@@ -41,7 +41,7 @@
     "fame_pct": 0
   },
   "profile": {
-    "_doc": "Plan 061. base_url: a self-hosted BDO-REST-API instance (man90/bdo-rest-api, e.g. http://127.0.0.1:8001/v1). Blank = off. The public instance is robots-disallowed and is never called; a non-loopback base is used only while its robots.txt allows Ebonwake.",
+    "_doc": "Plan 061. base_url: a self-hosted BDO-REST-API instance (man90/bdo-rest-api, e.g. http://127.0.0.1:8001/v1). Blank = off. The public instance is robots-disallowed and is never called; a non-loopback base is used only while its robots.txt allows Ebonwake. Plan 119: run the instance on loopback only (docker run -d --restart unless-stopped --name bdo-rest-api -p 127.0.0.1:8001:8001 man90/bdo-rest-api), then python tools/profile_selfhost.py check / wire.",
     "family": "",
     "base_url": "",
     "auto_level": true,
