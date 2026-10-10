@@ -27,6 +27,8 @@ XP_PCT_RANGE = (0, 1000)  # optional buff XP bonus, counted by the leveling XP s
 MAX_SESSIONS = 2000  # stored; GET shows the newest VIEW_SESSIONS
 AUTO_SPOT = "unspecified"  # plan 062: auto session spot before any session is logged
 VIEW_SESSIONS = 200
+SILVER_SRCS = ("ocr_delta", "typed")  # plan 112: derived from OCR samples / typed edit
+REFILL_MAX_S = 86400  # plan 112: a late shot fills an auto session closed this recently
 ID_RE = re.compile(r"^[a-z0-9-]{1,40}$")
 SID_RE = re.compile(r"^s[0-9]{1,9}$")
 
@@ -413,7 +415,37 @@ def _clean_session(it):
     out = {k: it[k] for k in ("id", "spot", "started", "minutes", "silver", "trash")}
     out["loot"], out["loot_value"] = _clean_loot(it.get("loot")), _clean_loot_value(
         it.get("loot_value"))
+    # Plan 112: auto flag + silver provenance, only when present and sane.
+    if it.get("auto") is True:
+        out["auto"] = True
+    if it.get("silver_src") in SILVER_SRCS:
+        out["silver_src"] = it["silver_src"]
+        sf = _clean_silver_from(it.get("silver_from"))
+        if it["silver_src"] == "ocr_delta" and sf is not None:
+            out["silver_from"] = sf
     return out
+
+
+def _delta_ok(d):
+    """A plan 112 ocrinfer.silver_delta result that may fill a row."""
+    return (isinstance(d, dict) and _ok_int(d.get("silver"), 1, MAX_SILVER)
+            and _clean_silver_from({"first_at": d.get("first"), "last_at": d.get("last"),
+                                    "n": d.get("n"), "conf": d.get("conf")}) is not None)
+
+
+def _delta_fields(d):
+    return {"silver_src": "ocr_delta",
+            "silver_from": {"first_at": d["first"], "last_at": d["last"], "n": d["n"],
+                            "conf": d["conf"]}}
+
+
+def _clean_silver_from(raw):
+    if not (isinstance(raw, dict) and _iso_or_none(raw.get("first_at"))
+            and _iso_or_none(raw.get("last_at")) and _ok_int(raw.get("n"), 2, 10 ** 6)
+            and isinstance(raw.get("conf"), (int, float)) and not isinstance(raw["conf"], bool)
+            and 0 <= raw["conf"] <= 1):
+        return None
+    return {k: raw[k] for k in ("first_at", "last_at", "n", "conf")}
 
 
 def _clean_loot(raw):
@@ -745,7 +777,7 @@ class GrindService:
         return (_int(arg["silver"], "silver", 0, MAX_SILVER),
                 _int(arg["trash"], "trash", 0, MAX_TRASH))
 
-    def _add_session(self, doc, spot, started, minutes, silver, trash, valued=None):
+    def _add_session(self, doc, spot, started, minutes, silver, trash, valued=None, extra=None):
         sid = f"s{doc['next_sid']}"
         doc["next_sid"] += 1
         ses = {"id": sid, "spot": spot, "started": started, "minutes": minutes,
@@ -753,7 +785,9 @@ class GrindService:
         if valued is not None:
             ses["loot"] = valued.pop("items")
             ses["loot_value"] = valued
+        ses.update(extra or {})
         doc["sessions"].append(ses)
+        return sid
 
     # -- plan 039: loot ----------------------------------------------------------
 
@@ -1141,13 +1175,18 @@ class GrindService:
             self._save(doc)
             return dict(doc["active"])
 
-    def auto_stop(self, started, at):
-        """Close the auto session that started at `started` at `at` (ISO), logged
-        with 0 silver (a loot import may value it later). Returns False (no
-        write) when that auto session is no longer the active one."""
+    def auto_stop(self, started, at, silver=None):
+        """Close the auto session that started at `started` at `at` (ISO). Plan
+        112: silver is the OCR silver delta across the window (`silver`: a
+        precomputed ocrinfer.silver_delta, else read from store domain
+        `silver`); 0 without one (a late shot or loot import may fill it).
+        Returns the new session id, or False (no write) when that auto session
+        is no longer the active one."""
         end = _parse_iso(at)
         if end is None:
             raise ValueError("auto stop needs an ISO time")
+        if silver is None:
+            silver = self._silver_delta(started, end)
         with self._lock:
             doc = self._load()
             act = doc["active"]
@@ -1155,11 +1194,84 @@ class GrindService:
                 return False
             secs = (end - _parse_iso(act["started"])).total_seconds()
             minutes = min(MAX_MINUTES, max(1, int(secs // 60)))
-            self._add_session(doc, act["spot"], act["started"], minutes, 0, 0)
+            extra = {"auto": True}
+            amount = 0
+            if _delta_ok(silver):
+                amount = silver["silver"]
+                extra.update(_delta_fields(silver))
+            sid = self._add_session(doc, act["spot"], act["started"], minutes, amount, 0,
+                                    extra=extra)
             doc["active"] = None
             doc["pending_stop"] = None
             self._save(doc)
+        return sid
+
+    # -- plan 112: silver from the OCR silver delta ----------------------------
+
+    def _silver_delta(self, started, end):
+        """ocrinfer.silver_delta over [started, end] from store domain `silver`."""
+        from . import ocrinfer  # local: ocrinfer -> ocr -> grind would cycle
+        samples = self.store.get("silver").get("samples")
+        try:
+            return ocrinfer.silver_delta(samples if isinstance(samples, list) else [],
+                                         {"start": started,
+                                          "end": _iso(end) if end is not None else None})
+        except Exception:  # noqa: BLE001 - a derived fill is an extra, never fatal
+            return None
+
+    def auto_fill(self, sid, delta, source="ocr_delta"):
+        """Set an auto session's silver from a late `delta` once: only while it
+        is `auto`, still 0 and carries no silver source (typed beats derived).
+        Returns whether it wrote."""
+        if source != "ocr_delta" or not _delta_ok(delta):
+            return False
+        with self._lock:
+            doc = self._load()
+            ses = next((s for s in doc["sessions"] if s["id"] == sid), None)
+            if (ses is None or not ses.get("auto") or ses["silver"] != 0
+                    or "silver_src" in ses):
+                return False
+            ses["silver"] = delta["silver"]
+            ses.update(_delta_fields(delta))
+            self._save(doc)
         return True
+
+    def refill_silver(self):
+        """A silver sample arrived (late screenshots are read async): fill the
+        newest closed auto session (ended within REFILL_MAX_S) that is still 0
+        and unsourced. Returns the filled session id or None."""
+        now = self._now()
+        doc = self._load()
+        for ses in reversed(doc["sessions"]):
+            start = _parse_iso(ses["started"])
+            end = start + _dt.timedelta(minutes=ses["minutes"])
+            if (now - end).total_seconds() > REFILL_MAX_S:
+                break
+            if not ses.get("auto") or ses["silver"] != 0 or "silver_src" in ses:
+                continue
+            delta = self._silver_delta(ses["started"], end)
+            if delta is not None and self.auto_fill(ses["id"], delta):
+                return ses["id"]
+        return None
+
+    def edit(self, arg):
+        """`{id, silver}`: a typed silver for a logged session. It replaces an
+        OCR-derived value and marks the row typed, so no late fill touches it."""
+        arg = _fields(arg, "edit", ("id", "silver"))
+        sid = arg["id"]
+        if not isinstance(sid, str) or not SID_RE.match(sid):
+            raise ValueError("edit id must be a session id like s12")
+        silver = _int(arg["silver"], "silver", 0, MAX_SILVER)
+        with self._lock:
+            doc = self._load()
+            ses = next((s for s in doc["sessions"] if s["id"] == sid), None)
+            if ses is None:
+                raise ValueError(f"unknown session: {sid}")
+            ses["silver"] = silver
+            ses["silver_src"] = "typed"
+            ses.pop("silver_from", None)
+            self._save(doc)
+        return self.view()
 
     def keep(self, arg):
         """`{"keep": true}`: dismiss the pending stop; the session keeps running."""

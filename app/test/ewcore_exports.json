@@ -132,6 +132,7 @@
     ["lootHintText","function"],
     ["sessionSilver","function"],
     ["trashPileText","function"],
+    ["silverSrcBadge","function"],
     ["SPOT_GOALS","object"],
     ["spotsPath","function"],
     ["spotNeedText","function"],

@@ -54,3 +54,32 @@ PASS within 3 rounds; one push.
 Retires: typing silver into an auto-closed grind session.
 
 Depends on: 062, 063.
+
+## As-built deviations
+
+1. No grind session edit existed. Decision: a new POST `/api/grind`
+   `{"edit": {id, silver}}` (`GrindService.edit`) sets silver and marks the
+   row `silver_src: "typed"`, dropping `silver_from`; the Grind tab makes an
+   auto row's amount clickable (Enter saves). Alternatives: delete + re-log
+   (loses started / minutes), a general all-fields edit (scope creep). Why:
+   the smallest surface that lets typed beat derived and undo a bad delta.
+   Reverses if: a general session edit lands; it subsumes this op.
+2. The delta is computed inside `grind.auto_stop` (reading store domain
+   `silver`) instead of `PlaySession` passing it in; `auto_stop(started, at,
+   silver=None)` still takes a precomputed delta. Late fill is
+   `grind.refill_silver()`, run from the app's AutoOcr `on_change` notifier
+   (every commit / undo), which calls `auto_fill(sid, delta)` on the newest
+   closed auto session (ended within 24 h) that is still 0 and unsourced.
+   Alternatives: a play-window -> grind-sid map in `playsession` (more state,
+   same result: the auto session's started == the play window start). Why:
+   no new cross-service wiring; idempotent. Reverses if: auto sessions stop
+   sharing the play window's start.
+3. `silver_delta(samples, window, why=None)`: None cannot carry a reason, so
+   the why is appended to an optional list. Zero gain is also None (a 0 row
+   is the unfilled default). With a dip beyond tolerance (0.1 percent of the
+   balance) the gains are summed at conf 0.6 even when the net is negative
+   (spent more than earned); only an all-falling series is None. Why: slice
+   4's guard covers the net-negative-with-gains case better than a bare None.
+   Reverses if: a plan 081 sale / market action feed makes spends known.
+4. `auto_stop` now returns the new session id (truthy) instead of True.
+   Auto sessions carry `auto: true` so a late fill never touches manual rows.

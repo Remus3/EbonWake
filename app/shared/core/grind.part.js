@@ -231,6 +231,21 @@
     return parts.join(', ');
   }
 
+  // Plan 112: badge {text, title} for silver derived from the OCR silver delta
+  // across an auto session (typed or manual silver: null).
+  function silverSrcBadge(s) {
+    if (!plainObject(s) || s.silver_src !== 'ocr_delta') return null;
+    const f = plainObject(s.silver_from) ? s.silver_from : {};
+    const sure = !isNum(f.conf) || f.conf >= 1;
+    const span = typeof f.first_at === 'string' && typeof f.last_at === 'string'
+      ? ' ' + f.first_at.slice(11, 16) + '-' + f.last_at.slice(11, 16) : '';
+    return {
+      text: sure ? 'OCR delta' : 'OCR delta ~',
+      title: 'silver from ' + (isNum(f.n) ? f.n : '?') + ' OCR silver reads' + span +
+        (sure ? '' : ' (silver dropped mid-session; gains summed)') + ' - click the amount to type it'
+    };
+  }
+
   // Exact shape check for POST /api/grind bodies (main-process IPC guard).
   function validGrindBody(body) {
     if (!plainObject(body)) return false;
@@ -252,6 +267,8 @@
       return withLoot(v, ['silver', 'trash']) && validLoot(v);
     }
     if (k === 'keep') return v === true;
+    // Plan 112: a typed silver for a logged session (beats an OCR-derived one).
+    if (k === 'edit') return exact(v, ['id', 'silver']) && validRef(v.id, SESSION_ID_RE) && inRange(v.silver, SILVER);
     if (k === 'log') {
       return withLoot(v, ['spot', 'minutes', 'silver', 'trash']) && validName(v.spot) &&
         inRange(v.minutes, MINUTES) && validLoot(v);
@@ -545,7 +562,7 @@
     LOOT_MAX: LOOT_MAX, LOOT_COUNT: LOOT_COUNT, VENDOR_PRICE: VENDOR_PRICE, ITEM_ID: ITEM_ID,
     validLootList: validLootList, withLoot: withLoot, validLootItem: validLootItem,
     lootHintText: lootHintText, sessionSilver: sessionSilver, trashPileText: trashPileText,
-    validGrindBody: validGrindBody, DROP_ROW_RE: DROP_ROW_RE, DROP_FIELD_RE: DROP_FIELD_RE,
+    silverSrcBadge: silverSrcBadge, validGrindBody: validGrindBody, DROP_ROW_RE: DROP_ROW_RE, DROP_FIELD_RE: DROP_FIELD_RE,
     DROP_BYPASS: DROP_BYPASS, validDropValue: validDropValue, pctText: pctText,
     dropView: dropView, agrisLine: agrisLine, parseGrindForm: parseGrindForm,
     SPOT_GOALS: SPOT_GOALS, SPOT_STAT: SPOT_STAT, SPOT_LEVEL: SPOT_LEVEL, spotsPath: spotsPath,
