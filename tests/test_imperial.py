@@ -161,7 +161,7 @@ def test_view_cp_from_profile_wins_over_typed(tmp_path):
     s.set_cp(100)
     v = s.view()
     assert v["cp"] == {"value": 301, "source": "profile", "typed": 100, "at": None,
-                       "age_s": None, "stale": False}
+                       "age_s": None, "stale": False, "expires_at": None, "expired": False}
     assert [t["cap"] for t in v["types"]] == [150, 150]
 
 
@@ -172,9 +172,13 @@ def test_view_cp_typed_when_profile_hides_it(tmp_path, profile):
     assert s.view()["cp"]["value"] is None and s.view()["types"][0]["left"] is None
     v = s.set_cp(80)
     assert v["cp"] == {"value": 80, "source": "operator", "typed": 80,
-                       "at": "2026-10-05T22:30:00+00:00", "age_s": 0, "stale": False}
+                       "at": "2026-10-05T22:30:00+00:00", "age_s": 0, "stale": False,
+                       "expires_at": "2026-10-12T22:30:00+00:00", "expired": False}
     assert v["types"][1] == {"type": "alchemy", "cap": 40, "delivered": 0, "left": 40,
-                             "done": False, "mastery_pct": 0}
+                             "done": False, "mastery_pct": 0, "mastery_source": "default",
+                             "mastery_typed": None, "mastery_at": None, "mastery_age_s": None,
+                             "mastery_stale": False, "mastery_expires_at": None,
+                             "mastery_expired": False}
 
 
 # --- plan 081: CP from the CP readout screenshot ----------------------------------------

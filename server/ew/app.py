@@ -717,7 +717,10 @@ class EWServer(ThreadingHTTPServer):
             except Exception:  # noqa: BLE001 - a service fault lists nothing
                 rows = []
             for r in rows:
-                out.append(dict(r, source="typed", expires_at=None, expires_in_s=None,
+                # Plan 117: imperial rows carry their own expiry.
+                exp = overrides._ts(r.get("expires_at"))
+                out.append(dict(r, source="typed", expires_at=r.get("expires_at"),
+                                expires_in_s=None if exp is None else max(0, int(exp - now)),
                                 clearable=False))
         # Plan 095: a typed event currency balance, expiring at the event end.
         try:

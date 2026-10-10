@@ -114,3 +114,31 @@ test('Today card: imperial.js mounted by today.js, posts via the bridge, safe DO
   assert.match(read('preload.js'), /\/api\/imperial/);
   assert.ok(read('overlay/overlay.js').indexOf('/api/imperial') < 0);
 });
+
+// Plan 117: CP + mastery from screenshots; a typed value is an expiring override.
+test('imperialRows: mastery source text (screenshot / typed / expired / none)', () => {
+  const v = view({ types: [
+    { type: 'cooking', cap: 156, delivered: 0, mastery_pct: 40.5, mastery_source: 'ocr', mastery_age_s: 7200, mastery_stale: false },
+    { type: 'alchemy', cap: 156, delivered: 0, mastery_pct: 15, mastery_source: 'operator', mastery_expired: true }
+  ] });
+  assert.deepStrictEqual(C.imperialRows(v).map((r) => r.masteryText), [
+    '+40.5% mastery (from screenshot, 2h ago)', '+15% mastery (typed, expired)']);
+  const t = view({ types: [{ type: 'cooking', cap: 1, delivered: 0, mastery_pct: 20, mastery_source: 'operator', mastery_expired: false },
+    { type: 'alchemy', cap: 1, delivered: 0, mastery_pct: 0, mastery_source: 'default' }] });
+  assert.deepStrictEqual(C.imperialRows(t).map((r) => r.masteryText), ['+20% mastery (typed)', '']);
+  assert.strictEqual(C.imperialRows(view())[0].masteryText, '+20% mastery');  // pre-117 server
+});
+
+test('imperialCpText: an expired typed CP says so', () => {
+  assert.strictEqual(C.imperialCpText(view({ cp: { value: 80, source: 'operator', typed: 80, expired: true } })),
+    'CP 80 (typed, expired)');
+});
+
+test('validPost: /api/imperial mastery null clears the typed bonus', () => {
+  assert.strictEqual(C.validPost('/api/imperial', { mastery: { type: 'alchemy', pct: null } }), true);
+  assert.strictEqual(C.validPost('/api/imperial', { mastery: { type: 'alchemy', pct: '1' } }), false);
+});
+
+test('imperial.js: the type row shows the mastery source text', () => {
+  assert.match(read('dashboard/imperial.js'), /r\.masteryText/);
+});

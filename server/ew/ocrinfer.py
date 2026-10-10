@@ -281,8 +281,9 @@ NUM_TOK = r"\d[\d.,]*\d|\d"
 WEIGHT_RE = re.compile(rf"(?<![\d.,])({NUM_TOK})\s*/\s*({NUM_TOK})\s*LT\b", re.IGNORECASE)
 SLOTS_RE = re.compile(r"(?<![\d.,/])(\d{1,3})\s*/\s*(\d{1,3})(?![\d.,/%])")
 SLOTS_LABEL = re.compile(r"slot|inventory", re.IGNORECASE)
-CP_PAIR_RE = re.compile(r"(?<![A-Za-z])(?:contribution\s*points?|c\.?p\.?)\s*:?\s*(\d{1,5})\s*/\s*"
-                        r"(\d{1,5})(?!\d)", re.IGNORECASE)
+# Plan 117: the Energy / CP bar labels it "Contribution" / "Contrib." without "points".
+CP_PAIR_RE = re.compile(r"(?<![A-Za-z])(?:contribution(?:\s*points?)?|contrib\.?|c\.?p\.?)\s*:?\s*"
+                        r"(\d{1,5})\s*/\s*(\d{1,5})(?!\d)", re.IGNORECASE)
 CP_ONE_RE = re.compile(r"(?<![A-Za-z])contribution\s*points?\s*:?\s*(\d{1,5})(?![\d/]|\s*/)",
                        re.IGNORECASE)
 FAME_RE = re.compile(r"fame[^%\d]{0,40}?\+?\s*(\d{1,2})(?:([.,])(\d{1,3}))?\s*%", re.IGNORECASE)
@@ -298,6 +299,15 @@ CONF_CP_ONE = 0.85        # one number: maybe the points left, not the total
 CONF_FAME_DOT = 0.95
 CONF_FAME_WHOLE = 0.92
 CONF_FAME_COMMA = 0.85
+# Plan 117: the life-skill mastery window's imperial delivery bonus.
+MASTERY_TYPES = ("cooking", "alchemy")
+MASTERY_MAX_READ = 500     # imperial.MASTERY_MAX
+MASTERY_RE = re.compile(r"imperial\s+(?:(cooking|alchemy)\s+)?deliver(?:y|ies)?[^%\d]{0,40}?"
+                        r"\+?\s*(\d{1,3})(?:([.,])(\d{1,2}))?\s*%", re.IGNORECASE)
+MASTERY_HEAD_RE = re.compile(r"(?<![A-Za-z])(cooking|alchemy)\s+mastery", re.IGNORECASE)
+CONF_MASTERY_LINE = 0.95   # the type is on the bonus line
+CONF_MASTERY_HEADER = 0.9  # the type is the window's one mastery header
+CONF_MASTERY_COMMA = 0.85  # decimal comma: a dot misread
 
 
 def _lines_of(doc):
@@ -410,14 +420,49 @@ def fame_field(doc, size=None, regions=None):
     return _best(cands)
 
 
+def mastery_fields(doc):
+    """Plan 117: [{kind: mastery, name: cooking|alchemy, value: bonus pct,
+    conf, why}] from the life-skill mastery window's "Imperial Cooking
+    Delivery Bonus +40.5%" line. A line without the type takes the window's
+    one "<Type> Mastery" header; two headers (or none) leave it unread. The
+    mastery points alone are never converted (no sourced points -> bonus
+    table). At most one read per type, the most confident."""
+    lines = _lines_of(doc)
+    heads = {m.group(1).lower() for ln in lines for m in MASTERY_HEAD_RE.finditer(ln["text"])}
+    best = {}
+    for ln in lines:
+        for m in MASTERY_RE.finditer(ln["text"]):
+            t = m.group(1).lower() if m.group(1) else None
+            if t is not None:
+                conf, why = CONF_MASTERY_LINE, "type on the bonus line"
+            elif len(heads) == 1:
+                t = next(iter(heads))
+                conf, why = CONF_MASTERY_HEADER, f"type from the {t} mastery header"
+            else:
+                continue
+            whole, sep, frac = m.group(2), m.group(3), m.group(4)
+            v = int(whole) + (int(frac) / 10 ** len(frac) if frac else 0)
+            if v > MASTERY_MAX_READ:
+                continue
+            if sep == ",":
+                conf, why = min(conf, CONF_MASTERY_COMMA), why + "; decimal comma"
+            v = round(v, 2)
+            f = {"kind": "mastery", "name": t, "value": int(v) if v == int(v) else v,
+                 "conf": conf, "why": why}
+            if t not in best or conf > best[t]["conf"]:
+                best[t] = f
+    return [best[t] for t in MASTERY_TYPES if t in best]
+
+
 def planner_fields(doc, size=None, regions=None):
-    """Every plan 081 planner read in one doc (weight, slots, cp, fame)."""
+    """Every plan 081 planner read in one doc (weight, slots, cp, fame), plus
+    the plan 117 imperial mastery reads."""
     out = []
     for fn in (weight_field, slots_field, cp_field, fame_field):
         f = fn(doc, size=size, regions=regions)
         if f is not None:
             out.append(f)
-    return out
+    return out + mastery_fields(doc)
 
 
 # -- sanity over history (S7) ------------------------------------------------------

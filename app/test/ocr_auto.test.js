@@ -21,7 +21,8 @@ test('validOcrBody: review accept / discard / fix and undo shapes', () => {
     { review: null }, { review: { id: 'r1' } }, { review: { id: 'x1', action: 'accept' } },
     { review: { id: 'r1', action: 'eat' } }, { review: { id: 'r1', action: 'accept', value: 1 } },
     { review: { id: 'r1', action: 'fix' } }, { review: { id: 'r1', action: 'fix', value: -1 } },
-    { review: { id: 'r1', action: 'fix', value: 1.5 } }, { review: { id: 'r1', action: 'fix', value: '5' } },
+    { review: { id: 'r1', action: 'fix', value: 1.555 } }, { review: { id: 'r1', action: 'fix', value: 501.5 } },
+    { review: { id: 'r1', action: 'fix', value: '5' } },
     { undo: 'r1' }, { undo: 5 }, { undo: 'u1', review: { id: 'r1', action: 'accept' } }
   ]) {
     assert.strictEqual(C.validOcrBody(bad), false, JSON.stringify(bad));
@@ -83,4 +84,25 @@ test('game.js: auto-OCR card reads /api/ocr/auto, posts over the bridge, listens
   }
   assert.doesNotMatch(src, /innerHTML|outerHTML|insertAdjacentHTML|document\.write/);
   assert.match(read('dashboard/dashboard.js'), /'ocr'\]/);
+});
+
+// Plan 117: CP bar and mastery window reads are listed, labelled and fixable.
+test('normalizeOcrAuto: cp and mastery review rows, labels and fixes', () => {
+  const a = C.normalizeOcrAuto({ review: [
+    { id: 'r8', file: 'cp.jpg', kind: 'cp', name: 'cp', value: 312, conf: 0.85, why: 'one number' },
+    { id: 'r9', file: 'm.jpg', kind: 'mastery', name: 'alchemy', value: 12.5, conf: 0.85, why: 'decimal comma' },
+    { id: 'r10', kind: 'mastery', name: 'alchemy', value: 900 },
+    { id: 'r11', kind: 'mastery', name: 'alchemy', value: 1.255 }
+  ] });
+  assert.deepStrictEqual(a.review.map((r) => r.id), ['r8', 'r9']);
+  assert.strictEqual(C.ocrAutoLabel(a.review[0]), 'CP 312 (85%)');
+  assert.strictEqual(C.ocrAutoLabel(a.review[1]), 'alchemy imperial mastery +12.5% (85%)');
+  assert.strictEqual(C.ocrFixHint('cp'), 'total CP');
+  assert.strictEqual(C.ocrFixHint('mastery'), 'bonus %, e.g. 40.5');
+  assert.deepStrictEqual(C.ocrFixBody('r9', 'mastery', ' +12.75% '), { review: { id: 'r9', action: 'fix', value: 12.75 } });
+  assert.deepStrictEqual(C.ocrFixBody('r8', 'cp', '1,200'), { review: { id: 'r8', action: 'fix', value: 1200 } });
+  for (const [k, t] of [['mastery', '501'], ['mastery', '1.255'], ['mastery', 'x'], ['cp', '10001']]) {
+    assert.strictEqual(C.ocrFixBody('r1', k, t), null, k + ' ' + t);
+  }
+  assert.strictEqual(C.validOcrBody({ review: { id: 'r1', action: 'fix', value: 1.555 } }), false);
 });
