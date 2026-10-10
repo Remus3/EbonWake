@@ -1,13 +1,16 @@
 EW NEXT SESSION
 ---------------
-SESSION: 28
+SESSION: 29
 
 Next action: SF - on/after 2026-10-11 (date-gated; before it, skip): if
 the interactive sessions since 2026-10-08 still show 0 undispatchable
 would-deny rows in ops/loop/control/subagent_first.jsonl (session 19: 19
 would-deny, all dispatchable, research 0019; session 20: 0 / 271), write
 `deny` into ops/loop/control/subagent_first.mode, read it back, and say so
-in the next batched note to MAIN.
+in the next batched note to MAIN. Then confirm the loop merged 114 / 115 /
+116 (In flight below); any item left in adjudicate / merge-conflict /
+gave-up / failed-dirty is fixed by a session agent (merge-stuck recipe in
+Context).
 
 Carried forward (not acted on yet):
 - OPERATOR (one batched ask, nothing blocks on it): QA plans 009-073 in
@@ -34,6 +37,12 @@ Carried forward (not acted on yet):
   row 106 to [x]. Reverses if MAIN orders trees to set it themselves.
 - MAIN to record EW's port block 8940-8959 in the machine-wide registry and
   add EW to the roster / lane widget (roster INFO 0230 says EW is a member).
+- MAIN (next batched note, do not send alone): defect report - in session
+  28 a planner agent's first commit picked up ANOTHER repo's commit
+  message from a shared temp file (commit-msg temp path shared across
+  trees); the message was rewritten before push. Likely a kit gitlock or
+  harness temp-path collision; ask MAIN to make the commit-message temp
+  path per-tree / per-owner. Send with the SF line above.
 - NOTE: loop item Hf9ac4b (old CHECK bullet) was dispatched 20:04
   2026-10-09 AFTER it was done by hand; lane-2 finished 20:07. If it
   leaves a branch or keep ref, discard it (main already has the seen
@@ -48,6 +57,18 @@ Carried forward (not acted on yet):
   cleared via kit fleet_gitlock.clear_index_lock and read back gone
   (gitlock.jsonl index-lock-removed). A stale claim file of dead pid 19796
   stays in ops/loop/control/claims/ (kit treats it non-live; left alone).
+- NOTE (operator order session 28, 2026-10-10): "remove operator manual
+  input as much as possible in everything". Keep pushing zero-touch:
+  wave 1 = plans 108-116; wave 2 = ROADMAP rows 117 (Imperial CP +
+  mastery OCR), 118 (Deadeye FS / crons / Agris from enhance-window OCR),
+  119 (self-hosted BDO-REST-API for family / gear - adjudicate the
+  install first), 120 (remaining typed-fields survey: pets, mounts,
+  inventory LT, crafting -> automation plans). The loop builds them.
+- NOTE: ETA tuning (session 28): loop lane runs overran their ETA - build
+  and review ~3x (607 s vs ~200 s estimate), data 114 1.7x. eta.py
+  estimate build/review/data all read ~60 s default; record real lane
+  durations (or raise the lane defaults) so 1.5x / 3x overrun checks stop
+  misfiring.
 - NOTE: closed records live in docs/handoff-ledger.txt (row 104); move a
   bullet there once it is only history.
 - NOTE: run the node suite through the gate as
@@ -78,8 +99,8 @@ Carried forward (not acted on yet):
   the live game; no required toggles or typed entry (a changed setting
   gets forgotten and skews output). Every new plan follows research 0010
   and the plan 079 override ledger (visible badge, auto-expiry, live
-  signal supersedes). Settings left after 080: market.vp,
-  profile.multi_character.
+  signal supersedes). Settings left after 109: profile.multi_character
+  (market.vp retired to a fallback by plan 109).
 - NOTE: operator likes the character portrait (082/083/084, research
   0011); End Game window = optional OCR source for level + class binding
   (084 follow-up, not planned). Operator has no PrtSc key; screenshots via
@@ -123,7 +144,8 @@ Carried forward (not acted on yet):
   host dead (research 0007). Plan 061 removed the default and gates any
   configured host on robots; profile features (004/041/042) are quiet until
   a self-hosted instance (docker man90/bdo-rest-api, port 8001) is set in
-  config/local.json. Self-hosting = an install, adjudicator call.
+  config/local.json. Self-hosting = an install, adjudicator call (ROADMAP
+  row 119 now carries it).
 - NOTE: research 0003 dates (Olvia Class 3 enrol 2026-11-05, quests
   2026-11-11) are BDFoundry-sourced, unverified vs the official notice;
   NA world boss times after the 2026-11-01 DST change unconfirmed (plan 031
@@ -142,11 +164,11 @@ Carried forward (not acted on yet):
   pre-push leak sweep refuses; merge origin/main with an explicit -m.
 
 Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew (Ready, last result
-0), HALT absent, no lanes in flight, lane worktrees 0/1/2 clean and
-merged, inbox no unhandled notes, ROADMAP no open rows, headless 27/120
-(read 2026-10-10 session 27). FLEET_SIDECAR_ROOT empty in HKCU
-Environment (read 2026-10-10 session 27; row 106 stays MAIN-gated). State:
-ops/loop/control/loop_items/*.json, progress/loop.json,
+0, fire 456+), HALT absent, inbox no unhandled notes, headless 39/120
+(read 2026-10-10 14:49 session 28). FLEET_SIDECAR_ROOT empty in HKCU
+Environment (read 2026-10-10 session 28; row 106 stays MAIN-gated).
+ROADMAP open: 114 / 115 / 116 (loop in flight), 117-120 (new, open).
+State: ops/loop/control/loop_items/*.json, progress/loop.json,
 progress/lane-<i>.json, inbox_status.json. Merge-stuck items are fixed by
 a session agent (merge refs/ew/keep/<id> onto main, keep both sides, mark
 item merged, delete keep ref, push). Restart: stop the server pid from
@@ -157,31 +179,41 @@ session, not as a loop lane (lanes cannot read gitignored main-checkout
 dirs, the gitlock or the progress file).
 
 Acceptance: SF mode decided per the date gate (mode file read back);
-nothing in adjudicate / merge-conflict / gave-up / failed-dirty.
+114 / 115 / 116 merged and ROADMAP rows flipped by the loop; nothing in
+adjudicate / merge-conflict / gave-up / failed-dirty; 117-120 dispatched
+by the loop.
 
-Do NOT redo: session 27 (2026-10-10): status check only; no code
-changes; inbox 0 new, ROADMAP 0 open, SIDECAR read empty (no-op); SF
-date gate not reached (not acted on).
-session 26 (2026-10-10): status check only; no code
-changes; SIDECAR read empty (no-op); SF date gate not reached.
-session 25 (2026-10-10): hang recovery only (NOTE above);
-no code changes; SF date gate not reached (not acted on).
+Do NOT redo: session 28 (2026-10-10): operator zero-touch order; plans
+108-116 filed (04184da); loop merged 110 (3d8962c), 108 (b9083f1), 112
+(ed265ee), 109 (10fc902), 111 (603f21b), 113 (84c17dc), all refute 0/3
+PASS, ci + codeql green on 84c17dc (38080311281 / 38080311254). ROADMAP
+rows 117-120 added (this /done). SF date gate not reached.
+session 27 (2026-10-10): status check only; no code changes.
+session 26 (2026-10-10): status check only; no code changes.
+session 25 (2026-10-10): hang recovery only (NOTE above).
 session 24 (2026-10-10): V101 DONE - row 101 merge 633fa46 verified;
 Nc0305f ANSWER sent (delivery 1/1); deep-dive DD-20261010 merged 08de0c3
 (research 0020, no new plans).
-session 23 (2026-10-09): kit v15 vendored per MAIN ORDER Nc0305f
-(0074764); plan 107 merge c1510ba verified; row 106 bundle archive DONE
-(9fa11b3; ROADMAP 106 `[>] MAIN-gated`); row 101 requeued.
 Older sessions: docs/handoff-ledger.txt and git log.
 
-In flight: none.
+In flight (loop-owned; do not merge by hand while the loop holds them):
+- 114 (Today auto rules): lane data, worktree lane-2, keep ref
+  refs/ew/keep/114 (3046e0a, verdict PASS), state merge-conflict at
+  14:35 - the loop dispatches a resolve run; progress
+  progress/p114-*.json + progress/lane-<i>.json, ETA ~1-2 ticks.
+- 115 (event currency OCR): lane build, worktree lane-0, resolve run 1/2
+  ran (keep ref refs/ew/keep/115, 6467244), review worker launched 14:49;
+  ETA next tick (~15 min).
+- 116 (leveling auto samples): lane review, worktree lane-1, build ran
+  (finished 14:44), review worker launched 14:49; ETA ~1-2 ticks.
 
-Status: HEAD 9922bea == origin/main before this /done (the hand-off
-commit follows). CI 38022486736 + codeql 38022486747 success on 633fa46;
-08de0c3, a32b789, 091da20, 9922bea docs-only. /done gates (session 27):
-gated pytest 3648 passed (98 s), gated node 715 pass 0 fail (npm.cmd),
-leak sweep ARMED (19). Server running on a32b789 (/api/version read
-back). Loop task Ready, last result 0, inbox_status idle. Session jsonl
-< 10 MB.
+Status: 84c17dc == origin/main at /done start; /done pushes
+b72d524 (ROADMAP 117-120) + the hand-off commit (range 84c17dc..HEAD).
+CI 38080311281 + codeql 38080311254 success on 84c17dc; the /done push
+is docs-only. /done gates (session 28): gated pytest 3749 passed 0
+failed (94 s / 81 s) with 1 fleet_test_guard teardown error each run
+from the armed loop writing its runtime mid-suite (b72d524 body), gated
+node 747 pass 0 fail (npm.cmd), leak sweep ARMED (19). Loop task Ready,
+last result 0, inbox_status running. Session jsonl < 10 MB.
 
 Start with: read this file, then CLAUDE.md, docs/plans/ROADMAP.md, git log -10.
