@@ -32,7 +32,7 @@
     OVERLAY_WIDGETS, PALETTE_COMMANDS, PALETTE_ROUTES, PORTRAIT_HINT, POST_ROUTES,
     PROFILE_HISTORY_PATH, QUIET_ALLOW, QUIET_STATES, SEARCH_DEBOUNCE_MS, SETTINGS_FIELDS,
     SETTINGS_GROUPS, SETTINGS_KEYS, SPOT_GOALS, THEMES, TOAST_MAX, TOAST_MS, TOAST_ONCE_MS,
-    TOAST_TEXT_MAX, VERSION_POLL_MS, WIDGETS, ZONES, agrisLine, alertFor, autoWatchBadge,
+    TOAST_TEXT_MAX, VERSION_POLL_MS, WIDGETS, ZONES, ZONES_EMPTY, agrisLine, alertFor, autoWatchBadge,
     backoffMs, bandStrip, booksLine, booksToNextText, bossDriftBanner, bossGarmothText,
     bossRows, bossSuggested, bossTicks, bracketLines, buffRowView, buffRows, buffsLive,
     calcQuery, claimBody, claimDueHits, claimLine, claimPlace, claimRows, classOfTab,
@@ -92,9 +92,9 @@
     validInventoryBody, validLevelingBody, validMountsBody, validMute, validNotify,
     validOcrBody, validOnboardingBody, validOpenExternal, validPetsBody, validPortraitsBody,
     validPost, validProfileBase, validProgressBody, validResetRule, validSettingsBody,
-    validTodayBody, validWatchBody, watchAlert, weeklyPlan, whatNowActions, whatNowLeft,
-    whatNowLine, widgetsFromQuery, widgetsQuery, widgetsTurnedOn, withStep, withTick, xpPresets,
-    zeroPill, zoneCapText, zoneKillsText, zoneLevelText } = K;
+    validTodayBody, validWatchBody, verdictRows, watchAlert, weeklyPlan, whatNowActions, whatNowLeft,
+    whatNowLine, widgetsFromQuery, widgetsQuery, widgetsTurnedOn, withCurrency, withStep, withTick, xpPresets,
+    zeroPill, zoneCapText, zoneKillsText, zoneLevelText, zonesRows } = K;
 
   const api = {
     EXTERNAL_HOSTS: EXTERNAL_HOSTS,
@@ -539,7 +539,11 @@
     serverRows: serverRows,
     validAccelerator: validAccelerator,
     hotkeys: hotkeys,
-    DEFAULT_HOTKEYS: DEFAULT_HOTKEYS
+    DEFAULT_HOTKEYS: DEFAULT_HOTKEYS,
+    withCurrency: withCurrency,
+    ZONES_EMPTY: ZONES_EMPTY,
+    zonesRows: zonesRows,
+    verdictRows: verdictRows
   };
   if (NODE) module.exports = api;
   else root.EWCore = api;

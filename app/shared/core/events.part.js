@@ -417,6 +417,14 @@
     return intIn(n, 0, 1e7) ? { currency_balance: { event: event, value: n } } : null;
   }
 
+  // Plan 110: the Events body with its `currency` block swapped for a fresh GET
+  // /api/events/currency read (a light re-read after an event tick); the body
+  // unchanged when either side is not an object / {events: [...]}.
+  function withCurrency(data, block) {
+    if (!plainObject(data) || !plainObject(block) || !Array.isArray(block.events)) return data;
+    return Object.assign({}, data, { currency: block });
+  }
+
   // GET /api/today event_rows -> valid rows (weekly / once, inside the event window).
   function eventGameRows(d) {
     const raw = plainObject(d) && Array.isArray(d.event_rows) ? d.event_rows : [];
@@ -582,7 +590,7 @@
     loginMarkBody: loginMarkBody, CUR_NUM_MAX: CUR_NUM_MAX, curNum: curNum, curText: curText,
     currencyRows: currencyRows, currencyText: currencyText, currencyPill: currencyPill,
     currencyWishText: currencyWishText, currencyWishBody: currencyWishBody,
-    currencyBalanceBody: currencyBalanceBody, eventGameRows: eventGameRows,
+    currencyBalanceBody: currencyBalanceBody, withCurrency: withCurrency, eventGameRows: eventGameRows,
     eventTickBody: eventTickBody, suggestAddBody: suggestAddBody, suggestStatus: suggestStatus,
     validNoticeNo: validNoticeNo, noticeRows: noticeRows, noticeAddBody: noticeAddBody,
     noticeDismissBody: noticeDismissBody, noticeEndText: noticeEndText,

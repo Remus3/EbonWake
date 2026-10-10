@@ -239,7 +239,15 @@
         p.appendChild(card('Server', sv));
         const fr = el('div', 'ew-fresh');
         fr.id = 'sys-fresh';
-        p.appendChild(card('Signal health', fr)); // plan 073: was "Data freshness"
+        const sh = card('Signal health', fr); // plan 073: was "Data freshness"
+        // Plan 110: patch-notes verdicts on tracked data rows (plan 085).
+        const dv = el('details', 'ew-ldet');
+        dv.appendChild(el('summary', 'ew-muted', 'Data checks (patch notes vs tracked rows)'));
+        const dl = el('div', 'ew-list');
+        dl.id = 'sys-verdicts';
+        dv.appendChild(dl);
+        sh.appendChild(dv);
+        p.appendChild(sh);
         if (window.EWGame) window.EWGame.mount(p);
       } else {
         p.appendChild(card(t.title, el('p', 'ew-muted', 'Arrives in plan ' + (t.plan || '?') + '.')));
@@ -348,6 +356,30 @@
       const drift = C.bossDriftBanner(H.sources && H.sources.bossdrift);
       if (drift) fr.appendChild(el('div', 'ew-drift', drift.text + ' (see World bosses)'));
     }
+    paintVerdicts();
+  }
+
+  // Plan 110: the Data checks list, rebuilt only when the verdicts body changes
+  // (paintSystem runs every 5 s; an open link button keeps its node).
+  function paintVerdicts() {
+    const box = document.getElementById('sys-verdicts');
+    if (!box) return;
+    const v = C.verdictRows(H.verdicts);
+    const sig = [v.error, v.counts, v.last].concat(v.rows.map(function (r) { return r.cls + r.text + r.url; })).join('|');
+    if (box.dataset.sig === sig) return;
+    box.dataset.sig = sig;
+    box.textContent = '';
+    if (v.error) box.appendChild(el('div', 'ew-muted ew-sigline', v.error));
+    if (v.counts) box.appendChild(el('div', 'ew-muted ew-sigline', v.counts));
+    v.rows.forEach(function (r) {
+      const row = el('div', 'ew-sigrow');
+      row.appendChild(el('span', 'ew-pill ' + r.cls, r.pill));
+      row.appendChild(el('span', 'ew-muted', r.text));
+      const b = r.url && window.EWToast ? window.EWToast.linkButton(r.url) : null;
+      if (b) { b.textContent = r.link; row.appendChild(b); }
+      box.appendChild(row);
+    });
+    if (v.last) box.appendChild(el('div', 'ew-muted ew-sigline', v.last));
   }
 
   function getJSON(path) {
@@ -366,7 +398,8 @@
       return Promise.all([
         getJSON('/api/health').then(function (h) { H.health = h; }, function () { H.health = null; }),
         getJSON('/api/state').then(function (s) { H.sources = s && s.sources; }, function () { /* keep last */ }),
-        getJSON('/api/signals').then(function (s) { H.signals = s; }, function () { H.signals = null; })
+        getJSON('/api/signals').then(function (s) { H.signals = s; }, function () { H.signals = null; }),
+        getJSON('/api/data/verdicts').then(function (d) { H.verdicts = d; }, function () { H.verdicts = null; }) // plan 110
       ]);
     }, function () { H.health = null; }).then(function () { paintPill(); paintSystem(); });
   }

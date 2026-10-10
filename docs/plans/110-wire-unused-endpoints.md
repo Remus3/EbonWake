@@ -66,3 +66,41 @@ Retires: the manual curl / API look-up the operator would need to see zone
 EXP or data verdicts.
 
 Depends on: 088, 085, 095.
+
+## As-built deviations
+
+1. Slice 1 trigger. Decision: the Events tab re-reads
+   `/api/events/currency` on the SSE `today` push (an `event_tick` /
+   `event_untick` is a POST /api/today, which bumps only `today`) and swaps
+   the block in with `withCurrency()` (events.part.js). A wishlist / balance
+   edit does NOT re-read: its POST /api/events reply is already the full
+   events body with `currency`, which `send()` accepts. Alternatives: a GET
+   after every wishlist POST (a duplicate read of data in hand); a server
+   bump of `events` on event ticks (Python change, full-body refetch - what
+   the plan retires). Why: the light read lands exactly where data changed
+   without a new GET. Reverses if: a currency-changing op moves off the
+   events POST reply.
+2. Slice 3 placement and formatter home. Decision: the Data checks list is a
+   `<details>` inside the Signal health card (plan 073 renamed the plan 020
+   freshness card), fed by `/api/data/verdicts` in the same `pollVersion`
+   round as `/api/signals`; `verdictRows()` lives in base.part.js next to
+   `signalRows()` and lists contradicted then confirmed rows (silent rows
+   are neither listed nor counted). Links reuse
+   `EWToast.linkButton` (allowlisted hosts, ew:open-external). Alternatives:
+   a separate "Data checks" card; listing silent rows. Why: one card for data
+   health; silent rows have no evidence to show. Reverses if: the operator
+   asks for silent rows or a separate card.
+3. Slice 4 guard scope. Decision: a route counts as consumed only by a
+   quoted literal (`'/api/x'`, `'/api/x?...'`) in non-test app/ JS or HTML;
+   comment mentions and prefixes do not. The allowlist is empty: every GET
+   route has a consumer after slices 1-3. Alternatives: substring match
+   (a doc comment would satisfy it). Why: a comment is not a consumer.
+   Reverses if: a route is legitimately built dynamically (add it to ALLOW
+   with its reason).
+4. Desktop self-test not run in the lane (headless worktree, no Electron
+   window). The node tests pin the fetches, the details nodes and the empty
+   states; the loop's merge / session self-test covers the render. Reverses
+   if: the self-test shows either block missing.
+5. Progress file: the lane's sandbox refused writes to the main checkout's
+   `ops/loop/control/progress/p110-build.json` (and python outside
+   pytest / ruff), so no item-12 progress was written this run.

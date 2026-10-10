@@ -65,6 +65,17 @@
     getJSON('/api/events').then(accept, function (e) { S.err = e.message; }).then(draw);
   }
 
+  // Plan 110: an event tick on the Today tab (SSE `today`) changes only the
+  // currency rows; re-read GET /api/events/currency, not the whole body. A
+  // failure keeps the last rows (the next poll reports errors).
+  function pollCurrency() {
+    if (!S.data) return;
+    getJSON('/api/events/currency').then(function (b) {
+      S.data = C.withCurrency(S.data, b);
+      if (S.ui && S.ui.currencyBody.isConnected) drawCurrency();
+    }, function () { /* keep the last currency rows */ });
+  }
+
   function msg(text) { if (S.ui) S.ui.msg.textContent = text; }
 
   // One POST at a time. Every op's reply is an item or a count, not the GET
@@ -675,6 +686,10 @@
       if (window.EWBus) window.EWBus.on('events', function () {
         if (C.pollPaused(S.panel, document)) S.last = null;
         else poll(true);
+      });
+      if (window.EWBus) window.EWBus.on('today', function () {
+        if (C.pollPaused(S.panel, document)) S.last = null;
+        else pollCurrency();
       });
       poll(false);
     } else {

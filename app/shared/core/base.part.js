@@ -11,7 +11,7 @@
   'use strict';
 
   // from later parts, bound by link() once every part is installed
-  let fmtAge, fmtLocal, isNum;
+  let externalUrl, fmtAge, fmtLocal, isNum;
 
   // NA daily reset 00:00 UTC; weekly reset Thursday 00:00 UTC.
   function nextDailyReset(now) {
@@ -157,6 +157,38 @@
       title: bad.map(function (r) { return r.name + ': ' + (r.hint || r.detail); }).join('\n') };
   }
 
+  // Plan 110: System "Data checks" from GET /api/data/verdicts (plan 085).
+  // Contradicted rows first (evidence + date + patch-notes link), then
+  // confirmed; silent rows are counted by the server signal, not listed.
+  const VERDICT_ORDER = { contradicted: 0, confirmed: 1 };
+  function verdictRows(d) {
+    if (!d || typeof d !== 'object' || Array.isArray(d) || !d.verdicts || typeof d.verdicts !== 'object' ||
+      Array.isArray(d.verdicts) || !Array.isArray(d.unchecked)) {
+      return { rows: [], counts: '', last: '', error: 'data checks unavailable' };
+    }
+    const rows = Object.keys(d.verdicts).filter(function (k) {
+      const v = d.verdicts[k];
+      return v && typeof v === 'object' && VERDICT_ORDER[v.verdict] !== undefined;
+    }).map(function (k) {
+      const v = d.verdicts[k];
+      const date = typeof v.date === 'string' && v.date ? v.date.slice(0, 10) : '';
+      const ev = typeof v.evidence === 'string' && v.evidence ? ': ' + v.evidence.slice(0, 200) : '';
+      const url = externalUrl(v.url);
+      return { key: k, verdict: v.verdict, cls: v.verdict === 'contradicted' ? 'bad' : 'ok', pill: v.verdict,
+        text: k + ev + (date ? ' (' + date + ')' : ''), url: url, link: url ? 'patch notes' : '' };
+    }).sort(function (a, b) {
+      return VERDICT_ORDER[a.verdict] - VERDICT_ORDER[b.verdict] || (a.key < b.key ? -1 : (a.key > b.key ? 1 : 0));
+    });
+    const bad = rows.filter(function (r) { return r.verdict === 'contradicted'; }).length;
+    const n = d.last_notice;
+    const last = n && typeof n === 'object' && typeof n.title === 'string'
+      ? 'last patch notes read: ' + (typeof n.date === 'string' && n.date ? n.date.slice(0, 10) + ' - ' : '') + n.title.slice(0, 120)
+      : 'no patch notes read yet';
+    return { rows: rows, counts: bad + ' contradicted, ' + (rows.length - bad) + ' confirmed, ' +
+      d.unchecked.length + ' unchecked', last: last,
+      error: typeof d.error === 'string' && d.error ? 'data hints unreadable: ' + d.error.slice(0, 200) : null };
+  }
+
   // Plan 079: override ledger. One /api/overrides item -> the card-header
   // badge {cls, text, title}; null for junk. The title says what is in force,
   // where it came from and when it lapses.
@@ -254,11 +286,12 @@
     RESTART_HINT: RESTART_HINT, knownCommit: knownCommit, commitsDiffer: commitsDiffer,
     healthPill: healthPill, notOnServer: notOnServer, parseWhen: parseWhen,
     sourceFreshness: sourceFreshness, SIGNAL_CLS: SIGNAL_CLS, signalRows: signalRows,
-    signalPill: signalPill, fmtOverrideValue: fmtOverrideValue, overrideBadge: overrideBadge,
+    signalPill: signalPill, VERDICT_ORDER: VERDICT_ORDER, verdictRows: verdictRows, fmtOverrideValue: fmtOverrideValue, overrideBadge: overrideBadge,
     overrideItems: overrideItems, overrideBadges: overrideBadges, overrideRows: overrideRows,
     overridePill: overridePill, serverRows: serverRows, DEFAULT_HOTKEYS: DEFAULT_HOTKEYS,
     validAccelerator: validAccelerator, hotkeys: hotkeys });
   return function link() {
+    externalUrl = K.externalUrl;
     fmtAge = K.fmtAge;
     fmtLocal = K.fmtLocal;
     isNum = K.isNum;
