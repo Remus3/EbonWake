@@ -779,3 +779,147 @@ def currency_field(doc, rules, at):
         f["conf"] = round(f["conf"], 3)
         out.append(f)
     return out
+
+
+# -- plan 118: enhancement window ----------------------------------------------------
+# One shot of the enhancement window (a line naming "Enhance" / "Enhancement")
+# gives the character's current failstack, the crons on hand and the Agris pity
+# stacks of the item in the slot. `keys` maps every plan 035 (family, step) row
+# to its Agris threshold (None when the table has none).
+
+ENH_FS_MAX = 999          # enhance.MAX_FS
+ENH_CRONS_MAX = 10 ** 9   # deadeye.MAX_CRONS
+ENH_AGRIS_MAX = 1000      # deadeye.MAX_AGRIS_STACKS
+CONF_ENH_LABEL = 0.97     # label and number on one line
+CONF_ENH_FALLBACK = 0.9   # x factor: the Agris key came from the next plan step
+CONF_ENH_AMBIGUOUS = 0.5  # two values for one kind, or the shown threshold disagrees
+ENH_LADDER = ("+0",) + tuple(f"+{n}" for n in range(1, 16)) + (
+    "PRI", "DUO", "TRI", "TET", "PEN", "HEX", "SEP", "OCT", "NOV", "DEC")  # enhance.STEPS
+_ENH_ANCHOR = re.compile(r"\benhance(?:ment)?\b", re.IGNORECASE)
+_ENH_FS = re.compile(r"(?:\bfail\s*-?\s*stacks?\b|\bFS\b|\bchance\s+increase\b)\s*[:=]?\s*"
+                     r"\+?\s*(\d{1,4})(?![\d.,%])", re.IGNORECASE)
+_ENH_SLASH = re.compile(r"(\d[\d,.]*)\s*/\s*(\d[\d,.]*)")
+_ENH_ITEM = re.compile(r"^\s*(?:\+\s?(\d{1,2})\b|(" + "|".join(ENH_LADDER[16:])
+                       + r")\b\s*[:.]?)?", re.IGNORECASE)
+_ENH_AGRIS_NUM = re.compile(r"(?<![\d,.])(\d{1,4})(?:\s*/\s*(\d{1,4}))?(?![\d,.])")
+_ENH_CRON = [("crons", "cron stone"), ("crons", "cron stones")]
+
+
+def _agris_word(text):
+    """End offset of the first word within one edit of "agris", or None."""
+    for m in re.finditer(r"[A-Za-z]+", text):
+        if _lev(m.group(0).lower(), "agris") <= 1:
+            return m.end()
+    return None
+
+
+def _enh_cron_amount(text):
+    """(value, conf, why) of the owned crons on one line, or None."""
+    m = _CUR_OWNED.search(text)
+    if m:
+        return _cur_amount(text[m.end():])
+    if _CUR_COST.search(text):
+        return None
+    s = _ENH_SLASH.search(text)
+    if s:
+        amt = _cur_amount(s.group(2))
+        return None if amt is None else (amt[0], amt[1], amt[2] + " (needed / owned)")
+    return _cur_amount(text)
+
+
+def _enh_item_key(lines, keys):
+    """(family, step) of the item in the slot: the first line naming a plan 035
+    family; step = the first level above its shown level that has a rate row."""
+    families = sorted({f for f, _ in keys})
+    for ln in lines:
+        low = ln["text"].lower()
+        fam = next((f for f in families if f.replace("_", " ") in low), None)
+        if fam is None:
+            continue
+        m = _ENH_ITEM.match(ln["text"])
+        cur = f"+{int(m.group(1))}" if m.group(1) else (m.group(2) or "+0").upper()
+        if cur not in ENH_LADDER:
+            continue
+        step = next((s for s in ENH_LADDER[ENH_LADDER.index(cur) + 1:] if (fam, s) in keys),
+                    None)
+        if step is not None:
+            return fam, step
+    return None
+
+
+def _enh_pick(rows):
+    """One field from the candidate reads of a kind: the best conf, dropped to
+    CONF_ENH_AMBIGUOUS when another value was read too."""
+    f = dict(max(rows, key=lambda r: r["conf"]))
+    if len({repr(r["value"]) for r in rows}) > 1:
+        f["conf"] = min(f["conf"], CONF_ENH_AMBIGUOUS)
+        f["why"] += "; another value on screen"
+    f["conf"] = round(f["conf"], 3)
+    return f
+
+
+def _enh_crons(lines, i, hit):
+    """The enh_crons candidate of the cron-name line `i`, or None."""
+    text = lines[i]["text"]
+    amt, near = _enh_cron_amount(text), False
+    if amt is None and not _CUR_COST.search(text):
+        for b in _cur_near(lines, i):
+            if (_cur_name(b["text"], _ENH_CRON) is not None or _ENH_FS.search(b["text"])
+                    or _agris_word(b["text"]) is not None):
+                continue
+            amt = _enh_cron_amount(b["text"])
+            if amt is not None:
+                near = True
+                break
+    if amt is None or amt[0] > ENH_CRONS_MAX:
+        return None
+    ratio = round(1 - hit[1] / len(hit[2]), 3)
+    name = "exact" if hit[1] == 0 else f"~{ratio:.2f}"
+    return {"kind": "enh_crons", "name": "crons", "value": amt[0],
+            "conf": ratio * amt[1] * (CONF_CUR_NEAR if near else 1),
+            "why": f"cron name {name}; {amt[2]}" + (" (line beside / below)" if near else "")}
+
+
+def enhance_fields(doc, keys, fallback=None):
+    """[{kind: enh_fs | enh_crons | enh_agris, name, value, conf, why}] from one
+    enhancement window shot; [] without an "Enhance" anchor line. `fallback`
+    (family, step) keys an Agris read when no item line names a family."""
+    lines = _lines_of(doc)
+    if not any(_ENH_ANCHOR.search(ln["text"]) for ln in lines):
+        return []
+    keys = keys or {}
+    fs, crons, agris = [], [], []
+    for i, ln in enumerate(lines):
+        text = ln["text"]
+        for m in _ENH_FS.finditer(text):
+            if int(m.group(1)) <= ENH_FS_MAX:
+                fs.append({"kind": "enh_fs", "name": "fs", "value": int(m.group(1)),
+                           "conf": CONF_ENH_LABEL, "why": "failstack label"})
+        hit = _cur_name(text, _ENH_CRON)
+        if hit is not None:
+            c = _enh_crons(lines, i, hit)
+            if c is not None:
+                crons.append(c)
+        end = _agris_word(text)
+        if end is not None:
+            m = _ENH_AGRIS_NUM.search(text[end:])
+            if m and int(m.group(1)) <= ENH_AGRIS_MAX:
+                agris.append((int(m.group(1)), int(m.group(2)) if m.group(2) else None))
+    out = [_enh_pick(rows) for rows in (fs, crons) if rows]
+    if not agris:
+        return out
+    key, conf, why = _enh_item_key(lines, keys), CONF_ENH_LABEL, "Agris stacks"
+    if key is None and fallback is not None and tuple(fallback) in keys:
+        key, conf = tuple(fallback), CONF_ENH_LABEL * CONF_ENH_FALLBACK
+        why = "Agris stacks; item from the next plan step"
+    if key is None:
+        return out
+    rows = []
+    for stacks, shown in agris:
+        c, w, t = conf, why, keys.get(key)
+        if shown is not None and t is not None and shown != t:
+            c, w = min(c, CONF_ENH_AMBIGUOUS), f"{w}; shown threshold {shown} != {t}"
+        rows.append({"kind": "enh_agris", "name": f"{key[0]} {key[1]}",
+                     "value": {"family": key[0], "step": key[1], "stacks": stacks},
+                     "conf": c, "why": w})
+    return out + [_enh_pick(rows)]
