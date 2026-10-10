@@ -76,3 +76,41 @@ Retires: the typed `market.fame_pct` Settings field as a required input
 (kept only as an explicit override).
 
 Depends on: 081.
+
+## As-built deviations
+
+Self-adjudicated in the build lane (refute-rounds: 0/3 at hand-in).
+
+1. Tier table ships empty. Decision: `server/ew/data/fame_tiers.json` has
+   `tiers: []`, `source: null`, `read: null`, `verified: false`; the loader
+   (`server/ew/fameauto.py`) and the fallback are wired and tested with an
+   injected table. Alternatives: tiers from memory (forbidden by slice 3: no
+   invented tier data); block the plan on a research lane. Why: the build run
+   had no granted web read, so no public page sourced the table. Reverses if:
+   a deep-dive or data lane reads a public page with the tiers - fill the rows,
+   set source / read, and `verified` only after a plan 085 hint row agrees
+   with a sell dialog read.
+2. Profile estimate is computed at read time, not written to store domain
+   `fame`, and it never retires a ledger entry (typed or config) - it only
+   beats the default. Alternatives: persist it beside the OCR read; let it
+   beat config like an OCR read does. Why: it is an unverified estimate from
+   partial data (the public profile has combat + life fame, not the age fame
+   part of family fame), so an operator-sourced value stays more trustworthy;
+   computing it on read keeps the one persisted value an actual screenshot
+   read. Reverses if: the tier table is verified and family fame is fully
+   covered by the profile.
+3. Family fame = combat_fame + life_fame of the main character row of the
+   newest refresh (the fields are family-level and repeat on each character
+   row), not a sum over characters.
+4. The Settings line uses the shared plan 081 `derivedText` wording ("Family
+   fame bonus: 1.25 % (from screenshot, 2d ago)") instead of "(OCR, 2 d ago)",
+   so every derived input reads the same across cards.
+5. `AutoOcr.fame_read()` also reads the plan 081 `ocr_reads` list (a newer
+   row there wins), so a store written before plan 108 keeps its read without
+   a migration.
+6. The monotonic guard applies only to a read from a shot at least as new as
+   the current read (an older shot reading lower is history, not a drop); a
+   review accept / fix commits regardless (the operator's call), and the
+   agreeing review item is removed when the second read commits.
+7. `/api/settings` (GET and POST) carries `derived` {key: row}; the clear
+   button posts the existing plan 079 `{clear: "market.fame_pct"}`.

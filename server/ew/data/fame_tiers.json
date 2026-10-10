@@ -1,0 +1,7 @@
+{
+ "note": "Plan 108: family fame (combat + life fame of the newest public profile refresh) -> Central Market sale bonus percent, used only when no market sell dialog screenshot was read. Empty on purpose: no public page was read to source the tiers in the build run (as-built deviation 1 of plan 108), and plan 108 forbids invented tier data. Fill tiers [{min_fame, pct}] from a sourced page, set source / read, and set verified true only after a plan 085 hint row checks it against a sell dialog read.",
+ "source": null,
+ "read": null,
+ "verified": false,
+ "tiers": []
+}

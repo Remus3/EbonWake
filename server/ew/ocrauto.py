@@ -449,9 +449,16 @@ class AutoOcr:
                     f = dict(f, why=f"{f['why']}; {hold}")  # S7: never auto-committed
                 else:
                     before = (ocrinfer.prev_sample(samples, shot_at), self.leveling.rate())
+            agree = None
+            if f["kind"] == "fame" and f["conf"] >= mn:
+                hold, agree = self._fame_hold(shot["name"], f["value"], shot_at)
+                if hold is not None:
+                    f = dict(f, why=f"{f['why']}; {hold}")
             if hold is None and f["conf"] >= mn:
                 try:
                     self._commit(shot["name"], f["kind"], f["name"], f["value"], shot_at)
+                    if agree is not None:
+                        self._drop_review(agree)
                     touched = True
                     if before is not None:
                         self._suggest_book(shot["name"], f["value"], shot_at, *before)
@@ -556,6 +563,52 @@ class AutoOcr:
         r = max(enumerate(rows), key=lambda p: (_ts(p[1]["at"]), p[0]))[1]
         return {"value": r["value"], "at": r["at"],
                 "source": r["source"] if isinstance(r.get("source"), str) else "ocr"}
+
+    # -- plan 108: the persisted family fame read ------------------------------------
+
+    def fame_read(self):
+        """{value, at, source: "ocr", file} of the newest committed fame read:
+        store domain `fame` (kept across commit-list rotation and restarts),
+        or a newer `ocr_reads` row (a store written before plan 108); or None."""
+        doc = self.store.get("fame")
+        best = None
+        try:
+            if _ts(doc.get("at")) is not None:
+                best = {"value": _check_value("fame", doc.get("value")), "at": doc["at"],
+                        "source": "ocr", "file": _str(doc.get("file"), 255) or None}
+        except ValueError:
+            best = None
+        r = self.latest("fame")
+        if r is not None and (best is None or _ts(r["at"]) > _ts(best["at"])):
+            src = r["source"]
+            best = {"value": r["value"], "at": r["at"], "source": "ocr",
+                    "file": (src[4:] or None) if src.startswith("ocr:") else None}
+        return best
+
+    def _fame_put(self, uid, value, at, file):
+        self.store.put("fame", {"id": uid, "value": value, "at": _iso(at), "source": "ocr",
+                                "file": _str(file, 255)})
+
+    def _fame_hold(self, file, value, shot_at):
+        """Slice 4: (why held | None, id of an agreeing review item | None). Fame
+        only rises: a read below the newest one (from a later shot) is held
+        until a second screenshot reads the same value."""
+        cur = self.fame_read()
+        if cur is None or value >= cur["value"] or shot_at < _ts(cur["at"]):
+            return None, None
+        with self._lock:
+            items = self._review()["items"]
+        for i in items:
+            if i.get("kind") == "fame" and i.get("value") == value and i.get("file") != file:
+                return None, i.get("id")
+        return (f"fame went down from {cur['value']} %; held until a second screenshot "
+                "agrees"), None
+
+    def _drop_review(self, rid):
+        with self._lock:
+            r = self._review()
+            r["items"] = [i for i in r["items"] if i.get("id") != rid]
+            self.store.put("ocr_review", r)
 
     # -- plan 081: loot counts of the running grind session ------------------------
 
@@ -667,6 +720,9 @@ class AutoOcr:
                     "id": uid, "at": _iso(shot_at), "value": value,
                     "source": f"ocr:{_str(file, 255)}"}])[-MAX_READS:]
                 self.store.put("ocr_reads", reads)
+                cur = _ts(self.store.get("fame").get("at")) if kind == "fame" else None
+                if kind == "fame" and (cur is None or shot_at >= cur):
+                    self._fame_put(uid, value, shot_at, file)  # plan 108: the newest read
             else:
                 # `value` is minutes left at the shot; a fix is typed as minutes left now.
                 left = value - math.floor(max(0.0, now - shot_at) / 60) if at_shot else value
@@ -728,6 +784,17 @@ class AutoOcr:
                 reads = self._reads()
                 reads[c["kind"]] = [r for r in reads.get(c["kind"], []) if r.get("id") != uid]
                 self.store.put("ocr_reads", reads)
+                if c["kind"] == "fame" and self.store.get("fame").get("id") == uid:
+                    # Plan 108: back to the newest read left, or no read at all.
+                    rest = sorted(reads["fame"], key=lambda r: _ts(r["at"]))
+                    if rest:
+                        src = rest[-1].get("source")
+                        self._fame_put(rest[-1].get("id"), rest[-1]["value"],
+                                       _ts(rest[-1]["at"]),
+                                       src[4:] if isinstance(src, str)
+                                       and src.startswith("ocr:") else "")
+                    else:
+                        self.store.put("fame", {})
             else:
                 # Only while the timer is still the one this commit wrote: a later
                 # commit or a manual re-arm / clear is never overwritten.

@@ -45,7 +45,7 @@ from pathlib import Path
 from urllib.parse import parse_qs
 
 from . import (__version__, autotick, autowatch, bossdrift, bosses, context, coupons, crafting,
-               dataverdicts, deadeye,
+               dataverdicts, deadeye, fameauto,
                derived, detect, enhance, eventcurrency, eventnotices, events, gamewatch, grind, imperial, inventory, itemnames,
                leveling, logindays, maint, maintdigest, market, mounts, ocr, ocrauto, onboarding, overrides,
                pets,
@@ -218,6 +218,8 @@ class EWServer(ThreadingHTTPServer):
                 clock=getattr(profile_client, "clock", time.time)),
             on_level=lambda lvl: self.leveling.profile_marker(lvl),
             auto_level=cfg.get("auto_level", True))
+        # Plan 108: profile fame -> sale bonus tiers (the no-screenshot fallback).
+        self.fame_tiers = fameauto.load_tiers()
         # Plan 018: buff presets follow the newest started XP epoch.
         # Plan 039: loot priced from the cached arsha sublist, taxed per plan 027.
         self.grind = grind.GrindService(
@@ -539,32 +541,58 @@ class EWServer(ThreadingHTTPServer):
         auto = getattr(self, "ocr_auto", None)
         return auto.latest(kind) if auto is not None else None
 
+    def _fame_read(self):
+        """Plan 108: the derived fame bonus {value, at, source: ocr|profile,
+        file}: the persisted sell dialog read, else the profile fame tier
+        estimate (only while the tier table has rows), else None."""
+        auto = getattr(self, "ocr_auto", None)
+        r = auto.fame_read() if auto is not None else None
+        if r is not None:
+            return r
+        hist = self.progress.history
+        snap = hist.main_snapshot() if hist is not None else None
+        pct = fameauto.estimate(self.fame_tiers, fameauto.profile_fame(snap))
+        if pct is None:
+            return None
+        return {"value": pct, "at": snap["at"], "source": "profile", "file": None}
+
     def _fame_live(self):
-        """The newest market sell dialog fame read, when it is at least as new as
-        the market.fame_pct override (typed or config) - a newer typed value wins."""
-        r = self._ocr_read("fame")
+        """Plan 108 precedence: a sell dialog read beats a config/local.json
+        value always and a typed override only when the read is newer. The
+        profile estimate is the fallback under any ledger entry."""
+        r = self._fame_read()
         if r is None or not market._valid_fame(r.get("value")):
             return None
         e = self.overrides.doc()["live"].get("market.fame_pct")
-        if e is not None:
+        if e is not None and (r["source"] != "ocr" or e["source"] == "typed"):
+            if r["source"] != "ocr":
+                return None
             r_at, e_at = overrides._ts(r.get("at")), overrides._ts(e.get("set_at"))
             if r_at is None or (e_at is not None and r_at < e_at):
                 return None
-        return {"value": r["value"], "signal": "ocr_fame"}
+        return {"value": r["value"],
+                "signal": "ocr_fame" if r["source"] == "ocr" else "profile_fame"}
 
     def _fame_row(self):
         """Fame bonus in force with its source and age (spec section 4)."""
         fame = self.tax()["fame_pct"]
-        r = self._ocr_read("fame")
+        r = self._live(self._fame_read)
         now = float(self.overrides.clock())
-        if r is not None and r.get("value") == fame and self._fame_live() is not None:
-            row = derived.pick(None, r, now)
-            return dict(row, value=fame, source="ocr")
+        if r is not None and r.get("value") == fame and self._live(self._fame_live) is not None:
+            row = dict(derived.pick(None, r, now), value=fame, source=r["source"])
+            if r["source"] == "profile":
+                row["note"] = fameauto.ESTIMATE_NOTE
+            return row
         e = self.overrides.doc()["live"].get("market.fame_pct")
         if e is not None:
             return {"value": fame, "source": e["source"], "at": e["set_at"],
                     "age_s": None, "stale": False}
         return {"value": fame, "source": "default", "at": None, "age_s": None, "stale": False}
+
+    def settings_out(self, view):
+        """Plan 108: a /api/settings body plus `derived` {key: row} - the value
+        in force for a key that is read, not typed, with its source and age."""
+        return dict(view, derived={"market.fame_pct": self._live(self._fame_row)})
 
     def _hot_until(self, now):
         """Plan 081: end (utc datetime) of the next maintenance after `now`."""
@@ -955,7 +983,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/zones/xp":
             return self._send(200, self.server.zones.view())
         if path == "/api/settings":
-            return self._send(200, self.server.settings.view())
+            return self._send(200, self.server.settings_out(self.server.settings.view()))
         if path == "/api/pets":
             q = parse_qs(query)
             if "exchange" not in q:
@@ -1145,7 +1173,7 @@ class Handler(BaseHTTPRequestHandler):
             det.apply()
         self.server.context.invalidate()  # plan 067: pins / blocks / auto apply live
         out["overrides"] = self.server.overrides_view()
-        return out
+        return self.server.settings_out(out)
 
     def _post_ocr(self, body):
         # Plan 063: {"review": {id, action, value?}} / {"undo": id} act on the
