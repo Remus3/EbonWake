@@ -27,6 +27,30 @@ test('currencyText: covered / short / no wishlist / typed (mirrors server label)
     'Seals: 300 in hand (typed), 1170 guaranteed by 11-05');
 });
 
+test('currencyText: plan 115 OCR source label with age (mirrors server label)', () => {
+  const at = '2026-10-21T08:00:00+00:00';
+  const now = Date.parse(at);
+  const ocr = row({ wishlist_cost: 0, earned: 140, earned_src: 'ocr', balance_at: at, guaranteed: 970 });
+  assert.strictEqual(C.currencyText(ocr, now + 2 * 3600e3),
+    'Seals: 140 in hand (OCR, 2 h ago), 970 guaranteed by 11-05');
+  assert.ok(C.currencyText(ocr, now + 30e3).includes('(OCR, just now)'));
+  assert.ok(C.currencyText(ocr, now + 45 * 60e3).includes('(OCR, 45 min ago)'));
+  assert.ok(C.currencyText(ocr, now + 3 * 86400e3).includes('(OCR, 3 d ago)'));
+  assert.ok(C.currencyText(row({ earned_src: 'ocr', balance_at: null }), now).includes('140 in hand (OCR),'));
+  const rows = C.currencyRows({ events: [ocr, row({ earned_src: 'bogus', balance_at: at })] });
+  assert.deepStrictEqual(rows.map((r) => [r.earned_src, r.balance_at]), [['ocr', at], ['log', null]]);
+});
+
+test('OCR review: currency_balance rows shown, fix capped', () => {
+  const a = C.normalizeOcrAuto({ review: [{ id: 'r1', kind: 'currency_balance', name: '10673', value: 20,
+    conf: 0.95, why: 'held', file: 'a.png' }] });
+  assert.strictEqual(a.review.length, 1);
+  assert.strictEqual(C.ocrAutoLabel(a.review[0]), 'event 10673 currency 20 (95%)');
+  assert.deepStrictEqual(C.ocrFixBody('r1', 'currency_balance', '1,240'),
+    { review: { id: 'r1', action: 'fix', value: 1240 } });
+  assert.strictEqual(C.ocrFixBody('r1', 'currency_balance', '99999999'), null);
+});
+
 test('currencyPill', () => {
   assert.deepStrictEqual(C.currencyPill(row()), { cls: 'ok', text: 'covered' });
   assert.deepStrictEqual(C.currencyPill(row({ shortfall: 90 })), { cls: 'warn', text: '90 short' });

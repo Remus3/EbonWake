@@ -396,7 +396,8 @@ class EWServer(ThreadingHTTPServer):
             on_change=self._ocr_auto_changed, leveling=self.leveling, progress=self.progress,
             play=self.play.view, loot_target=self.grind.loot_target, zones=self.zones,
             bosses=self.bosses,  # plan 111: a boss loot screen ticks the loot itself
-            catalog=self.names.catalog)  # plan 113: off-table loot names
+            catalog=self.names.catalog,  # plan 113: off-table loot names
+            currency=self.currency)  # plan 115: exchange / tooltip -> event currency balance
         # Plan 081: the running session's OCR loot counts prefill the loot form;
         # plan 113: an auto session closes with them as its loot, cache-priced.
         self.grind.ocr_loot = self.ocr_auto.loot_prefill
@@ -807,6 +808,7 @@ class EWServer(ThreadingHTTPServer):
         self.bus.bump("ocr")
         self.bus.bump("grind")
         self.bus.bump("progress")  # plan 066: gs stats (leveling bumps its own seq)
+        self.bus.bump("events")  # plan 115: an event currency balance read
 
     def _play_config(self):
         s = self.fixed_settings()
