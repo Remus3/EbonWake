@@ -224,14 +224,17 @@ def test_daily_needs_a_ticked_daily(tmp_path):
     assert _done(svc.view())["daily"] is False
 
 
-def test_leveling_needs_a_typed_sample(tmp_path):
+def test_leveling_done_from_any_sample(tmp_path):
     svc, store, _ = _svc(tmp_path)
+    assert _done(svc.view())["leveling"] is False
     store.put("leveling", {"samples": [{"ts": "2026-10-05T10:00:00+00:00", "level": 61,
                                         "pct": None, "source": "profile"}]})
-    assert _done(svc.view())["leveling"] is False  # a profile marker is not a sample
+    assert _done(svc.view())["leveling"] is True  # plan 116: a profile marker counts
     store.put("leveling", {"samples": [{"ts": "2026-10-05T10:00:00+00:00", "level": 61,
                                         "pct": 12.5}]})
     assert _done(svc.view())["leveling"] is True
+    store.put("leveling", {"samples": [{"ts": "bad", "level": 61, "pct": 12.5}]})
+    assert _done(svc.view())["leveling"] is False
 
 
 def _all_done(tmp_path):

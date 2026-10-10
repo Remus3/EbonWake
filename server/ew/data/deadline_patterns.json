@@ -1,0 +1,10 @@
+{
+  "_doc": "Plan 116: level-gated deadline sentences kept from official notice Detail pages ('reach Lv N by <date>', 'enrol by'). Each pattern is a case-insensitive Python regex searched in one sentence; an optional named group 'level' picks the level, else the sentence's only 'Lv N' / 'Level N' (two different levels: conf x 0.8). A sentence is kept only when it also holds a date that resolves. conf at or over the plan 111 gate (0.95) adds the row with by notice; below it the row is a suggestion only. Estimated wording, not measured against a live notice yet.",
+  "verified": false,
+  "patterns": [
+    {"re": "\\breach(?:es|ing)?\\s+(?:Lv\\.?|Level)\\s*(?P<level>[0-9]{1,2})\\b.{0,80}?\\b(?:by|before|until)\\b", "kind": "reach", "conf": 0.97},
+    {"re": "\\b(?:enrol\\w*|regist\\w*)\\b.{0,80}?(?:Lv\\.?|Level)\\s*(?P<level>[0-9]{1,2})\\b.{0,80}?\\b(?:until|by|before|closes?|ends?)\\b", "kind": "enrol", "conf": 0.96},
+    {"re": "(?:Lv\\.?|Level)\\s*(?P<level>[0-9]{1,2})\\b.{0,80}?\\b(?:enrol\\w*|regist\\w*)\\b.{0,80}?\\b(?:until|by|before|closes?|ends?)\\b", "kind": "enrol", "conf": 0.96},
+    {"re": "\\b(?:sign[- ]?up|join|apply|participat\\w*)\\b.{0,120}?\\b(?:until|by|before|ends?|closes?)\\b", "kind": "enrol", "conf": 0.8}
+  ]
+}

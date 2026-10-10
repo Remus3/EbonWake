@@ -49,7 +49,7 @@ def test_combat_special_claim_resolves_from_the_maintenance_slot():
     n = eventnotices.parse_notice(PAGES[COMBAT], COMBAT_TITLE, 2026, 10)
     assert n["claims"] == [{"text": COMBAT_TEXT,
                             "until": {"date": "2026-10-15", "edge": "before", "time": None}}]
-    assert n["parse_v"] == maintdigest.PARSE_V == 3
+    assert n["parse_v"] == maintdigest.PARSE_V >= 3  # plan 116 bumped it to 4
     # the event's own window is the pass sale, which ends a week earlier
     assert n["window"]["ends"] == {"date": "2026-10-08", "edge": "before", "time": None}
     assert claimwindows.latest(n["claims"], _resolve(SLOT8)) == (_utc(2026, 10, 15, 8, 0),

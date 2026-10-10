@@ -232,6 +232,7 @@
     ["hotLive","function"],
     ["levelingLine","function"],
     ["fmtLevelLine","function"],
+    ["sampleBadge","function"],
     ["historyRows","function"],
     ["PROFILE_HISTORY_PATH","string"],
     ["lifeskillView","function"],

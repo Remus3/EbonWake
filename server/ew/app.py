@@ -1263,11 +1263,12 @@ class Handler(BaseHTTPRequestHandler):
                "hot_del": "hot_del", "milestones": "set_milestones",
                "epoch_add": "epoch_add", "epoch_del": "epoch_del",
                "deadline_set": "deadline_set", "deadline_del": "deadline_del",
+               "deadline_accept": "deadline_accept",
                "book_add": "book_add", "book_use": "book_use", "book_del": "book_del"}
         if len(body) != 1 or not (set(ops) & set(body)):
             raise ValueError("body must be one of {sample|sample_del|hot_add|hot_del|"
                              "milestones|epoch_add|epoch_del|deadline_set|deadline_del|"
-                             "book_add|book_use|book_del: ...}")
+                             "deadline_accept|book_add|book_use|book_del: ...}")
         (op, arg), = body.items()
         return getattr(self.server.leveling, ops[op])(arg)
 

@@ -430,32 +430,76 @@ def _parse(ts):
     return when.timestamp() if when.tzinfo is not None else None
 
 
-def check_level(samples, level, pct, shot_ts):
-    """None when (level, pct) read at `shot_ts` extends the history, else why it
-    is held for review. `samples`: cleaned plan 011 samples, oldest first
-    (typed, `ocr` and plan 041 profile markers). A typed sample at or after the
-    shot always wins (manual entry beats an older OCR read)."""
+def level_hold(samples, level, pct, shot_ts):
+    """(kind, why) when (level, pct) read at `shot_ts` breaks the history, else
+    None. kind: "older" (a later / typed sample exists), "below" (level below
+    the known one) or "back" (XP went back at the same level). `samples`:
+    cleaned plan 011 samples, oldest first (typed, `ocr` and plan 041 profile
+    markers); plan 116 superseded samples are skipped. A typed sample at or
+    after the shot always wins (manual entry beats an older OCR read)."""
+    samples = [s for s in samples if s.get("superseded") is not True]
     for s in reversed(samples):
         ts = _parse(s.get("ts"))
         if ts is None:
             continue
         typed = s.get("source") is None and s.get("pct") is not None
         if ts > shot_ts or (typed and ts >= shot_ts):
-            return f"shot older than a {'typed' if typed else 'later'} sample ({s['ts']})"
+            return "older", f"shot older than a {'typed' if typed else 'later'} sample ({s['ts']})"
     known, _, _ = _level_now(samples) if samples else (None, None, None)
     if known is not None and level < known:
-        return f"level {level} below the known Lv {known}"
+        return "below", f"level {level} below the known Lv {known}"
     last = next((s for s in reversed(samples) if s.get("pct") is not None), None)
     if last is not None and last["level"] == level and pct < last["pct"]:
-        return f"XP {pct}% went back from {last['pct']}% at Lv {level}"
+        return "back", f"XP {pct}% went back from {last['pct']}% at Lv {level}"
     return None
 
 
+def check_level(samples, level, pct, shot_ts):
+    """None when the read extends the history, else why it is held (see level_hold)."""
+    hold = level_hold(samples, level, pct, shot_ts)
+    return None if hold is None else hold[1]
+
+
+# Plan 116: a read held as "below" / "back" is accepted when a second read
+# from another shot at least AGREE_GAP_S away lands within AGREE_PCT of it.
+AGREE_PCT = 0.5
+AGREE_GAP_S = 120
+RESOLVABLE = ("below", "back")
+
+
+def cum_pct(level, pct):
+    """Cumulative level-percent of a read (a profile marker: the level start)."""
+    return level * 100 + (pct or 0)
+
+
+def agrees(a, b):
+    """Two {level, pct, shot_ts} reads agree: >= AGREE_GAP_S apart and within
+    AGREE_PCT cumulative percent of each other."""
+    return (abs(a["shot_ts"] - b["shot_ts"]) >= AGREE_GAP_S
+            and abs(cum_pct(a["level"], a["pct"]) - cum_pct(b["level"], b["pct"])) <= AGREE_PCT)
+
+
+def conflicting(samples, reads):
+    """ts of the counted samples older than the newest of `reads` that sit
+    above them all (the misread that held them), oldest first."""
+    top = max(cum_pct(r["level"], r["pct"]) for r in reads)
+    until = max(r["shot_ts"] for r in reads)
+    out = []
+    for s in samples:
+        ts = _parse(s.get("ts"))
+        if ts is None or ts >= until or s.get("superseded") is True:
+            continue
+        if cum_pct(s["level"], s.get("pct")) > top:
+            out.append(s["ts"])
+    return out
+
+
 def prev_sample(samples, shot_ts):
-    """Newest sample with a pct at or before `shot_ts`, or None."""
+    """Newest counted sample with a pct at or before `shot_ts`, or None."""
     for s in reversed(samples):
         ts = _parse(s.get("ts"))
-        if ts is not None and ts <= shot_ts and s.get("pct") is not None:
+        if ts is not None and ts <= shot_ts and s.get("pct") is not None \
+                and s.get("superseded") is not True:
             return s
     return None
 

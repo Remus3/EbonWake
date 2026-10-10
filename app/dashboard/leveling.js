@@ -257,6 +257,10 @@
       // Plan 041: a server-written profile marker has no XP percent.
       r.appendChild(s.source === 'profile' ? el('span', 'ew-muted', '(profile)') :
         el('span', 'ew-mprice ew-gnum', s.pct + '%'));
+      const b = C.sampleBadge(s); // plan 116: typed / OCR / profile (superseded)
+      const bs = el('span', 'ew-muted ' + b.cls, b.text);
+      bs.title = b.title;
+      r.appendChild(bs);
       if (s.pre_patch === true) r.appendChild(el('span', 'ew-muted', 'pre-patch'));
       const x = el('button', 'ew-tx', 'x');
       x.type = 'button';
@@ -323,11 +327,36 @@
       const p = C.deadlinePill(dl);
       r.appendChild(el('span', 'ew-pill ' + p.cls, p.text));
       const t = el('span', 'ew-mname', C.deadlineLine(dl));
-      t.title = t.textContent;
+      t.title = t.textContent + (dl.by === 'notice' && dl.source ? ' - ' + dl.source : '');
       r.appendChild(t);
+      // Plan 116: a row added from an official notice is undone with x.
+      if (dl.by === 'notice') r.appendChild(deadlineX(dl.id, 'remove this notice deadline'));
       ui.deadlines.appendChild(r);
     });
-    ui.deadlines.hidden = !list.length;
+    // Plan 116: notice rows under the auto-add gate wait for Accept (or x).
+    const sugg = S.data ? S.data.deadline_suggestions : [];
+    sugg.forEach(function (dl) {
+      const r = el('div', 'ew-lrow ew-lnote');
+      r.appendChild(el('span', 'ew-pill unknown', 'suggested'));
+      const t = el('span', 'ew-mname', dl.label + ': Lv ' + dl.needs_level + ' by ' + C.fmtMonthDay(dl.enrol_by_utc));
+      t.title = 'read from an official notice' + (dl.source ? ' - ' + dl.source : '');
+      r.appendChild(t);
+      const a = button('Accept');
+      a.addEventListener('click', function () { send({ deadline_accept: dl.id }, 'deadline added'); });
+      r.appendChild(a);
+      r.appendChild(deadlineX(dl.id, 'dismiss this suggestion'));
+      ui.deadlines.appendChild(r);
+    });
+    ui.deadlines.hidden = !list.length && !sugg.length;
+  }
+
+  function deadlineX(id, title) {
+    const x = el('button', 'ew-tx', 'x');
+    x.type = 'button';
+    x.title = title;
+    x.setAttribute('aria-label', title);
+    x.addEventListener('click', function () { send({ deadline_del: id }, 'deadline removed'); });
+    return x;
   }
 
   function draw() {
@@ -451,10 +480,32 @@
     });
     det.appendChild(ef);
     det.appendChild(booksEditor(ui));
-    det.appendChild(el('div', 'ew-muted ew-lnote', 'recent samples'));
+    det.appendChild(el('div', 'ew-muted ew-lnote', 'recent samples (typed / OCR / profile)'));
     ui.samples = el('div', 'ew-list');
     det.appendChild(ui.samples);
+    det.appendChild(sampleForm());
     return det;
+  }
+
+  // Plan 116: screenshots and profile refreshes fill the samples; typing one
+  // is optional, so the level + XP % form lives in the details row.
+  function sampleForm() {
+    const q = el('form', 'ew-lform');
+    q.appendChild(el('span', 'ew-muted', 'type a sample (optional)'));
+    const lvl = input('ew-lnum', 2, 'Lv', 'level 1-' + C.LEVEL_MAX);
+    lvl.inputMode = 'numeric';
+    const pct = input('ew-lnum', 8, 'XP %', 'XP % 0-100, up to 3 decimals');
+    pct.inputMode = 'decimal';
+    q.appendChild(lvl);
+    q.appendChild(pct);
+    q.appendChild(button('Log', 'submit'));
+    q.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      const r = C.parseSampleForm({ level: lvl.value, pct: pct.value });
+      if (!r.ok) { msg(r.error); return; }
+      send(r.body, 'logged').then(function (ok) { if (ok) pct.value = ''; });
+    });
+    return q;
   }
 
   function sizeSelect() {
@@ -517,22 +568,6 @@
     c.appendChild(h);
     const body = el('div', 'ew-cbody');
     const ui = { card: c, pill: pill, mdirty: false };
-    // Quick entry: level + XP %, Enter submits.
-    const q = el('form', 'ew-lform');
-    const lvl = input('ew-lnum', 2, 'Lv', 'level 1-' + C.LEVEL_MAX);
-    lvl.inputMode = 'numeric';
-    const pct = input('ew-lnum', 8, 'XP %', 'XP % 0-100, up to 3 decimals');
-    pct.inputMode = 'decimal';
-    q.appendChild(lvl);
-    q.appendChild(pct);
-    q.appendChild(button('Log', 'submit'));
-    q.addEventListener('submit', function (ev) {
-      ev.preventDefault();
-      const r = C.parseSampleForm({ level: lvl.value, pct: pct.value });
-      if (!r.ok) { msg(r.error); return; }
-      send(r.body, 'logged').then(function (ok) { if (ok) pct.value = ''; });
-    });
-    body.appendChild(q);
     ui.lvl = el('div', 'ew-mname', 'loading...');
     body.appendChild(ui.lvl);
     const kv = el('div', 'ew-kv');
