@@ -19,7 +19,9 @@ for review below the gate). Plan 111: a book-use suggestion at or over
 AUTO_APPLY_MIN is applied instead of queued, a shot near a world boss spawn
 whose text names that boss ticks its loot (`bosses`, by: auto), and every such
 auto-apply (and every committed zone read) is listed in store domain
-`auto_applied` with an Undo. Nothing reaches the game: the input is image files the operator
+`auto_applied` with an Undo. Plan 115: an event currency balance read from
+the exchange window / a tooltip sets that event's balance in eventcurrency
+(held when below the logged projection). Nothing reaches the game: the input is image files the operator
 saved with the game's own screenshot key, read after they are written.
 """
 
@@ -59,9 +61,12 @@ MAX_LOOT_ROWS = 60
 # Plan 081: planner reads (inventory weight / slots, CP, market fame bonus).
 PLANNER_KINDS = ("weight", "slots", "cp", "fame")
 # Plan 088: a Monster Zone Info read (zone, recommended level, per-kill EXP).
-KINDS = ("silver", "buff", "level", "gear", "book_use") + PLANNER_KINDS + (zoneinfo.KIND,)
+# Plan 115: an event currency balance (exchange window / tooltip) -> eventcurrency.
+CURRENCY_KIND = "currency_balance"
+KINDS = ("silver", "buff", "level", "gear", "book_use") + PLANNER_KINDS + (zoneinfo.KIND,
+                                                                           CURRENCY_KIND)
 # a book suggestion and a zone read are accept / discard only
-FIX_KINDS = ("silver", "buff", "level", "gear") + PLANNER_KINDS
+FIX_KINDS = ("silver", "buff", "level", "gear") + PLANNER_KINDS + (CURRENCY_KIND,)
 
 # Silver confidence (separators between the digit groups of the read amount).
 CONF_GROUPED = 0.97      # 1,234,567 - the game's own format
@@ -291,6 +296,8 @@ def _check_value(kind, v):
         raise ValueError(f"slots value must be {{used, total}}, total {lo}..{hi}")
     if kind == "cp" and _ok_int(v, 0, ocrinfer.CP_MAX_READ):
         return v
+    if kind == CURRENCY_KIND and _ok_int(v, 0, ocrinfer.CUR_MAX_READ):
+        return v
     if kind == zoneinfo.KIND:
         return zoneinfo.check_value(v)
     if kind == "fame":
@@ -298,7 +305,8 @@ def _check_value(kind, v):
             return v
         raise ValueError(f"fame value must be a number 0..{ocrinfer.FAME_MAX_READ}")
     ranges = {"silver": f"0..{MAX_SILVER}", "buff": f"1..{MAX_BUFF_MINUTES}",
-              "gear": f"{GS_RANGE[0]}..{GS_RANGE[1]}", "cp": f"0..{ocrinfer.CP_MAX_READ}"}
+              "gear": f"{GS_RANGE[0]}..{GS_RANGE[1]}", "cp": f"0..{ocrinfer.CP_MAX_READ}",
+              CURRENCY_KIND: f"0..{ocrinfer.CUR_MAX_READ}"}
     raise ValueError(f"{kind} value must be an int {ranges.get(kind, '')}".rstrip())
 
 
@@ -312,7 +320,7 @@ class AutoOcr:
 
     def __init__(self, store, game, reader, grind, settings=None, clock=time.time,
                  on_change=None, leveling=None, progress=None, play=None, regions=None,
-                 loot_target=None, zones=None, bosses=None):
+                 loot_target=None, zones=None, bosses=None, currency=None):
         self.store = store
         self.game = game
         self.reader = reader              # OcrService (plan 009): .doc(name) -> {text, lines}
@@ -328,6 +336,8 @@ class AutoOcr:
         self.zones = zones
         # Plan 111: BossService; without one boss loot is never auto-ticked.
         self.bosses = bosses
+        # Plan 115: CurrencyService; without one event currency is not read.
+        self.currency = currency
         self.zone_titles = zoneinfo.load_titles()
         self.regions = regions if regions is not None else ocrinfer.load_regions()
         self.settings = settings or (lambda: {})
@@ -476,6 +486,8 @@ class AutoOcr:
         if self.zones is not None:
             fields += zoneinfo.parse(doc, self.zone_titles)
         shot_at = _ts(shot.get("mtime")) or self.clock()
+        if self.currency is not None:
+            fields += ocrinfer.currency_field(doc, self.currency.rules, shot_at)
         touched = self._loot_read(shot["name"], doc, shot_at, mn)
         for f in fields:
             if f["kind"] == "buff" and f["value"] - math.floor(
@@ -499,6 +511,16 @@ class AutoOcr:
                 hold, agree = self._fame_hold(shot["name"], f["value"], shot_at)
                 if hold is not None:
                     f = dict(f, why=f"{f['why']}; {hold}")
+            if f["kind"] == CURRENCY_KIND:
+                try:
+                    act, why = self.currency.ocr_check(f["name"], f["value"], shot_at)
+                except ValueError:
+                    continue  # the event is no longer tracked: nothing to set
+                if act == "skip":
+                    continue  # an older shot than the stored read: nothing to change
+                if act == "hold":
+                    hold = why
+                    f = dict(f, why=f"{f['why']}; {why}")
             if hold is None and f["conf"] >= mn:
                 try:
                     uid = self._commit(shot["name"], f["kind"], f["name"], f["value"], shot_at)
@@ -810,6 +832,10 @@ class AutoOcr:
                 level = self.leveling.level_at(shot_at) if self.leveling is not None else None
                 key, prev = self.zones.commit(value, _str(file, 255), shot_at, level)
                 entry.update(key=key, prev=prev, read_at=_iso(shot_at))
+            elif kind == CURRENCY_KIND:
+                # Plan 115: the balance as read at the shot (a fix too: it corrects the read).
+                entry["prev"] = self._need(self.currency).set_balance(
+                    name, value, source=f"ocr:{_str(file, 255)}", at=shot_at, uid=uid)
             elif kind in PLANNER_KINDS:
                 reads = self._reads()
                 reads[kind] = (reads.get(kind, []) + [{
@@ -876,6 +902,8 @@ class AutoOcr:
             elif c.get("kind") == zoneinfo.KIND:
                 self._need(self.zones).restore(c.get("key"), c.get("prev"), c.get("read_at"),
                                                c.get("file"))
+            elif c.get("kind") == CURRENCY_KIND:
+                self._need(self.currency).restore_read(c.get("name"), uid, c.get("prev"))
             elif c.get("kind") in PLANNER_KINDS:
                 reads = self._reads()
                 reads[c["kind"]] = [r for r in reads.get(c["kind"], []) if r.get("id") != uid]

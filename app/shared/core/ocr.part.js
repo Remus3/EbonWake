@@ -133,7 +133,8 @@
   const OCR_APPLIED_VIEW = 10;
   // Plan 066: + level {level, pct}, gear (ap / aap / dp int) and book_use
   // {size, pct_before, pct_after} (accept / discard only).
-  const OCR_AUTO_KINDS = ['silver', 'buff', 'level', 'gear', 'book_use'];
+  // Plan 115: + currency_balance (name = event number, value = balance).
+  const OCR_AUTO_KINDS = ['silver', 'buff', 'level', 'gear', 'book_use', 'currency_balance'];
   const OCR_REVIEW_MAX = 50;
   const OCR_LEVEL_MAX = 75;  // server levels.LEVEL_MAX
 
@@ -281,6 +282,7 @@
     if (r.kind === 'silver') return 'silver ' + String(r.value).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     if (r.kind === 'level') return 'Lv ' + r.value.level + ' ' + r.value.pct + '%';
     if (r.kind === 'gear') return r.name.toUpperCase() + ' ' + r.value;
+    if (r.kind === 'currency_balance') return 'event ' + r.name + ' currency ' + r.value;
     if (r.kind === 'book_use') {
       return r.value.size + ' book used? ' + r.value.pct_before + '% -> ' + r.value.pct_after + '%';
     }
@@ -296,7 +298,7 @@
   // Fix input placeholder per kind; '' = no fix (a book suggestion).
   function ocrFixHint(kind) {
     return { silver: 'silver', buff: 'minutes left now', level: 'level pct, e.g. 61 12.5',
-      gear: 'stat 0-999' }[kind] || '';
+      gear: 'stat 0-999', currency_balance: 'balance at the shot' }[kind] || '';
   }
 
   // Header line of the System card: "N to review".
@@ -323,6 +325,7 @@
     const v = Number(s);
     if (kind === 'buff' && (v < 1 || v > 43200)) return null;
     if (kind === 'gear' && v > 999) return null;
+    if (kind === 'currency_balance' && v > 1e7) return null;
     const body = { review: { id: id, action: 'fix', value: v } };
     return validOcrBody(body) ? body : null;
   }

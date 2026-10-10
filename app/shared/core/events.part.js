@@ -371,17 +371,35 @@
       const exchange = (Array.isArray(r.exchange) ? r.exchange : []).filter(function (x) {
         return plainObject(x) && curText(x.item, 120) && intIn(x.cost, 1, CUR_NUM_MAX) && intIn(x.limit, 1, 999);
       });
-      out.push(Object.assign({}, r, { wishlist: wish, exchange: exchange,
-        earned_src: r.earned_src === 'typed' ? 'typed' : 'log' }));
+      const src = r.earned_src === 'typed' || r.earned_src === 'ocr' ? r.earned_src : 'log';
+      out.push(Object.assign({}, r, { wishlist: wish, exchange: exchange, earned_src: src,
+        balance_at: src !== 'log' && typeof r.balance_at === 'string' ? r.balance_at : null }));
     });
     return out;
   }
 
+  // Plan 115: "just now" / "45 min ago" / "2 h ago" / "3 d ago" (mirrors server
+  // eventcurrency.ago); '' without a time.
+  function currencyAgo(at, now) {
+    const t = typeof at === 'string' ? Date.parse(at) : NaN;
+    if (!isFinite(t) || !isFinite(now)) return '';
+    const s = Math.max(0, Math.floor((now - t) / 1000));
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s / 60) + ' min ago';
+    if (s < 48 * 3600) return Math.floor(s / 3600) + ' h ago';
+    return Math.floor(s / 86400) + ' d ago';
+  }
+
   // "Seals: 120 earned, 640 guaranteed by 11-05, wishlist 590 - covered"
-  // (mirrors server eventcurrency.label).
-  function currencyText(r) {
+  // (mirrors server eventcurrency.label); plan 115: "140 in hand (OCR, 2 h ago)".
+  function currencyText(r, now) {
     const unit = r.unit.charAt(0).toUpperCase() + r.unit.slice(1);
-    const have = r.earned_src === 'typed' ? r.earned + ' in hand (typed)' : r.earned + ' earned';
+    let have = r.earned + ' earned';
+    if (r.earned_src === 'typed') have = r.earned + ' in hand (typed)';
+    if (r.earned_src === 'ocr') {
+      const when = currencyAgo(r.balance_at, now === undefined ? Date.now() : now);
+      have = r.earned + ' in hand (OCR' + (when ? ', ' + when : '') + ')';
+    }
     let out = unit + ': ' + have + ', ' + r.guaranteed + ' guaranteed by ' + r.ends.slice(5, 10);
     if (r.wishlist_cost > 0) {
       out += ', wishlist ' + r.wishlist_cost + ' - ' +

@@ -598,3 +598,140 @@ def silver_delta(samples, window, why=None):
         silver, conf, reason = net, 1.0, None
     return {"silver": silver, "first": use[0][2], "last": use[-1][2], "n": len(use),
             "conf": conf, "why": reason}
+
+
+# -- plan 115: event currency balance ------------------------------------------------
+# The event exchange window ("Seals of Purification" over "Owned: 140") or an
+# inventory tooltip ("Seals of Purification x 140", "140 Seals of Purification").
+# Names are the tracked plan 095 currencies of events running at the shot.
+
+CUR_NAME_MAX_D = 2        # edit distance over the folded name
+CUR_NEAR_PX = 60          # a number beside or below the name line, at most this far
+CONF_CUR_SHORT = 0.97     # <= 3 digits: no grouping expected
+CONF_CUR_GROUPED = 0.97   # 1,240 - the game's own format
+CONF_CUR_DOTTED = 0.9     # 1.240 - a comma read as a dot
+CONF_CUR_UNGROUPED = 0.9  # 1240 - the comma dropped
+CONF_CUR_MIXED = 0.6      # 1,240.5 - mixed separators
+CONF_CUR_NEAR = 0.97      # x factor: the number came from the next line / beside
+CONF_CUR_AMBIGUOUS = 0.5  # two amounts for one currency on screen, none labelled owned
+CUR_MAX_READ = 10 ** 7    # eventcurrency.MAX_BALANCE
+_CUR_TIMES = re.compile("(?<![A-Za-z])[xX" + chr(0xD7) + r"]\s*(?=\d)")
+_CUR_NUM = re.compile(r"(?<![\w.,+\-])(\d{1,3}(?:[,.]\d{3})+|\d{1,8})(?![\w%]|[.,]\d)")
+_CUR_OWNED = re.compile(r"\b(?:owned|have|held|possess\w*|balance|in stock)\b", re.IGNORECASE)
+_CUR_COST = re.compile(r"\b(?:cost|price|required|requires|needs?|exchange for)\b",
+                       re.IGNORECASE)
+
+
+def _lev(a, b):
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def _cur_name(text, names):
+    """(event, distance) of the closest currency name on a line (word windows
+    one word shorter / longer than the name), or None beyond CUR_NAME_MAX_D."""
+    words = ocr._norm(text).split()
+    best = None
+    for no, norm in names:
+        nw = len(norm.split())
+        for k in {max(1, nw - 1), nw, nw + 1}:
+            for i in range(len(words) - k + 1):
+                d = _lev(" ".join(words[i:i + k]), norm)
+                if d <= CUR_NAME_MAX_D and (best is None or d < best[1]):
+                    best = (no, d, norm)
+    return best
+
+
+def _cur_amount(text):
+    """(value, conf, why) of the first plausible amount in one line, or None."""
+    for m in _CUR_NUM.finditer(_CUR_TIMES.sub(" ", text)):
+        tok = m.group(1)
+        v = int(re.sub(r"[,.]", "", tok))
+        if v > CUR_MAX_READ:
+            continue
+        seps = set(re.findall(r"[,.]", tok))
+        if len(seps) > 1:
+            return v, CONF_CUR_MIXED, "mixed separators"
+        if seps == {","}:
+            return v, CONF_CUR_GROUPED, "comma grouped"
+        if seps == {"."}:
+            return v, CONF_CUR_DOTTED, "dot grouped"
+        if len(tok) <= 3:
+            return v, CONF_CUR_SHORT, "short amount"
+        return v, CONF_CUR_UNGROUPED, "no digit grouping"
+    return None
+
+
+def _cur_near(lines, i):
+    """Lines beside (right, within CUR_NEAR_PX) then just below the name line."""
+    a = lines[i]
+    if a["h"] <= 0:
+        return []
+    row = [b for j, b in enumerate(lines) if j != i and ocr._same_row(a, b)
+           and 0 <= b["x"] - (a["x"] + a["w"]) <= CUR_NEAR_PX]
+    below = [b for j, b in enumerate(lines) if j != i and not ocr._same_row(a, b)
+             and b["y"] > a["y"] + a["h"] / 2 and b["y"] - (a["y"] + a["h"]) <= CUR_NEAR_PX]
+    return sorted(row, key=lambda b: b["x"]) + sorted(below, key=lambda b: b["y"])
+
+
+def _active(rule, at):
+    return (_dt.datetime.fromisoformat(rule["starts"]).timestamp() <= at
+            < _dt.datetime.fromisoformat(rule["ends"]).timestamp())
+
+
+def currency_field(doc, rules, at):
+    """[{kind: currency_balance, name: event number, value, conf, why}], one per
+    event running at epoch `at` whose currency is named on a line (folded name,
+    edit distance <= CUR_NAME_MAX_D) with an amount on that line, else beside
+    it or on the line below within CUR_NEAR_PX. conf = name ratio x amount
+    sanity; a cost line is skipped; two different amounts for one currency
+    keep the one labelled owned, else the field drops to CONF_CUR_AMBIGUOUS."""
+    names = [(no, ocr._norm(r["currency"]).strip()) for no, r in sorted((rules or {}).items())
+             if _active(r, at)]
+    if not names:
+        return []
+    lines = _lines_of(doc)
+    cands = {}
+    for i, ln in enumerate(lines):
+        hit = _cur_name(ln["text"], names)
+        if hit is None or _CUR_COST.search(ln["text"]):
+            continue
+        no, d, norm = hit
+        amt, src, near = _cur_amount(ln["text"]), ln, False
+        if amt is None:
+            for b in _cur_near(lines, i):
+                if _cur_name(b["text"], names) is not None or _CUR_COST.search(b["text"]):
+                    continue
+                amt = _cur_amount(b["text"])
+                if amt is not None:
+                    src, near = b, True
+                    break
+        if amt is None:
+            continue
+        value, nconf, why = amt
+        ratio = round(1 - d / max(len(norm), 1), 3)
+        conf = ratio * nconf * (CONF_CUR_NEAR if near else 1)
+        why = f"name {'exact' if d == 0 else f'~{ratio:.2f}'}; {why}" + (
+            " (line beside / below)" if near else "")
+        owned = bool(_CUR_OWNED.search(src["text"]) or _CUR_OWNED.search(ln["text"]))
+        cands.setdefault(no, []).append(
+            (owned, conf, -len(cands.get(no, ())),
+             {"kind": "currency_balance", "name": no, "value": value, "conf": conf, "why": why}))
+    out = []
+    for no in sorted(cands):
+        rows = cands[no]
+        best = max(rows, key=lambda c: c[:3])
+        f = dict(best[3])
+        others = {c[3]["value"] for c in rows} - {f["value"]}
+        if others and not (best[0] and not any(c[0] for c in rows
+                                                if c[3]["value"] != f["value"])):
+            f["conf"] = min(f["conf"], CONF_CUR_AMBIGUOUS)
+            f["why"] += "; another amount for the same currency on screen"
+        f["conf"] = round(f["conf"], 3)
+        out.append(f)
+    return out

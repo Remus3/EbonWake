@@ -517,7 +517,7 @@
     rows.forEach(function (r) {
       const row = el('div', 'ew-erow active');
       const head = el('div', 'ew-ehead');
-      const t = el('span', 'ew-mname ew-gnum', C.currencyText(r));
+      const t = el('span', 'ew-mname ew-gnum', C.currencyText(r, Date.now()));
       t.title = r.currency + (r.verified === false ? ' (rules not yet verified against the notice)' : '');
       head.appendChild(t);
       const p = C.currencyPill(r);

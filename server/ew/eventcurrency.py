@@ -20,9 +20,15 @@ drops are never projected (unknown rate). Today counts as remaining until it
 qualifies. The typed balance (a plan 079-style override) expires at the event
 end. An ended event is hidden.
 
+Plan 115: a balance read from a screenshot (exchange window / tooltip, the
+plan 063 `currency_balance` OCR kind) is stored beside the typed one; the newer
+of the two (typed `set_at` vs the shot time) is the balance in hand, so field
+drops are counted inside it. It expires at the event end too.
+
 Store domains: `event_wishlist` {"items": [{event, item, qty}], "balances":
-{event: {value, set_at, expires_at}}} and `event_ticks` {"ticks": {event:
-{source id: [iso, ...]}}}. Nothing here fetches, reads the game or buys.
+{event: {value, set_at, expires_at}}, "ocr": {event: {id, value, at (shot),
+set_at, expires_at, source: "ocr:<file>"}}} and `event_ticks` {"ticks":
+{event: {source id: [iso, ...]}}}. Nothing here fetches, reads the game or buys.
 """
 
 import datetime as _dt
@@ -285,9 +291,27 @@ def active_balance(entry, now):
     return entry["value"]
 
 
-def project(rule, now, dates, marked, ticks, balance=None):
+def pick_balance(typed, read, now):
+    """Plan 115: (value, "typed" | "ocr", at iso) of the newer balance in force
+    at `now` - typed by its `set_at`, a read by its shot time `at`; a tie keeps
+    the typed one. None when neither is in force."""
+    have = []
+    if active_balance(typed, now) is not None:
+        t = _today._parse_iso(typed.get("set_at"))
+        have.append((t or _dt.datetime.min.replace(tzinfo=_UTC), 1, typed["value"], "typed",
+                     typed.get("set_at")))
+    if active_balance(read, now) is not None and _today._parse_iso(read.get("at")) is not None:
+        have.append((_today._parse_iso(read["at"]), 0, read["value"], "ocr", read["at"]))
+    if not have:
+        return None
+    _, _, value, src, at = max(have, key=lambda h: h[:2])
+    return value, src, at
+
+
+def project(rule, now, dates, marked, ticks, balance=None, read=None):
     """Projection of one event at `now` (UTC datetime), None once it ended.
-    `dates` {YYYY-MM-DD: minutes}, `marked` [YYYY-MM-DD], `ticks` {source id: [iso]}."""
+    `dates` {YYYY-MM-DD: minutes}, `marked` [YYYY-MM-DD], `ticks` {source id: [iso]};
+    `balance` the typed entry, `read` the plan 115 OCR entry (the newer wins)."""
     if now >= _dt.datetime.fromisoformat(rule["ends"]):
         return None
     dates = dates if isinstance(dates, dict) else {}
@@ -306,12 +330,12 @@ def project(rule, now, dates, marked, ticks, balance=None):
                 m = dates.get(now.date().isoformat())
                 m = int(m) if isinstance(m, (int, float)) and not isinstance(m, bool) else 0
                 play = {"minutes": m, "min_minutes": s["min_minutes"], "amount": s["amount"]}
-    typed = active_balance(balance, now)
-    have = earned if typed is None else typed
+    held = pick_balance(balance, read, now)
+    have, src, at = (earned, "log", None) if held is None else held
     return {"event": rule["event"], "title": rule["title"], "currency": rule["currency"],
             "unit": rule["unit"], "url": rule["url"], "verified": rule["verified"],
             "starts": rule["starts"], "ends": rule["ends"], "earned": have,
-            "earned_src": "log" if typed is None else "typed", "logged": earned,
+            "earned_src": src, "balance_at": at, "logged": earned,
             "remaining": remaining, "guaranteed": have + remaining, "by_source": rows,
             "play_today": play}
 
@@ -337,12 +361,33 @@ def wish_rows(rule, wishes, now):
     return out
 
 
-def label(row):
+def ago(at, now):
+    """"just now" / "45 min ago" / "2 h ago" / "3 d ago" (mirrors ewcore.js
+    currencyAgo); None without both times."""
+    t = _today._parse_iso(at) if isinstance(at, str) else None
+    if t is None or now is None:
+        return None
+    s = max(0, int((now - t).total_seconds()))
+    if s < 60:
+        return "just now"
+    if s < 3600:
+        return f"{s // 60} min ago"
+    if s < 48 * 3600:
+        return f"{s // 3600} h ago"
+    return f"{s // 86400} d ago"
+
+
+def label(row, now=None):
     """"Seals: 120 earned, 640 guaranteed by 11-05, wishlist 590 - covered"
-    (mirrors ewcore.js currencyText)."""
+    (mirrors ewcore.js currencyText); plan 115: "140 in hand (OCR, 2 h ago)"."""
     unit = row["unit"][:1].upper() + row["unit"][1:]
-    have = f"{row['earned']} in hand (typed)" if row["earned_src"] == "typed" \
-        else f"{row['earned']} earned"
+    if row["earned_src"] == "ocr":
+        when = ago(row.get("balance_at"), now)
+        have = f"{row['earned']} in hand (OCR{', ' + when if when else ''})"
+    elif row["earned_src"] == "typed":
+        have = f"{row['earned']} in hand (typed)"
+    else:
+        have = f"{row['earned']} earned"
     out = f"{unit}: {have}, {row['guaranteed']} guaranteed by {_mmdd(row['ends'])}"
     if row["wishlist_cost"] > 0:
         out += f", wishlist {row['wishlist_cost']} - " + (
@@ -378,7 +423,8 @@ class CurrencyService:
         doc = self.store.get(DOMAIN)
         items = [w for w in doc.get("items") or () if isinstance(w, dict)]
         bal = doc.get("balances") if isinstance(doc.get("balances"), dict) else {}
-        return {"items": items[:MAX_WISH], "balances": dict(bal)}
+        read = doc.get("ocr") if isinstance(doc.get("ocr"), dict) else {}
+        return {"items": items[:MAX_WISH], "balances": dict(bal), "ocr": dict(read)}
 
     def _ticks(self):
         t = self.store.get(TICKS_DOMAIN).get("ticks")
@@ -403,7 +449,8 @@ class CurrencyService:
         for no in sorted(self.rules, key=lambda n: (self.rules[n]["ends"], n)):
             rule = self.rules[no]
             ev_ticks = ticks.get(no) if isinstance(ticks.get(no), dict) else {}
-            p = project(rule, now, dates, marked, ev_ticks, wl["balances"].get(no))
+            p = project(rule, now, dates, marked, ev_ticks, wl["balances"].get(no),
+                        wl["ocr"].get(no))
             if p is None:
                 continue
             wish = wish_rows(rule, wl["items"], now)
@@ -411,7 +458,7 @@ class CurrencyService:
             row = dict(p, wishlist=wish, wishlist_cost=cost,
                        shortfall=max(0, cost - p["guaranteed"]),
                        exchange=[dict(x) for x in rule["exchange"]])
-            row["label"] = label(row)
+            row["label"] = label(row, now)
             out.append(row)
         return {"events": out}
 
@@ -471,13 +518,17 @@ class CurrencyService:
         """Plan 079 / 081: typed balances in force, as /api/overrides rows."""
         now = self._now()
         with self._lock:
-            bal = self._wish_doc()["balances"]
+            wl = self._wish_doc()
+        bal = wl["balances"]
         out = []
         for no in sorted(bal):
             rule = self.rules.get(no)
             v = active_balance(bal[no], now)
             if rule is None or v is None or now >= _dt.datetime.fromisoformat(rule["ends"]):
                 continue
+            held = pick_balance(bal[no], wl["ocr"].get(no), now)
+            if held is None or held[1] != "typed":
+                continue  # plan 115: a newer screenshot read is in force
             unit = rule["unit"][:1].upper() + rule["unit"][1:]
             out.append({"key": f"events.currency.{no}.balance", "label": f"{unit} balance (typed)",
                         "value": v, "set_at": bal[no].get("set_at"),
@@ -578,3 +629,77 @@ class CurrencyService:
             doc["balances"] = bal
             self.store.put(DOMAIN, doc)
         return self.view()
+
+    # -- plan 115: screenshot reads ---------------------------------------------------
+
+    def _read_at(self, event, value, at):
+        """(rule, shot datetime) of a valid read; raises ValueError."""
+        rule = self._rule(event)
+        if not _int(value, 0, MAX_BALANCE):
+            raise ValueError(f"currency balance must be an int 0..{MAX_BALANCE}")
+        if isinstance(at, bool) or not isinstance(at, (int, float)):
+            raise ValueError("at must be the epoch time of the screenshot")
+        when = _dt.datetime.fromtimestamp(at, _UTC).replace(microsecond=0)
+        if not _dt.datetime.fromisoformat(rule["starts"]) <= when \
+                < _dt.datetime.fromisoformat(rule["ends"]):
+            raise ValueError(f"the screenshot was not taken during event {event}")
+        return rule, when
+
+    def ocr_check(self, event, value, at):
+        """(None | "skip" | "hold", why) for a read of `value` at epoch `at`:
+        skip when a newer read is stored (an old shot never replaces it); hold
+        when it is below the logged projection at the shot minus the wishlist
+        cost (the most the operator plans to spend) - a misread, or spends
+        beyond the wishlist, wait for the operator."""
+        rule, when = self._read_at(event, value, at)
+        dates, marked = self._hist()
+        with self._lock:
+            wl, ticks = self._wish_doc(), self._ticks()
+        cur = wl["ocr"].get(rule["event"])
+        cur_at = _today._parse_iso(cur.get("at")) if isinstance(cur, dict) else None
+        if cur_at is not None and active_balance(cur, self._now()) is not None and when < cur_at:
+            return "skip", f"a newer read ({_iso(cur_at)}) is stored"
+        ev_ticks = ticks.get(rule["event"]) if isinstance(ticks.get(rule["event"]), dict) else {}
+        p = project(rule, when, dates, marked, ev_ticks)
+        spend = sum(w["subtotal"] for w in wish_rows(rule, wl["items"], self._now()))
+        floor = (p["logged"] if p else 0) - spend
+        if value < floor:
+            return "hold", (f"{value} is below the {floor} {rule['unit']} logged by the shot"
+                            + (f" (less the {spend} wishlist)" if spend else ""))
+        return None, None
+
+    def set_balance(self, event, value, source, at, uid=None):
+        """Store a screenshot read of the balance (shot at epoch `at`, `source`
+        "ocr:<file>") until the event end. Returns the entry it replaced (for
+        undo); an older shot than the stored read raises ValueError."""
+        rule, when = self._read_at(event, value, at)
+        if not isinstance(source, str) or not source.startswith("ocr:") or len(source) > 300:
+            raise ValueError("source must be ocr:<file>")
+        now = self._now()
+        with self._lock:
+            doc = self._wish_doc()
+            prev = doc["ocr"].get(rule["event"])
+            prev_at = _today._parse_iso(prev.get("at")) if isinstance(prev, dict) else None
+            if prev_at is not None and active_balance(prev, now) is not None and when < prev_at:
+                raise ValueError(f"a newer read ({_iso(prev_at)}) is stored")
+            doc["ocr"] = {k: e for k, e in doc["ocr"].items() if active_balance(e, now) is not None}
+            doc["ocr"][rule["event"]] = {"id": uid, "value": value, "at": _iso(when),
+                                         "set_at": _iso(now), "expires_at": rule["ends"],
+                                         "source": source}
+            self.store.put(DOMAIN, doc)
+        return prev if isinstance(prev, dict) else None
+
+    def restore_read(self, event, uid, prev):
+        """Undo a read: back to `prev` (or no read) while the stored read is
+        still the one `uid` wrote."""
+        rule = self._rule(event)
+        with self._lock:
+            doc = self._wish_doc()
+            cur = doc["ocr"].get(rule["event"])
+            if not isinstance(cur, dict) or cur.get("id") != uid:
+                raise ValueError("that balance read was replaced since; set it in Events")
+            if isinstance(prev, dict):
+                doc["ocr"][rule["event"]] = prev
+            else:
+                doc["ocr"].pop(rule["event"], None)
+            self.store.put(DOMAIN, doc)
