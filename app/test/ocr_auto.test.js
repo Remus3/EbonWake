@@ -48,6 +48,22 @@ test('normalizeOcrAuto: defensive over GET /api/ocr/auto', () => {
   assert.strictEqual(C.ocrAutoLabel(a.commits[0]), 'XP scroll 30m');
 });
 
+// Plan 113: a loot row read below the gate is reviewed (accept / fix count / discard).
+test('normalizeOcrAuto: loot review rows, label and count fix', () => {
+  const v = { name: 'Caphras Stone', count: 9, id: 721003, source: 'catalog', spot: 'hystria', started: '2026-10-05T10:00:00+00:00' };
+  const a = C.normalizeOcrAuto({ review: [
+    { id: 'r5', file: 'l.jpg', kind: 'loot', name: 'Caphras Stone', value: v, conf: 0.83, why: 'loot name read below the gate' },
+    { id: 'r6', kind: 'loot', value: Object.assign({}, v, { count: 0 }) },
+    { id: 'r7', kind: 'loot', value: Object.assign({}, v, { name: '' }) }
+  ] });
+  assert.deepStrictEqual(a.review.map((r) => r.id), ['r5']);
+  assert.deepStrictEqual(a.review[0].value, { name: 'Caphras Stone', count: 9, id: 721003, source: 'catalog' });
+  assert.strictEqual(C.ocrAutoLabel(a.review[0]), 'loot Caphras Stone x9 (catalog) (83%)');
+  assert.strictEqual(C.ocrFixHint('loot'), 'count');
+  assert.deepStrictEqual(C.ocrFixBody('r5', 'loot', '12'), { review: { id: 'r5', action: 'fix', value: 12 } });
+  assert.strictEqual(C.ocrFixBody('r5', 'loot', '0'), null);
+});
+
 test('ocrFixBody: typed digits -> a valid fix body', () => {
   assert.deepStrictEqual(C.ocrFixBody('r1', 'silver', '1,234,567'),
     { review: { id: 'r1', action: 'fix', value: 1234567 } });

@@ -29,6 +29,7 @@ AUTO_SPOT = "unspecified"  # plan 062: auto session spot before any session is l
 VIEW_SESSIONS = 200
 SILVER_SRCS = ("ocr_delta", "typed")  # plan 112: derived from OCR samples / typed edit
 REFILL_MAX_S = 86400  # plan 112: a late shot fills an auto session closed this recently
+LOOT_SOURCES = ("table", "catalog")  # plan 113: where an OCR loot row's item came from
 ID_RE = re.compile(r"^[a-z0-9-]{1,40}$")
 SID_RE = re.compile(r"^s[0-9]{1,9}$")
 
@@ -423,6 +424,8 @@ def _clean_session(it):
         sf = _clean_silver_from(it.get("silver_from"))
         if it["silver_src"] == "ocr_delta" and sf is not None:
             out["silver_from"] = sf
+    if it.get("loot_src") == "ocr" and out["loot"] is not None:  # plan 113
+        out["loot_src"] = "ocr"
     return out
 
 
@@ -459,9 +462,12 @@ def _clean_loot(raw):
                 and _ok_int(i.get("value"), 0, 10 ** 18)):
             continue
         iid, unit = i.get("id"), i.get("unit")
-        out.append({"name": i["name"], "id": iid if _ok_int(iid, 1, market.MAX_ID) else None,
-                    "count": i["count"], "kind": i["kind"],
-                    "unit": unit if _ok_int(unit, 0, 10 ** 15) else None, "value": i["value"]})
+        row = {"name": i["name"], "id": iid if _ok_int(iid, 1, market.MAX_ID) else None,
+               "count": i["count"], "kind": i["kind"],
+               "unit": unit if _ok_int(unit, 0, 10 ** 15) else None, "value": i["value"]}
+        if i.get("source") in LOOT_SOURCES:  # plan 113: OCR-applied rows
+            row["source"] = i["source"]
+        out.append(row)
     return out or None
 
 
@@ -534,6 +540,9 @@ class GrindService:
         # Plan 081: ocr_loot(spot, started) -> the loot counts auto-OCR read during
         # that session ({source: "ocr", items, at}) or None; set by the app.
         self.ocr_loot = None
+        # Plan 113: cached_price(item_id) -> int|None from the plan 002 cache, never
+        # fetching; prices OCR loot applied on auto close. Set by the app.
+        self.cached_price = None
         # Plan 085: verdict(key) -> a tracked row's patch-notes verdict or None; set by the app.
         self.verdict = None
         # `epoch` returns the newest started XP epoch or None (plan 018): until
@@ -899,14 +908,102 @@ class GrindService:
         return dict(p, items=rows) if rows else None
 
     def loot_target(self):
-        """Plan 081: {spot, started, names} of the running session (the auto-OCR
-        reads its loot counts from each shot), or None."""
+        """Plan 081: {spot, started, names, end: None} of the running session (the
+        auto-OCR reads its loot counts from each shot); plan 113: else the newest
+        session when it is an auto one closed within REFILL_MAX_S whose loot is
+        unset or OCR-applied, with its `end` (late shots are read async); None."""
         doc = self._load()
         act = doc["active"]
-        if act is None:
+        if act is not None:
+            names = [it["name"] for it in self._items(doc, act["spot"])]
+            return {"spot": act["spot"], "started": act["started"], "names": names, "end": None}
+        ses = doc["sessions"][-1] if doc["sessions"] else None
+        if ses is None or not ses.get("auto") or (ses["loot"] is not None
+                                                  and ses.get("loot_src") != "ocr"):
             return None
-        names = [it["name"] for it in self._items(doc, act["spot"])]
-        return {"spot": act["spot"], "started": act["started"], "names": names} if names else None
+        end = _parse_iso(ses["started"]) + _dt.timedelta(minutes=ses["minutes"])
+        if (self._now() - end).total_seconds() > REFILL_MAX_S:
+            return None
+        return {"spot": ses["spot"], "started": ses["started"],
+                "names": [it["name"] for it in self._items(doc, ses["spot"])], "end": _iso(end)}
+
+    # -- plan 113: OCR loot applied to auto sessions -----------------------------
+
+    def _ocr_valued(self, doc, spot, started):
+        """The OCR loot read during the session (store domain `ocr_loot` via the
+        `ocr_loot` hook) valued like a typed loot list, or None. A name on the
+        spot's list uses that item; a catalog row is a marketable item with its
+        id. Prices come from `cached_price` only (never fetched); a missing price
+        is `unknown`. Each row keeps its `source` (table / catalog)."""
+        if self.ocr_loot is None:
+            return None
+        try:
+            p = self.ocr_loot(spot, started)
+        except Exception:  # noqa: BLE001 - no OCR read = no loot applied
+            return None
+        rows = p.get("items") if isinstance(p, dict) else None
+        if not isinstance(rows, list):
+            return None
+        items = {it["name"].lower(): it for it in self._items(doc, spot)}
+        picked, sources = [], []
+        for r in rows:
+            if not (isinstance(r, dict) and isinstance(r.get("name"), str) and r["name"].strip()
+                    and _ok_int(r.get("count"), 1, MAX_LOOT_COUNT)):
+                continue
+            it = items.get(r["name"].strip().lower())
+            if it is not None:
+                picked.append(dict(it, count=r["count"]))
+                sources.append("table")
+            elif _ok_int(r.get("id"), 1, market.MAX_ID):
+                picked.append({"name": r["name"].strip()[:MAX_NAME], "id": r["id"],
+                               "marketable": True, "count": r["count"]})
+                sources.append("catalog")
+            if len(picked) >= MAX_LOOT:
+                break
+        if not picked:
+            return None
+        prices = {}
+        for it in picked:
+            if it["marketable"] and it.get("id") is not None:
+                try:
+                    pr = self.cached_price(it["id"]) if self.cached_price is not None else None
+                except Exception:  # noqa: BLE001 - an unreadable cache leaves it unknown
+                    pr = None
+                prices[it["id"]] = pr if _price_ok(pr) else None
+        t = self._tax()
+        valued = loot_value(picked, prices, t["vp"], t["fame_pct"])
+        for row, src in zip(valued["items"], sources):
+            row["source"] = src
+        return valued
+
+    def refill_loot(self):
+        """OCR loot changed (late shots, accepted reviews) or prices arrived:
+        re-apply it to the newest auto session closed within REFILL_MAX_S whose
+        loot is unset or OCR-applied (typed loot is never touched). Returns the
+        session id when it wrote, else None."""
+        doc = self._load()
+        if not doc["sessions"] or doc["active"] is not None:
+            return None
+        ses = doc["sessions"][-1]
+        if not ses.get("auto") or (ses["loot"] is not None and ses.get("loot_src") != "ocr"):
+            return None
+        end = _parse_iso(ses["started"]) + _dt.timedelta(minutes=ses["minutes"])
+        if (self._now() - end).total_seconds() > REFILL_MAX_S:
+            return None
+        valued = self._ocr_valued(doc, ses["spot"], ses["started"])
+        if valued is None:
+            return None
+        with self._lock:
+            doc = self._load()
+            cur = next((s for s in doc["sessions"] if s["id"] == ses["id"]), None)
+            if cur is None or (cur["loot"] is not None and cur.get("loot_src") != "ocr"):
+                return None
+            items = valued.pop("items")
+            if cur["loot"] == items and cur["loot_value"] == valued:
+                return None
+            cur.update(loot=items, loot_value=valued, loot_src="ocr")
+            self._save(doc)
+        return ses["id"]
 
     def loot_candidates(self):
         """Plan 071: marketable loot ids of the active spot, else the newest
@@ -917,16 +1014,21 @@ class GrindService:
         spot = act["spot"] if act else (doc["sessions"][-1]["spot"] if doc["sessions"] else None)
         if spot not in {s["id"] for s in doc["spots"]}:
             return {"spot": None, "items": []}
-        counts = {}
+        counts, catalog = {}, []
         for ses in reversed(doc["sessions"]):
             if ses["spot"] == spot and ses.get("loot"):
                 for it in ses["loot"]:
                     if it.get("id") is not None:
                         counts[it["id"]] = counts.get(it["id"], 0) + it["count"]
+                    if it.get("source") == "catalog" and it.get("id") is not None:
+                        catalog.append(it)  # plan 113: watched so the next refresh prices it
                 break
-        return {"spot": spot, "items": [
-            {"id": it["id"], "name": it["name"], "count": counts.get(it["id"], 1)}
-            for it in self._items(doc, spot) if it["marketable"] and it.get("id") is not None]}
+        items = [{"id": it["id"], "name": it["name"], "count": counts.get(it["id"], 1)}
+                 for it in self._items(doc, spot) if it["marketable"] and it.get("id") is not None]
+        have = {it["id"] for it in items}
+        items += [{"id": it["id"], "name": it["name"], "count": it["count"]}
+                  for it in catalog if it["id"] not in have]
+        return {"spot": spot, "items": items}
 
     def loot_names(self, spot):
         """Plan 040: the spot's loot item names (table + operator) for the OCR
@@ -1180,6 +1282,8 @@ class GrindService:
         112: silver is the OCR silver delta across the window (`silver`: a
         precomputed ocrinfer.silver_delta, else read from store domain
         `silver`); 0 without one (a late shot or loot import may fill it).
+        Plan 113: the session's OCR loot counts become its loot (`loot_src:
+        "ocr"`), valued from cached prices, so valued_silver is the loot value.
         Returns the new session id, or False (no write) when that auto session
         is no longer the active one."""
         end = _parse_iso(at)
@@ -1187,6 +1291,11 @@ class GrindService:
             raise ValueError("auto stop needs an ISO time")
         if silver is None:
             silver = self._silver_delta(started, end)
+        doc = self._load()
+        act = doc["active"]
+        # Plan 113: the OCR loot counts of the session are its loot (cached prices).
+        valued = self._ocr_valued(doc, act["spot"], act["started"]) \
+            if act is not None and act["auto"] and act["started"] == started else None
         with self._lock:
             doc = self._load()
             act = doc["active"]
@@ -1199,8 +1308,10 @@ class GrindService:
             if _delta_ok(silver):
                 amount = silver["silver"]
                 extra.update(_delta_fields(silver))
+            if valued is not None:
+                extra["loot_src"] = "ocr"
             sid = self._add_session(doc, act["spot"], act["started"], minutes, amount, 0,
-                                    extra=extra)
+                                    valued=valued, extra=extra)
             doc["active"] = None
             doc["pending_stop"] = None
             self._save(doc)

@@ -328,7 +328,7 @@ class EWServer(ThreadingHTTPServer):
             self.market.watchlist, shopping=self.shopping.view,
             loot=self.grind.loot_candidates, recipes=self.crafting.view,
             price=self.market.cached_price)
-        self.market.curate = self.autowatch.sync
+        self.market.curate = self._curate
         if game_watch is None:
             # Only main() passes the real config; a bare make_server (every test)
             # never reads config/local.json (plan 008 refute round 1).
@@ -395,9 +395,12 @@ class EWServer(ThreadingHTTPServer):
             settings=self.fixed_settings, clock=grind_clock or time.time,
             on_change=self._ocr_auto_changed, leveling=self.leveling, progress=self.progress,
             play=self.play.view, loot_target=self.grind.loot_target, zones=self.zones,
-            bosses=self.bosses)  # plan 111: a boss loot screen ticks the loot itself
-        # Plan 081: the running session's OCR loot counts prefill the loot form.
+            bosses=self.bosses,  # plan 111: a boss loot screen ticks the loot itself
+            catalog=self.names.catalog)  # plan 113: off-table loot names
+        # Plan 081: the running session's OCR loot counts prefill the loot form;
+        # plan 113: an auto session closes with them as its loot, cache-priced.
         self.grind.ocr_loot = self.ocr_auto.loot_prefill
+        self.grind.cached_price = self.market.cached_price
         if isinstance(listeners, list):
             listeners.append(self.ocr_auto.on_game)
         # Plan 068: login / logged-minute rows tick themselves (undoable); a shot
@@ -783,12 +786,24 @@ class EWServer(ThreadingHTTPServer):
         reason = self.progress._off_reason() if src["status"] == "off" else None
         return {"status": src["status"], "reason": reason, "updated": src["updated"]}
 
+    def _curate(self):
+        # Plan 113: prices the previous watch refresh cached value an auto session's
+        # unknown OCR loot rows, then plan 071 curates the watch list.
+        try:
+            if self.grind.refill_loot() is not None:
+                self.bus.bump("grind")
+        except Exception:  # noqa: BLE001 - a derived fill never breaks the refresh
+            pass
+        self.autowatch.sync()
+
     def _ocr_auto_changed(self):
         # Plan 112: a late OCR silver sample fills a still-0 auto grind session once.
-        try:
-            self.grind.refill_silver()
-        except Exception:  # noqa: BLE001 - a derived fill never breaks the notifier
-            pass
+        # Plan 113: late loot reads / accepted loot reviews re-apply its OCR loot.
+        for fill in ("refill_silver", "refill_loot"):
+            try:
+                getattr(self.grind, fill)()
+            except Exception:  # noqa: BLE001 - a derived fill never breaks the notifier
+                pass
         self.bus.bump("ocr")
         self.bus.bump("grind")
         self.bus.bump("progress")  # plan 066: gs stats (leveling bumps its own seq)

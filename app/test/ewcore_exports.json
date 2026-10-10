@@ -135,6 +135,7 @@
     ["sessionSilver","function"],
     ["trashPileText","function"],
     ["silverSrcBadge","function"],
+    ["ocrLootView","function"],
     ["SPOT_GOALS","object"],
     ["spotsPath","function"],
     ["spotNeedText","function"],

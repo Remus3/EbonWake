@@ -1024,6 +1024,48 @@ def test_loot_unmatched_lists_counted_lines_without_a_name():
     assert out["unmatched"] == ["Pirate Gold Coin x3"]
 
 
+# Plan 113: second pass over unmatched lines against the item-name catalog.
+CAT = {(721003, 0): "Caphras Stone", (5301, 0): "Coal", (44195, 0): "Pirate Gold Coin",
+       (721003, 3): "Caphras Stone"}
+
+
+def test_loot_catalog_pass_turns_unmatched_into_catalog_rows():
+    out = ocr.extract_loot(["Pirate Gold Coin x3", f"{DUST} x2", "Junk Thing x1"], NAMES,
+                           catalog=CAT)
+    assert out["unmatched"] == ["Junk Thing x1"]
+    by = {r["name"]: r for r in out["rows"]}
+    assert by[DUST]["source"] == "table" and "id" not in by[DUST]
+    assert by["Pirate Gold Coin"] == {"name": "Pirate Gold Coin", "count": 3,
+                                      "confidence": ocr.CATALOG_CONF_SCALE, "id": 44195,
+                                      "marketable": True, "source": "catalog"}
+
+
+@pytest.mark.parametrize("line,want", [
+    ("You obtained Caphras Stone x4", ("Caphras Stone", 4)),   # exact word window
+    ("Caphras Stome x4", ("Caphras Stone", 4)),                # 1 edit, long name
+    ("Caphrus Stome x4", ("Caphras Stone", 4)),                # 2 edits
+    ("Cxphrus Stome x4", None),                                # 3 edits
+    ("Coal x2", ("Coal", 2)),                                  # short name, exact line
+    ("Coel x2", None),                                         # short name, 1 edit
+    ("Black Coal Dust x2", None),                              # short name as a stray word
+    ("Caphras Stone", None),                                   # no count: no row
+])
+def test_loot_catalog_match_rules(line, want):
+    rows = ocr.parse_loot([line], [], catalog=CAT)
+    assert [(r["name"], r["count"]) for r in rows] == ([want] if want else [])
+
+
+def test_loot_catalog_fuzzy_conf_is_scaled_below_exact():
+    exact = ocr.parse_loot(["Caphras Stone x1"], [], catalog=CAT)[0]["confidence"]
+    fuzzy = ocr.parse_loot(["Caphras Stome x1"], [], catalog=CAT)[0]["confidence"]
+    assert exact == ocr.CATALOG_CONF_SCALE and fuzzy == round((1 - 1 / 13) * 0.9, 2)
+
+
+def test_loot_without_a_catalog_keeps_the_plan_040_shape():
+    assert ocr.parse_loot([f"{DUST} x2"], NAMES) == [{"name": DUST, "count": 2,
+                                                      "confidence": 1.0}]
+
+
 def _score(cases):
     hits = total = 0
     for c in cases:

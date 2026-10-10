@@ -133,7 +133,9 @@
   const OCR_APPLIED_VIEW = 10;
   // Plan 066: + level {level, pct}, gear (ap / aap / dp int) and book_use
   // {size, pct_before, pct_after} (accept / discard only).
-  const OCR_AUTO_KINDS = ['silver', 'buff', 'level', 'gear', 'book_use'];
+  // Plan 113: + loot {name, count, id, source} (a fix is the count).
+  const OCR_AUTO_KINDS = ['silver', 'buff', 'level', 'gear', 'book_use', 'loot'];
+  const OCR_LOOT_MAX = 1e7;  // server grind.MAX_LOOT_COUNT
   const OCR_REVIEW_MAX = 50;
   const OCR_LEVEL_MAX = 75;  // server levels.LEVEL_MAX
 
@@ -156,6 +158,13 @@
     if (kind === 'level') return ocrLevelValue(v) ? { level: v.level, pct: v.pct } : null;
     if (kind === 'book_use') {
       return ocrBookValue(v) ? { size: v.size, pct_before: v.pct_before, pct_after: v.pct_after } : null;
+    }
+    if (kind === 'loot') {
+      if (!plainObject(v) || typeof v.name !== 'string' || !v.name.trim() ||
+          !Number.isInteger(v.count) || v.count < 1 || v.count > OCR_LOOT_MAX) return null;
+      return { name: v.name.slice(0, 60), count: v.count,
+        id: Number.isInteger(v.id) && v.id > 0 ? v.id : null,
+        source: v.source === 'catalog' ? 'catalog' : 'table' };
     }
     return Number.isInteger(v) && v >= 0 ? v : null;
   }
@@ -284,6 +293,7 @@
     if (r.kind === 'book_use') {
       return r.value.size + ' book used? ' + r.value.pct_before + '% -> ' + r.value.pct_after + '%';
     }
+    if (r.kind === 'loot') return 'loot ' + r.value.name + ' x' + r.value.count + ' (' + r.value.source + ')';
     return r.name + ' ' + r.value + 'm';
   }
 
@@ -296,7 +306,7 @@
   // Fix input placeholder per kind; '' = no fix (a book suggestion).
   function ocrFixHint(kind) {
     return { silver: 'silver', buff: 'minutes left now', level: 'level pct, e.g. 61 12.5',
-      gear: 'stat 0-999' }[kind] || '';
+      gear: 'stat 0-999', loot: 'count' }[kind] || '';
   }
 
   // Header line of the System card: "N to review".
@@ -323,6 +333,7 @@
     const v = Number(s);
     if (kind === 'buff' && (v < 1 || v > 43200)) return null;
     if (kind === 'gear' && v > 999) return null;
+    if (kind === 'loot' && (v < 1 || v > OCR_LOOT_MAX)) return null;
     const body = { review: { id: id, action: 'fix', value: v } };
     return validOcrBody(body) ? body : null;
   }

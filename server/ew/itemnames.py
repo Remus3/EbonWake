@@ -207,6 +207,13 @@ class NameIndex:
         return {k: v[1] for k, v in best.items()}
 
     # -- query ------------------------------------------------------------
+    def catalog(self):
+        """Plan 113: every known {(id, sid): name} (the OCR loot catalog); never
+        fetches."""
+        with self._lock:
+            self._refresh_cache()
+            return self.entries()
+
     def name(self, item_id, sid=0):
         """Known name for (id, sid) or None; never fetches (plan 037)."""
         with self._lock:

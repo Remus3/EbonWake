@@ -625,6 +625,12 @@ def extract(doc):
 
 LOOT_MATCH_MAX = 0.25
 MAX_UNMATCHED = 50
+# Plan 113: a line off the spot's table is matched against the item-name
+# catalog: exact fold first, else at most CATALOG_MAX_EDITS edits for names of
+# CATALOG_MIN_FUZZY+ characters; catalog confidence is scaled down.
+CATALOG_CONF_SCALE = 0.9
+CATALOG_MAX_EDITS = 2
+CATALOG_MIN_FUZZY = 8
 _DIG = "[0-9OoIl]"
 _GROUPED = r"\d{1,3}(?: ?[,.] ?\d{3}| \d{3})+|\d+"
 _GROUPED_X = rf"{_DIG}{{1,3}}(?: ?[,.] ?{_DIG}{{3}}| {_DIG}{{3}})+|{_DIG}+"
@@ -635,8 +641,8 @@ LOOT_TAIL = re.compile(rf"(?<![\w.,])({_GROUPED})\s*$")
 _OCR_DIGIT = str.maketrans("OoIl", "0011")
 
 
-def name_distance(a, b):
-    """Levenshtein distance of a and b over the longer length (0.0 .. 1.0)."""
+def edit_distance(a, b):
+    """Levenshtein distance of a and b (edits)."""
     if a == b:
         return 0
     prev = list(range(len(b) + 1))
@@ -645,7 +651,14 @@ def name_distance(a, b):
         for j, cb in enumerate(b, 1):
             cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
         prev = cur
-    return prev[-1] / max(len(a), len(b), 1)
+    return prev[-1]
+
+
+def name_distance(a, b):
+    """Levenshtein distance of a and b over the longer length (0.0 .. 1.0)."""
+    if a == b:
+        return 0
+    return edit_distance(a, b) / max(len(a), len(b), 1)
 
 
 def _loot_count(text):
@@ -725,26 +738,80 @@ def _fill_counts(lines, parsed, pure, hits):
             h[2] = parsed[j][0]
 
 
-def extract_loot(text_lines, known_names):
-    """OCR lines + the spot's loot names -> {rows: [{name, count, confidence}],
-    unmatched: [line text with a count but no loot name]}. The same name on
-    several lines (acquisition log) sums; confidence (1 - distance) keeps the
-    lowest. Suggestions only: nothing is stored here."""
+def _catalog(catalog):
+    """Plan 113: {(id, sid): name} -> {fold: (id, name)} of base items (sid 0);
+    the lowest id wins a folded-name clash."""
+    out = {}
+    for key, name in sorted(catalog.items() if isinstance(catalog, dict) else (),
+                            key=lambda kv: str(kv[0])):
+        if not (isinstance(key, tuple) and len(key) == 2 and key[1] == 0
+                and isinstance(key[0], int) and not isinstance(key[0], bool) and key[0] > 0
+                and isinstance(name, str)):
+            continue
+        fold = _norm(name).strip()
+        if fold and (fold not in out or key[0] < out[fold][0]):
+            out[fold] = (key[0], name.strip())
+    return out
+
+
+def _catalog_hit(rest, cat):
+    """(id, name, conf) of the catalog item named by `rest`: an exact fold of
+    the line or of one of its word windows (CATALOG_MIN_FUZZY+ characters)
+    first, else the whole line within
+    CATALOG_MAX_EDITS of a name of at least CATALOG_MIN_FUZZY characters."""
+    words = _norm(rest).split()
+    if not words:
+        return None
+    for k in range(len(words), 0, -1):  # longest window first
+        for i in range(len(words) - k + 1):
+            win = " ".join(words[i:i + k])
+            hit = cat.get(win)
+            # a short name only as the whole line ("Coal x3"), never a stray word
+            if hit is not None and (k == len(words) or len(win) >= CATALOG_MIN_FUZZY):
+                return hit[0], hit[1], CATALOG_CONF_SCALE
+    whole, best = " ".join(words), None
+    for fold, (iid, name) in cat.items():
+        if len(fold) < CATALOG_MIN_FUZZY or abs(len(fold) - len(whole)) > CATALOG_MAX_EDITS:
+            continue
+        d = edit_distance(whole, fold)
+        if d <= CATALOG_MAX_EDITS and (best is None or (d, iid) < best[:2]):
+            best = (d, iid, name, fold)
+    if best is None:
+        return None
+    d, iid, name, fold = best
+    return iid, name, round((1 - d / max(len(fold), len(whole))) * CATALOG_CONF_SCALE, 2)
+
+
+def extract_loot(text_lines, known_names, catalog=None):
+    """OCR lines + the spot's loot names -> {rows: [{name, count, confidence,
+    source?}], unmatched: [line text with a count but no loot name]}. The same
+    name on several lines (acquisition log) sums; confidence (1 - distance)
+    keeps the lowest. Plan 113: an unmatched line is tried against `catalog`
+    ({(id, sid): name}, the plan 028 item-name index); a hit is a row with `id`,
+    `marketable: true`, `source: "catalog"` and confidence scaled by
+    CATALOG_CONF_SCALE. Suggestions only: nothing is stored here."""
     names = _loot_names(known_names)
+    cat = _catalog(catalog) if catalog else {}
     lines, geo = _loot_lines(text_lines)
     parsed = [_loot_count(ln["text"]) for ln in lines]
     pure = {i for i, (n, rest) in enumerate(parsed) if n is not None and not _norm(rest).strip()}
-    hits, unmatched = [], []
+    hits, unmatched, ids = [], [], {}
     for i, ln in enumerate(lines):
         if i in pure:
             continue
         count, rest = parsed[i]
         name, d = _best_name(rest, names) if names else (None, None)
-        if name is None:
-            if count is not None and re.search("[A-Za-z]", rest) and len(unmatched) < MAX_UNMATCHED:
-                unmatched.append(ln["text"])
+        if name is not None:
+            hits.append([i, name, count, round(1 - d, 2)])
             continue
-        hits.append([i, name, count, round(1 - d, 2)])
+        if count is None or not re.search("[A-Za-z]", rest):
+            continue
+        hit = _catalog_hit(rest, cat) if cat else None
+        if hit is not None:
+            ids[hit[1]] = hit[0]
+            hits.append([i, hit[1], count, hit[2]])
+        elif len(unmatched) < MAX_UNMATCHED:
+            unmatched.append(ln["text"])
     if geo:
         _fill_counts(lines, parsed, pure, hits)
     rows = {}
@@ -752,6 +819,10 @@ def extract_loot(text_lines, known_names):
         row = rows.get(name)
         if row is None:
             rows[name] = {"name": name, "count": count, "confidence": conf}
+            if catalog:  # the plan 040 import body keeps its shape without one
+                rows[name]["source"] = "table"
+            if name in ids:
+                rows[name].update(id=ids[name], marketable=True, source="catalog")
             continue
         if count is not None:
             row["count"] = min(MAX_LOOT_COUNT, (row["count"] or 0) + count)
@@ -759,9 +830,9 @@ def extract_loot(text_lines, known_names):
     return {"rows": list(rows.values()), "unmatched": unmatched}
 
 
-def parse_loot(text_lines, known_names):
-    """[{name, count, confidence}] for the loot names read in `text_lines`."""
-    return extract_loot(text_lines, known_names)["rows"]
+def parse_loot(text_lines, known_names, catalog=None):
+    """[{name, count, confidence, source?}] for the loot names read in `text_lines`."""
+    return extract_loot(text_lines, known_names, catalog)["rows"]
 
 
 # -- service ---------------------------------------------------------------------

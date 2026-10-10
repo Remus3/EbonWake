@@ -98,3 +98,36 @@ test('Grind tab reads /api/grind/loot and builds nodes with DOM APIs', () => {
   assert.ok(src.includes('C.sessionSilver'));
   assert.ok(!/innerHTML|insertAdjacentHTML|outerHTML/.test(src));
 });
+
+// Plan 113: an auto session closed with OCR loot shows "Loot (OCR): N items, X"
+// and a details list with each row's source (table / catalog).
+test('ocrLootView: Loot (OCR) row text and the per-row details', () => {
+  const s = {
+    loot_src: 'ocr', valued_silver: 38200000,
+    loot: [
+      { name: 'Ancient Relic Crystal Shard', id: 4987, count: 12, kind: 'market', unit: 2000000, value: 20436000, source: 'table' },
+      { name: 'Trace of Nature', id: null, count: 300, kind: 'vendor', unit: 1000, value: 300000, source: 'table' },
+      { name: 'Sealed Black Magic Crystal', id: 4990, count: 2, kind: 'unknown', unit: null, value: 0, source: 'catalog' }
+    ],
+    loot_value: { total: 38200000, trash: 300000, market: 37900000, unknown: ['Sealed Black Magic Crystal'] }
+  };
+  const v = C.ocrLootView(s);
+  assert.strictEqual(v.text, 'Loot (OCR): 3 items, 38.2M');
+  assert.deepStrictEqual(v.rows, [
+    { text: 'Ancient Relic Crystal Shard x12 - 20.4M', source: 'table' },
+    { text: 'Trace of Nature x300 - 300K', source: 'table' },
+    { text: 'Sealed Black Magic Crystal x2 - no price', source: 'catalog' }
+  ]);
+  assert.strictEqual(C.ocrLootView(Object.assign({}, s, { loot: [s.loot[0]] })).text, 'Loot (OCR): 1 item, 38.2M');
+  assert.strictEqual(C.ocrLootView(Object.assign({}, s, { loot_src: undefined })), null);
+  assert.strictEqual(C.ocrLootView({ loot_src: 'ocr', loot: [] }), null);
+  assert.strictEqual(C.ocrLootView(null), null);
+  const odd = C.ocrLootView({ loot_src: 'ocr', loot: [null, { name: 'X', count: 1, kind: 'market', value: 5, source: 'weird' }], loot_value: { total: 5 } });
+  assert.deepStrictEqual(odd.rows, [{ text: 'X x1 - 5', source: '' }]);
+});
+
+test('Grind tab renders the Loot (OCR) row and its details', () => {
+  const src = read('dashboard/grind.js');
+  assert.ok(src.includes('C.ocrLootView(s)'));
+  assert.ok(src.includes("el('details'"));
+});
