@@ -12,13 +12,14 @@
   // from earlier parts
   const { CLAIM_TOAST, ISO_DAY, MARKET_ALERTS, NOTE_MAX, bossHits, buffsLive, claimLine,
     claimRows, fmtDuration, fmtSilver, hotLive, isNum, itemRule, lastResetOf, loginDayText,
-    loginDays, normalizeGame, notOnServer, pendingStop, plainObject, suggestedRows } = K;
+    loginDays, normalizeGame, notOnServer, ocrAppliedHits, pendingStop, plainObject,
+    suggestedRows } = K;
 
   // ---- Toasts + notifications (plan 026) ----
   // toastQueue: the dashboard's toast region model (max 4, newest last, a key
   // pushed again replaces its toast). notifyRules: pure rule engine over two
   // snapshots of the payloads the dashboard already polls:
-  //   {at, market, grind, grindAt, leveling, levelingAt, events, today, game, bosses}
+  //   {at, market, grind, grindAt, leveling, levelingAt, events, today, game, bosses, ocr}
   // (raw GET bodies; *At = fetch time ms). A missing prev is a baseline: only
   // state rules (buffEnding) fire on it, transition rules wait for a second look.
 
@@ -357,7 +358,8 @@
     { name: 'resetSoon', defaultOn: true, fire: resetSoonHits },
     { name: 'loginRisk', defaultOn: true, fire: loginRiskHits },
     { name: 'maintLoss', defaultOn: true, fire: maintLossHits },
-    { name: 'claimDue', defaultOn: true, fire: claimDueHits }  // plan 086 (plan 080: every rule on)
+    { name: 'claimDue', defaultOn: true, fire: claimDueHits },  // plan 086 (plan 080: every rule on)
+    { name: 'ocrApplied', defaultOn: true, fire: ocrAppliedHits }  // plan 111
   ];
 
   // {rule: bool} from each rule's defaultOn. Plan 080: a config/local.json

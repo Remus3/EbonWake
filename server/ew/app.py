@@ -394,7 +394,8 @@ class EWServer(ThreadingHTTPServer):
             self.store, self.game, self.ocr, self.grind,
             settings=self.fixed_settings, clock=grind_clock or time.time,
             on_change=self._ocr_auto_changed, leveling=self.leveling, progress=self.progress,
-            play=self.play.view, loot_target=self.grind.loot_target, zones=self.zones)
+            play=self.play.view, loot_target=self.grind.loot_target, zones=self.zones,
+            bosses=self.bosses)  # plan 111: a boss loot screen ticks the loot itself
         # Plan 081: the running session's OCR loot counts prefill the loot form.
         self.grind.ocr_loot = self.ocr_auto.loot_prefill
         if isinstance(listeners, list):
@@ -1232,10 +1233,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def _post_ocr(self, body):
         # Plan 063: {"review": {id, action, value?}} / {"undo": id} act on the
-        # auto-OCR queue; every other body is a plan 009 / 040 read.
+        # auto-OCR queue; every other body is a plan 009 / 040 read. Plan 111:
+        # {"undo": "a<n>"} undoes one auto-applied row.
         if isinstance(body, dict) and set(body) == {"review"}:
             return self.server.ocr_auto.review(body["review"])
         if isinstance(body, dict) and set(body) == {"undo"}:
+            if isinstance(body["undo"], str) and body["undo"].startswith("a"):
+                return self.server.ocr_auto.undo_applied(body["undo"])
             return self.server.ocr_auto.undo(body["undo"])
         return self.server.ocr.read(body)
 

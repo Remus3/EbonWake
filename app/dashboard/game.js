@@ -93,6 +93,17 @@
     if (!a) return;
     const sph = C.ocrSilverH(a);
     if (sph) box.appendChild(el('div', 'ew-muted', sph));
+    // Plan 111: confident book / zone / boss reads were applied; Undo each.
+    if (a.applied.length) box.appendChild(el('div', 'ew-mname', 'Applied automatically'));
+    a.applied.forEach(function (r) {
+      const row = el('div', 'ew-grow');
+      const n = el('span', r.undone ? 'ew-muted' : 'ew-mname', C.ocrAppliedLabel(r));
+      n.title = r.file;
+      row.appendChild(n);
+      const body = C.ocrAppliedUndo(r);
+      if (body) row.appendChild(btn('Undo', function () { autoPost(body); }));
+      box.appendChild(row);
+    });
     a.review.forEach(function (r) {
       const row = el('div', 'ew-grow');
       const n = el('span', 'ew-mname', C.ocrAutoLabel(r));

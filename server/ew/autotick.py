@@ -6,7 +6,8 @@ clock counts N logged-in minutes since the reset, `ready_minutes:N` only marks
 the row ready. Auto ticks carry `by: auto`; an operator untick blocks them until
 the row's next reset (TodayService). A screenshot (plan 008 watcher) taken while
 logged in within BOSS_WINDOW_MIN of a plan 031 spawn suggests that boss as
-"probably done" - a suggestion only, never a loot tick.
+"probably done" - a suggestion only, never a loot tick (plan 111: the OCR
+worker ticks it when the shot's text also names the boss, `ocrauto`).
 
 Inputs are the session-log state, screenshot file times and the clock: nothing
 is read from or sent to the game.
@@ -42,9 +43,9 @@ def _iso(ts):
     return _dt.datetime.fromtimestamp(ts, _UTC).replace(microsecond=0).isoformat()
 
 
-def boss_suggestions(at, table):
-    """Epoch `at` -> [(PT day, boss)] for every spawn within +- BOSS_WINDOW_MIN
-    (edges inclusive)."""
+def boss_spawns(at, table):
+    """Epoch `at` -> [(PT day, boss, spawn epoch)] for every spawn within
+    +- BOSS_WINDOW_MIN (edges inclusive)."""
     week = _bosses._by_weekday(table)
     day0 = _bosses.utc_to_pt(_dt.datetime.fromtimestamp(at, _UTC)).date()
     out = []
@@ -52,8 +53,14 @@ def boss_suggestions(at, table):
         for slot in week[day.weekday()]:
             spawn, row = _bosses._spawn(table, slot, day)
             if abs(spawn.timestamp() - at) <= BOSS_WINDOW_MIN * 60:
-                out.extend((row["day"], b) for b in row["bosses"])
+                out.extend((row["day"], b, spawn.timestamp()) for b in row["bosses"])
     return out
+
+
+def boss_suggestions(at, table):
+    """Epoch `at` -> [(PT day, boss)] for every spawn within +- BOSS_WINDOW_MIN
+    (edges inclusive)."""
+    return [(day, boss) for day, boss, _ in boss_spawns(at, table)]
 
 
 class AutoTick:
