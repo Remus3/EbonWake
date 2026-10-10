@@ -21,7 +21,9 @@ whose text names that boss ticks its loot (`bosses`, by: auto), and every such
 auto-apply (and every committed zone read) is listed in store domain
 `auto_applied` with an Undo. Plan 115: an event currency balance read from
 the exchange window / a tooltip sets that event's balance in eventcurrency
-(held when below the logged projection). Nothing reaches the game: the input is image files the operator
+(held when below the logged projection). Plan 118: an enhancement window
+shot sets the current failstack, crons owned and Agris pity in deadeye
+(`ocrinfer.enhance_fields`). Nothing reaches the game: the input is image files the operator
 saved with the game's own screenshot key, read after they are written.
 """
 
@@ -64,10 +66,14 @@ PLANNER_KINDS = ("weight", "slots", "cp", "fame")
 # Plan 113: a loot-window row (table or catalog item + count) under the gate.
 # Plan 115: an event currency balance (exchange window / tooltip) -> eventcurrency.
 CURRENCY_KIND = "currency_balance"
+# Plan 118: enhancement window reads (current failstack, crons owned, Agris
+# pity {family, step, stacks}) -> deadeye; an Agris fix is the stacks count.
+ENH_KINDS = ("enh_fs", "enh_crons", "enh_agris")
 KINDS = ("silver", "buff", "level", "gear", "book_use") + PLANNER_KINDS + (
-    zoneinfo.KIND, "loot", CURRENCY_KIND)
+    zoneinfo.KIND, "loot", CURRENCY_KIND) + ENH_KINDS
 # a book suggestion and a zone read are accept / discard only; a loot fix is a count
-FIX_KINDS = ("silver", "buff", "level", "gear") + PLANNER_KINDS + ("loot", CURRENCY_KIND)
+FIX_KINDS = ("silver", "buff", "level", "gear") + PLANNER_KINDS + (
+    "loot", CURRENCY_KIND) + ENH_KINDS
 LOOT_KEYS = {"name", "count", "id", "source", "spot", "started"}
 LOOT_SOURCES = ("table", "catalog")
 
@@ -316,7 +322,18 @@ def _check_value(kind, v):
             return dict(v)
         raise ValueError(f"loot value must be {{name, count 1..{MAX_LOOT_COUNT}, id, "
                          "source: table|catalog, spot, started}")
+    enh_max = {"enh_fs": ocrinfer.ENH_FS_MAX, "enh_crons": ocrinfer.ENH_CRONS_MAX}
+    if kind in enh_max and _ok_int(v, 0, enh_max[kind]):
+        return v
+    if kind == "enh_agris":
+        if (isinstance(v, dict) and set(v) == {"family", "step", "stacks"}
+                and isinstance(v["family"], str) and isinstance(v["step"], str)
+                and _ok_int(v["stacks"], 0, ocrinfer.ENH_AGRIS_MAX)):
+            return dict(v)
+        raise ValueError(f"enh_agris value must be {{family, step, stacks 0.."
+                         f"{ocrinfer.ENH_AGRIS_MAX}}}")
     ranges = {"silver": f"0..{MAX_SILVER}", "buff": f"1..{MAX_BUFF_MINUTES}",
+              "enh_fs": f"0..{ocrinfer.ENH_FS_MAX}", "enh_crons": f"0..{ocrinfer.ENH_CRONS_MAX}",
               "gear": f"{GS_RANGE[0]}..{GS_RANGE[1]}", "cp": f"0..{ocrinfer.CP_MAX_READ}",
               CURRENCY_KIND: f"0..{ocrinfer.CUR_MAX_READ}"}
     raise ValueError(f"{kind} value must be an int {ranges.get(kind, '')}".rstrip())
@@ -332,7 +349,8 @@ class AutoOcr:
 
     def __init__(self, store, game, reader, grind, settings=None, clock=time.time,
                  on_change=None, leveling=None, progress=None, play=None, regions=None,
-                 loot_target=None, zones=None, bosses=None, catalog=None, currency=None):
+                 loot_target=None, zones=None, bosses=None, catalog=None, currency=None,
+                 deadeye=None):
         self.store = store
         self.game = game
         self.reader = reader              # OcrService (plan 009): .doc(name) -> {text, lines}
@@ -354,6 +372,8 @@ class AutoOcr:
         self.bosses = bosses
         # Plan 115: CurrencyService; without one event currency is not read.
         self.currency = currency
+        # Plan 118: DeadeyeService; without one the enhancement window is not read.
+        self.deadeye = deadeye
         self.zone_titles = zoneinfo.load_titles()
         self.regions = regions if regions is not None else ocrinfer.load_regions()
         self.settings = settings or (lambda: {})
@@ -504,6 +524,8 @@ class AutoOcr:
         shot_at = _ts(shot.get("mtime")) or self.clock()
         if self.currency is not None:
             fields += ocrinfer.currency_field(doc, self.currency.rules, shot_at)
+        if self.deadeye is not None:
+            fields += self._enhance_fields(doc)
         touched = self._loot_read(shot["name"], doc, shot_at, mn)
         for f in fields:
             if f["kind"] == "buff" and f["value"] - math.floor(
@@ -542,6 +564,16 @@ class AutoOcr:
                 if act == "hold":
                     hold = why
                     f = dict(f, why=f"{f['why']}; {why}")
+            if f["kind"] in ENH_KINDS:
+                try:
+                    act, why = self.deadeye.ocr_check(f["kind"], f["value"], shot_at)
+                except ValueError:
+                    continue  # not a value deadeye keeps: nothing to set
+                if act == "skip":
+                    continue  # a newer read or a value typed after the shot is in force
+                if act == "hold":
+                    hold = why
+                    f = dict(f, why=f"{f['why']}; {why}")
             if hold is None and f["conf"] >= mn:
                 try:
                     uid = self._commit(shot["name"], f["kind"], f["name"], f["value"], shot_at)
@@ -561,6 +593,15 @@ class AutoOcr:
         touched = self._boss_read(shot["name"], doc, shot_at) or touched
         if touched:
             self._changed()
+
+    def _enhance_fields(self, doc):
+        """Plan 118: enhancement window fields, Agris keyed by the item line or
+        the plan 036 advice's next step."""
+        keys = {(r["family"], r["step"]): r.get("agris_threshold") for r in self.deadeye.rates()}
+        adv = self.deadeye.view()["stacks"]["advice"]
+        fallback = (adv["family"], adv["level"]) if adv.get("family") and adv.get("level") \
+            else None
+        return ocrinfer.enhance_fields(doc, keys, fallback)
 
     def _growing(self, shot):
         """The file on disk no longer has the listed size (BDO still writing it)."""
@@ -965,6 +1006,10 @@ class AutoOcr:
                 # Plan 115: the balance as read at the shot (a fix too: it corrects the read).
                 entry["prev"] = self._need(self.currency).set_balance(
                     name, value, source=f"ocr:{_str(file, 255)}", at=shot_at, uid=uid)
+            elif kind in ENH_KINDS:
+                # Plan 118: the enhancement window as read at the shot (a fix corrects it).
+                entry["prev"] = self._need(self.deadeye).ocr_set(
+                    kind, value, source=f"ocr:{_str(file, 255)}", at=shot_at, uid=uid)
             elif kind in PLANNER_KINDS:
                 reads = self._reads()
                 reads[kind] = (reads.get(kind, []) + [{
@@ -1040,6 +1085,9 @@ class AutoOcr:
                                    c.get("written"), c.get("prev"))
             elif c.get("kind") == CURRENCY_KIND:
                 self._need(self.currency).restore_read(c.get("name"), uid, c.get("prev"))
+            elif c.get("kind") in ENH_KINDS:
+                self._need(self.deadeye).ocr_restore(c["kind"], c.get("value"), uid,
+                                                     c.get("prev"))
             elif c.get("kind") in PLANNER_KINDS:
                 reads = self._reads()
                 reads[c["kind"]] = [r for r in reads.get(c["kind"], []) if r.get("id") != uid]
@@ -1164,6 +1212,9 @@ class AutoOcr:
                     if not _ok_int(value, 1, MAX_LOOT_COUNT):
                         raise ValueError(f"a loot fix is a count 1..{MAX_LOOT_COUNT}")
                     value = dict(item.get("value") or {}, count=value)
+                if action == "fix" and item["kind"] == "enh_agris":
+                    # Plan 118: an Agris fix is the corrected stacks count.
+                    value = dict(item.get("value") or {}, stacks=value)
                 self._commit(item.get("file"), item["kind"], item.get("name"), value,
                              _ts(item.get("shot_at")) or self.clock(), via=action,
                              at_shot=action == "accept")

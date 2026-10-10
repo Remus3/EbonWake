@@ -372,7 +372,10 @@
   function evInputs(r) {
     if (!S.evIn[r.id]) {
       const fams = S.table ? S.table.families : [];
-      S.evIn[r.id] = { family: C.enhanceFamilyGuess(r.item, fams) || fams[0] || '', fs: '0', crons: false };
+      // Plan 118: the FS starts at the enhancement window read when there is one.
+      const read = C.fmtStacks(S.data && S.data.stacks).fsNowValue;
+      S.evIn[r.id] = { family: C.enhanceFamilyGuess(r.item, fams) || fams[0] || '',
+        fs: String(read === null ? 0 : read), crons: false };
     }
     return S.evIn[r.id];
   }
@@ -641,6 +644,7 @@
     const f = C.fmtStacks(s);
     body.appendChild(el('div', 'ew-gnum', 'next: ' + f.advice));
     body.appendChild(el('div', 'ew-gnum', f.budget));
+    if (f.fsNow) body.appendChild(el('div', 'ew-gnum', f.fsNow));
     if (f.unknown) body.appendChild(el('div', 'ew-muted', f.unknown));
     const list = el('div', 'ew-list');
     f.bank.forEach(function (b) {

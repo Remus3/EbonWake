@@ -330,8 +330,14 @@
       return { kind: r.kind, value: r.value, text: fsKind(r.kind) + ' ' + r.value + ' x' + r.count };
     });
     const agris = (Array.isArray(o.agris) ? o.agris : []).filter(plainObject).map(function (r) {
-      return { family: r.family, step: r.step, text: r.family + ' ' + r.step + ': ' + r.stacks + ' stacks, ' + pityText(r.fails_to_guarantee) };
+      return { family: r.family, step: r.step, text: r.family + ' ' + r.step + ': ' + r.stacks + ' stacks, ' + pityText(r.fails_to_guarantee) +
+        (typeof r.source === 'string' ? ' (OCR)' : '') };
     });
+    // Plan 118: enhancement window reads (the newest of OCR / typed wins).
+    const fn = plainObject(o.fs_now) ? o.fs_now : null;
+    const fsNow = fn && Number.isInteger(fn.value) && fn.value >= 0 && fn.value <= ENHANCE_MAX_FS ?
+      'failstack now +' + fn.value + ' (OCR)' : '';
+    const cronsOcr = plainObject(o.reads) && plainObject(o.reads.crons) ? ' (OCR)' : '';
     const a = plainObject(o.advice) ? o.advice : {};
     let advice;
     if (typeof a.level !== 'string') {
@@ -345,14 +351,15 @@
       advice = head + ': ' + pick + pity;
     }
     const b = plainObject(o.budget) ? o.budget : {};
-    let budget = 'crons ' + fmtCrons(b.owned) + ' owned / ' + fmtCrons(b.needed) + ' expected';
+    let budget = 'crons ' + fmtCrons(b.owned) + ' owned' + cronsOcr + ' / ' + fmtCrons(b.needed) + ' expected';
     if (isNum(b.gap) && b.gap > 0) {
       budget += ', short ' + fmtCrons(b.gap) + (isNum(b.weeks) ? ' (~' + b.weeks + (b.weeks === 1 ? ' week)' : ' weeks)') : ' (no weekly income set)');
     } else if (isNum(b.needed)) {
       budget += ', covered';
     }
     const unk = (Array.isArray(b.unknown) ? b.unknown : []).filter(plainObject).map(function (u) { return u.family + ' ' + u.level; });
-    return { bank: bank, agris: agris, advice: advice, budget: budget,
+    return { bank: bank, agris: agris, advice: advice, budget: budget, fsNow: fsNow,
+      fsNowValue: fsNow ? fn.value : null,
       unknown: unk.length ? 'no chance data (not counted): ' + unk.join(', ') : '' };
   }
 

@@ -10,6 +10,11 @@ failstacks (`fs_bank`), Agris Essence pity stacks (`agris`) and crons on hand
 next open step closest to its soft cap without exceeding it, "guaranteed in N
 fails" per Agris row, and owned vs expected crons for every open step.
 
+Plan 118: an enhancement window screenshot read (plan 063 OCR) sets the
+current failstack (`reads.fs_now`), crons owned and an Agris row through
+`ocr_set` (undo `ocr_restore`); the newest of a read and a typed value wins
+(`typed_at`), so typed entry stays an optional override.
+
 Plan 055 adds two read-only calculators over tracked, sourced data files:
 `weeks_to_reform` (Jetina weekly boss-crystal exchange, `data/boss_crystal.json`)
 and `caphras_cost` (stones per range, `data/caphras.json`, priced from the plan
@@ -150,6 +155,32 @@ def _clean_crons(raw):
     owned, weekly = raw.get("owned"), raw.get("weekly_income")
     return {"owned": owned if _ok_int(owned, 0, MAX_CRONS) else 0,
             "weekly_income": weekly if _ok_int(weekly, 0, MAX_CRONS_WEEKLY) else 0}
+
+
+def _clean_read(e):
+    if (isinstance(e, dict) and _parse_iso(e.get("at")) is not None
+            and isinstance(e.get("source"), str) and isinstance(e.get("id"), (str, type(None)))):
+        return {k: e.get(k) for k in ("id", "value", "at", "set_at", "source")}
+    return None
+
+
+def _clean_reads(raw):
+    raw = raw if isinstance(raw, dict) else {}
+    agris = raw.get("agris") if isinstance(raw.get("agris"), dict) else {}
+    return {"fs_now": _clean_read(raw.get("fs_now")), "crons": _clean_read(raw.get("crons")),
+            "agris": {k: c for k, c in ((k, _clean_read(e)) for k, e in agris.items())
+                      if isinstance(k, str) and c is not None}}
+
+
+def _clean_typed(raw):
+    raw = raw if isinstance(raw, dict) else {}
+    agris = raw.get("agris") if isinstance(raw.get("agris"), dict) else {}
+    return {"crons": raw.get("crons") if _parse_iso(raw.get("crons")) else None,
+            "agris": {k: v for k, v in agris.items() if isinstance(k, str) and _parse_iso(v)}}
+
+
+def _akey(family, step):
+    return f"{family}|{step}"
 
 
 def _family_guess(item, families):
@@ -394,7 +425,8 @@ class DeadeyeService:
         ok = isinstance(nxt, int) and not isinstance(nxt, bool) and 1 <= nxt < 10 ** 9
         return {"notes": notes, "plan": plan, "next_id": max(nxt, top) if ok else top,
                 "fs_bank": _clean_bank(doc.get("fs_bank")), "agris": _clean_agris(doc.get("agris")),
-                "crons": _clean_crons(doc.get("crons"))}
+                "crons": _clean_crons(doc.get("crons")),
+                "reads": _clean_reads(doc.get("reads")), "typed_at": _clean_typed(doc.get("typed_at"))}
 
     def _save(self, doc):
         doc["updated"] = _iso(self._now())
@@ -430,14 +462,24 @@ class DeadeyeService:
         families = sorted({f for f, _ in rows})
         pity = {(a["family"], a["step"]): a["stacks"] for a in doc["agris"]}
         bank = sorted(doc["fs_bank"], key=lambda r: (FS_KINDS.index(r["kind"]), r["value"]))
-        agris = [dict(a, threshold=t, fails_to_guarantee=_fails_left(t, a["stacks"]))
+        agris = [dict(a, threshold=t, fails_to_guarantee=_fails_left(t, a["stacks"]),
+                      **self._read_tag(doc["reads"]["agris"].get(_akey(a["family"], a["step"]))))
                  for a in sorted(doc["agris"], key=lambda a: (a["family"],
                                                               enhance.STEPS.index(a["step"])))
                  for t in [rows.get((a["family"], a["step"]), {}).get("agris_threshold")]]
         open_steps = [s for s in doc["plan"] if not s["done"]]
+        fs_now = doc["reads"]["fs_now"]
         return {"fs_bank": bank, "agris": agris, "crons": doc["crons"],
+                # Plan 118: the enhancement window reads (newest of OCR / typed wins).
+                "fs_now": None if fs_now is None else {
+                    "value": fs_now["value"], "at": fs_now["at"], "source": fs_now["source"]},
+                "reads": {"crons": self._read_tag(doc["reads"]["crons"]) or None},
                 "advice": self._advice(open_steps[:1], rows, families, pity, bank),
                 "budget": self._budget(open_steps, rows, families, pity, doc["crons"])}
+
+    @staticmethod
+    def _read_tag(read):
+        return {} if read is None else {"source": read["source"], "read_at": read["at"]}
 
     @staticmethod
     def _advice(first, rows, families, pity, bank):
@@ -662,6 +704,9 @@ class DeadeyeService:
                 raise ValueError(f"at most {MAX_AGRIS_ROWS} Agris rows")
             doc["agris"] = rest + ([{"family": key[0], "step": key[1], "stacks": stacks}]
                                    if stacks else [])
+            # Plan 118: a typed value outranks every read of an older shot.
+            doc["reads"]["agris"].pop(_akey(*key), None)
+            doc["typed_at"]["agris"][_akey(*key)] = _iso(self._now())
             self._save(doc)
         return self.view()
 
@@ -679,5 +724,143 @@ class DeadeyeService:
         with self._lock:
             doc = self._load()
             doc["crons"].update(new)
+            if "owned" in new:  # plan 118: a typed count outranks older reads
+                doc["reads"]["crons"] = None
+                doc["typed_at"]["crons"] = _iso(self._now())
             self._save(doc)
         return self.view()
+
+    # -- plan 118: enhancement window reads --------------------------------------
+
+    def _threshold(self, family, step):
+        return next((r.get("agris_threshold") for r in self.rates()
+                     if (r["family"], r["step"]) == (family, step)), None)
+
+    @staticmethod
+    def _ocr_value(kind, value):
+        """Validated read value; for enh_agris the (family, step) key too."""
+        if kind == "enh_fs":
+            return _int(value, "fs", 0, enhance.MAX_FS), None
+        if kind == "enh_crons":
+            return _int(value, "crons", 0, MAX_CRONS), None
+        if kind == "enh_agris":
+            if (not isinstance(value, dict) or set(value) != {"family", "step", "stacks"}
+                    or not isinstance(value["family"], str)
+                    or not enhance.FAMILY_RE.fullmatch(value["family"])
+                    or value["step"] not in enhance.STEPS):
+                raise ValueError("an Agris read is {family, step, stacks}")
+            return (_int(value["stacks"], "stacks", 0, MAX_AGRIS_STACKS),
+                    (value["family"], value["step"]))
+        raise ValueError(f"not an enhancement read: {kind}")
+
+    @staticmethod
+    def _slot(doc, kind, key):
+        """(stored read, typed-at iso) of one read slot."""
+        if kind == "enh_fs":
+            return doc["reads"]["fs_now"], None
+        if kind == "enh_crons":
+            return doc["reads"]["crons"], doc["typed_at"]["crons"]
+        return doc["reads"]["agris"].get(_akey(*key)), doc["typed_at"]["agris"].get(_akey(*key))
+
+    @staticmethod
+    def _newer(read, typed, when):
+        """Why a read at `when` must not replace the slot, or None."""
+        r_at = _parse_iso(read["at"]) if read else None
+        if r_at is not None and when < r_at:
+            return f"a newer read ({read['at']}) is stored"
+        t_at = _parse_iso(typed)
+        if t_at is not None and when < t_at:
+            return f"a value typed later ({typed}) is in force"
+        return None
+
+    @staticmethod
+    def _when(at):
+        if isinstance(at, bool) or not isinstance(at, (int, float)):
+            raise ValueError("at must be the epoch time of the screenshot")
+        return _dt.datetime.fromtimestamp(at, _dt.timezone.utc).replace(microsecond=0)
+
+    def ocr_check(self, kind, value, at):
+        """(None | "skip" | "hold", why) for a read of `value` at epoch `at`:
+        skip when a newer read or a value typed after the shot holds the slot;
+        hold an Agris read above the table threshold (a misread)."""
+        v, key = self._ocr_value(kind, value)
+        when = self._when(at)
+        read, typed = self._slot(self._load(), kind, key)
+        why = self._newer(read, typed, when)
+        if why is not None:
+            return "skip", why
+        t = self._threshold(*key) if key else None
+        if t is not None and v > t:
+            return "hold", f"{v} stacks is above the Agris threshold {t}"
+        return None, None
+
+    def fs_now(self):
+        """The current failstack from the newest enhancement window read, or None."""
+        read = self._load()["reads"]["fs_now"]
+        return None if read is None else read["value"]
+
+    def ocr_set(self, kind, value, source, at, uid=None):
+        """Store one enhancement window read (shot at epoch `at`, `source`
+        "ocr:<file>"); returns {value, read} it replaced (for undo). A read older
+        than the stored read or than the last typed value raises ValueError."""
+        v, key = self._ocr_value(kind, value)
+        when = self._when(at)
+        if not isinstance(source, str) or not source.startswith("ocr:") or len(source) > 300:
+            raise ValueError("source must be ocr:<file>")
+        entry = {"id": uid, "value": v, "at": _iso(when), "set_at": _iso(self._now()),
+                 "source": source}
+        with self._lock:
+            doc = self._load()
+            read, typed = self._slot(doc, kind, key)
+            why = self._newer(read, typed, when)
+            if why is not None:
+                raise ValueError(why)
+            if kind == "enh_fs":
+                prev = read["value"] if read else None
+                doc["reads"]["fs_now"] = entry
+            elif kind == "enh_crons":
+                prev = doc["crons"]["owned"]
+                doc["crons"]["owned"] = v
+                doc["reads"]["crons"] = entry
+            else:
+                prev = self._agris_put(doc, key, v)
+                doc["reads"]["agris"][_akey(*key)] = entry
+            self._save(doc)
+        return {"value": prev, "read": read}
+
+    @staticmethod
+    def _agris_put(doc, key, stacks):
+        """Set one Agris row (0 removes it); returns the stacks it had."""
+        old = next((a for a in doc["agris"] if (a["family"], a["step"]) == key), None)
+        rest = [a for a in doc["agris"] if a is not old]
+        if stacks and old is None and len(rest) >= MAX_AGRIS_ROWS:
+            raise ValueError(f"at most {MAX_AGRIS_ROWS} Agris rows")
+        doc["agris"] = rest + ([{"family": key[0], "step": key[1], "stacks": stacks}]
+                               if stacks else [])
+        return old["stacks"] if old else 0
+
+    def ocr_restore(self, kind, value, uid, prev):
+        """Undo a read: back to `prev` while the stored read is still the one
+        `uid` wrote."""
+        _, key = self._ocr_value(kind, value)
+        prev = prev if isinstance(prev, dict) else {}
+        with self._lock:
+            doc = self._load()
+            read, _ = self._slot(doc, kind, key)
+            if read is None or read.get("id") != uid:
+                raise ValueError("that read was replaced since; set it in the Deadeye tab")
+            old = _clean_read(prev.get("read"))
+            if kind == "enh_fs":
+                doc["reads"]["fs_now"] = old
+            elif kind == "enh_crons":
+                p = prev.get("value")
+                doc["crons"]["owned"] = p if _ok_int(p, 0, MAX_CRONS) else 0
+                doc["reads"]["crons"] = old
+            else:
+                p = prev.get("value")
+                self._agris_put(doc, key, p if _ok_int(p, 0, MAX_AGRIS_STACKS) else 0)
+                if old is None:
+                    doc["reads"]["agris"].pop(_akey(*key), None)
+                else:
+                    doc["reads"]["agris"][_akey(*key)] = old
+            self._save(doc)

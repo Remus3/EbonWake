@@ -300,7 +300,9 @@ class EWServer(ThreadingHTTPServer):
         # Plan 044: operator-typed mounts + sourced T10 breed rules.
         self.mounts = mounts.MountsService(self.store)
         # Plan 035: EV math on tracked rate rows; prices from the market cache only.
-        self.enhance = enhance.EnhanceService(self.store, prices=self.market.cached_price)
+        # Plan 118: a query without fs evaluates at the enhancement window FS read.
+        self.enhance = enhance.EnhanceService(self.store, prices=self.market.cached_price,
+                                              fs_now=lambda: self.deadeye.fs_now())
         # Plan 036: stack advice reads the same effective rows (overrides included).
         # Plan 055: crystal / Caphras calculators price from the market cache only.
         self.deadeye = deadeye.DeadeyeService(self.store, clock=deadeye_clock or time.time,
@@ -397,7 +399,8 @@ class EWServer(ThreadingHTTPServer):
             play=self.play.view, loot_target=self.grind.loot_target, zones=self.zones,
             bosses=self.bosses,  # plan 111: a boss loot screen ticks the loot itself
             catalog=self.names.catalog,  # plan 113: off-table loot names
-            currency=self.currency)  # plan 115: exchange / tooltip -> event currency balance
+            currency=self.currency,  # plan 115: exchange / tooltip -> event currency balance
+            deadeye=self.deadeye)  # plan 118: enhancement window -> FS / crons / Agris
         # Plan 081: the running session's OCR loot counts prefill the loot form;
         # plan 113: an auto session closes with them as its loot, cache-priced.
         self.grind.ocr_loot = self.ocr_auto.loot_prefill

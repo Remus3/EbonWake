@@ -239,11 +239,14 @@ def _key(r):
 
 class EnhanceService:
     """Store domain `enhance`: {"rates": [row]} operator overrides; a row with
-    the same (family, step) as a tracked row replaces it."""
+    the same (family, step) as a tracked row replaces it. Plan 118: `fs_now()`
+    is the current failstack from the newest enhancement window read (or None);
+    a query without `fs` evaluates at it."""
 
-    def __init__(self, store, prices, table=None):
+    def __init__(self, store, prices, table=None, fs_now=None):
         self.store = store
         self.prices = prices
+        self.fs_now = fs_now or (lambda: None)
         self.table = table if table is not None else load_table()
         self._lock = threading.Lock()
 
@@ -299,13 +302,17 @@ class EnhanceService:
             return self.view()
         if family is None or step is None:
             raise ValueError("family and step are both required")
-        fs_s, crons_s = one("fs") or "0", one("crons") or "0"
-        if not re.fullmatch(r"[0-9]{1,3}", fs_s):
+        fs_s, crons_s = one("fs"), one("crons") or "0"
+        if fs_s is not None and not re.fullmatch(r"[0-9]{1,3}", fs_s):
             raise ValueError(f"fs must be an int in 0..{MAX_FS}")
         if crons_s not in ("0", "1"):
             raise ValueError("crons must be 0 or 1")
+        read = self.fs_now() if fs_s is None else None
+        fs, src = ((int(fs_s), "query") if fs_s is not None
+                   else (read, "ocr") if isinstance(read, int) and 0 <= read <= MAX_FS
+                   else (0, "default"))
         try:
-            return self.evaluate(family, step, int(fs_s), crons_s == "1")
+            return dict(self.evaluate(family, step, fs, crons_s == "1"), fs_source=src)
         except KeyError as e:
             raise ValueError(e.args[0]) from None
 
