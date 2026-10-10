@@ -332,7 +332,8 @@ class AutoOcr:
 
     def __init__(self, store, game, reader, grind, settings=None, clock=time.time,
                  on_change=None, leveling=None, progress=None, play=None, regions=None,
-                 loot_target=None, zones=None, bosses=None, catalog=None, currency=None):
+                 loot_target=None, zones=None, bosses=None, catalog=None, currency=None,
+                 on_doc=None):
         self.store = store
         self.game = game
         self.reader = reader              # OcrService (plan 009): .doc(name) -> {text, lines}
@@ -354,6 +355,9 @@ class AutoOcr:
         self.bosses = bosses
         # Plan 115: CurrencyService; without one event currency is not read.
         self.currency = currency
+        # Plan 114: fn(file, doc, shot_at) given every doc this worker read
+        # (AutoTick.on_doc: Today `shot:<cue>` rows); no second OCR.
+        self.on_doc = on_doc
         self.zone_titles = zoneinfo.load_titles()
         self.regions = regions if regions is not None else ocrinfer.load_regions()
         self.settings = settings or (lambda: {})
@@ -559,6 +563,11 @@ class AutoOcr:
             self._enqueue_review(shot["name"], f, shot_at)
             touched = True
         touched = self._boss_read(shot["name"], doc, shot_at) or touched
+        if self.on_doc is not None:
+            try:
+                self.on_doc(shot["name"], doc, shot_at)
+            except Exception:  # noqa: BLE001 - a Today hook never breaks the worker
+                pass
         if touched:
             self._changed()
 

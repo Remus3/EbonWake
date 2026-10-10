@@ -240,6 +240,15 @@
       if (extra) box.appendChild(extra);
       extra = box;
     }
+    const chip = C.todayAutoChip(it); // plan 114: screenshot / boss loot rules
+    if (chip && !C.todayAutoMark(it)) {
+      const box = el('span', null, '');
+      const pill = el('span', 'ew-pill unknown', chip);
+      pill.title = C.todayAutoTitle(it);
+      box.appendChild(pill);
+      if (extra) box.appendChild(extra);
+      extra = box;
+    }
     if (C.todayAutoMark(it) || C.todayReady(it)) extra = autoBox(it, extra);
     const n = row(it, extra);
     if (live) n.ewLive = live;

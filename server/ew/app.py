@@ -409,7 +409,11 @@ class EWServer(ThreadingHTTPServer):
         self.autotick = autotick.AutoTick(
             self.store, self.today, self.dice, self.game, table=self.bosses.table,
             settings=self.fixed_settings, clock=today_clock or time.time,
-            on_change=lambda: self.bus.bump("today"))
+            on_change=lambda: self.bus.bump("today"),
+            bosses=self.bosses)  # plan 114: `bosses:N` rows count the week's loot ticks
+        # Plan 114: the OCR worker hands each logged-in shot's doc to the Today
+        # `shot:<cue>` rows (no second OCR).
+        self.ocr_auto.on_doc = self.autotick.on_doc
         if isinstance(listeners, list):
             listeners.append(self.autotick.on_game)
         if isinstance(pollers, list):

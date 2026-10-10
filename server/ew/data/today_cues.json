@@ -1,0 +1,32 @@
+{
+  "challenges_daily": {
+    "patterns": ["\\bchallenges?\\b"],
+    "all": ["\\bdaily\\b", "\\b(completed?|claimed)\\b"],
+    "source": "plan 114: Challenges window (Y) daily tab, all rewards claimed / Completed; community UI wording, not yet checked against an operator screenshot",
+    "verified": false
+  },
+  "barter": {
+    "patterns": ["\\bbarter(ing)?\\b"],
+    "all": ["\\b(exchange[ds]?|complete[d]?|success(ful)?)\\b"],
+    "source": "plan 114: barter window exchange / barter completion text; community UI wording, not yet checked against an operator screenshot",
+    "verified": false
+  },
+  "guild_mission": {
+    "patterns": ["\\bguild\\s+missions?\\b"],
+    "all": ["\\b(complete[d]?|rewards?)\\b"],
+    "source": "plan 114: guild mission Complete / reward text; community UI wording, not yet checked against an operator screenshot",
+    "verified": false
+  },
+  "bs_weekly": {
+    "patterns": ["\\bblack\\s+spirit\\b"],
+    "all": ["\\bweekly\\b", "\\bcomplete[d]?\\b"],
+    "source": "plan 114: quest window Black Spirit weekly quest Complete; community UI wording, not yet checked against an operator screenshot",
+    "verified": false
+  },
+  "pearl_free": {
+    "patterns": ["\\bpearl\\s+shop\\b"],
+    "all": ["\\bfree\\b", "(purchase\\s+limit\\W*0\\s*/\\s*1|\\bpurchased\\b)"],
+    "source": "plan 114: Pearl Shop weekly free item purchase limit 0/1 or Purchased; community UI wording, not yet checked against an operator screenshot",
+    "verified": false
+  }
+}
