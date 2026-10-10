@@ -60,7 +60,7 @@
         isInt(v.add, -IMP_COUNT_MAX) && v.add <= IMP_COUNT_MAX && v.add !== 0;
       case 'cp': return v === null || inRange(v, IMP_CP);
       case 'mastery': return exact(v, ['type', 'pct']) && IMP_TYPES.indexOf(v.type) >= 0 &&
-        isNum(v.pct) && v.pct >= 0 && v.pct <= IMP_MASTERY_MAX;
+        (v.pct === null || (isNum(v.pct) && v.pct >= 0 && v.pct <= IMP_MASTERY_MAX));  // plan 117: null clears
       case 'box_add': return exact(v, ['type', 'name', 'items']) && IMP_TYPES.indexOf(v.type) >= 0 &&
         validAscii(v.name, IMP_NAME_MAX) && validImpItems(v.items);
       case 'box_del': return typeof v === 'string' && IMP_BOX_ID.test(v);
@@ -68,8 +68,22 @@
     }
   }
 
-  // One row per type: {type, label, delivered, cap, left, done, text, mastery}.
-  // Without CP the cap is unknown: the text asks for it instead of guessing.
+  // Plan 117: "+40.5% mastery (from screenshot, 2h ago)" / "(typed)" /
+  // "(typed, expired)"; '' with no bonus. A pre-117 row (no source) shows the pct.
+  function impMasteryText(t) {
+    const pct = isNum(t.mastery_pct) ? t.mastery_pct : 0;
+    const s = t.mastery_source;
+    if (s === 'default' || (!pct && s !== 'ocr' && s !== 'operator')) return '';
+    const head = '+' + pct + '% mastery';
+    if (s === 'ocr') {
+      return head + ' (' + derivedText({ source: 'ocr', age_s: t.mastery_age_s, stale: t.mastery_stale }).text + ')';
+    }
+    if (s === 'operator') return head + ' (typed' + (t.mastery_expired === true ? ', expired' : '') + ')';
+    return head;
+  }
+
+  // One row per type: {type, label, delivered, cap, left, done, text, mastery,
+  // masteryText}. Without CP the cap is unknown: the text asks for it instead of guessing.
   function imperialRows(view) {
     const types = plainObject(view) && Array.isArray(view.types) ? view.types : [];
     return types.filter(function (t) {
@@ -80,7 +94,7 @@
       return { type: t.type, label: impTitle(t.type), delivered: t.delivered, cap: cap, left: left,
         done: left === 0,
         text: cap === null ? t.delivered + ' delivered (set CP for the cap)' : left + ' / ' + cap + ' left',
-        mastery: isNum(t.mastery_pct) ? t.mastery_pct : 0 };
+        mastery: isNum(t.mastery_pct) ? t.mastery_pct : 0, masteryText: impMasteryText(t) };
     });
   }
 
@@ -95,7 +109,8 @@
     const c = plainObject(view) && plainObject(view.cp) ? view.cp : null;
     if (!c || !isNum(c.value)) return 'CP ?';
     if (c.source === 'ocr') return 'CP ' + c.value + ' (' + derivedText(c).text + ')';  // plan 081
-    return 'CP ' + c.value + (c.source === 'operator' ? ' (typed)' : '');
+    if (c.source === 'operator') return 'CP ' + c.value + (c.expired === true ? ' (typed, expired)' : ' (typed)');
+    return 'CP ' + c.value;
   }
 
   // Best boxes of one type in server order: [{id, name, text, cls}].

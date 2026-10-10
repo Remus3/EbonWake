@@ -79,7 +79,7 @@
 
   function typeRow(r) {
     const n = el('div', 'ew-trow' + (r.done ? ' done' : ''));
-    const lab = el('span', 'ew-mname', r.label + (r.mastery ? ' (+' + r.mastery + '% mastery)' : ''));
+    const lab = el('span', 'ew-mname', r.label + (r.masteryText ? ' ' + r.masteryText : ''));
     n.appendChild(lab);
     n.appendChild(el('span', 'ew-muted ew-tdays', r.text));
     [[-1, '-1'], [1, '+1'], [10, '+10']].forEach(function (p) { n.appendChild(tickButton(r.type, p[0], p[1])); });

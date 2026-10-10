@@ -5,7 +5,10 @@ input silver, and the midnight-server-time reset countdown.
 
 Rules and seed boxes come from the tracked, sourced `data/imperial_boxes.json`
 (official wiki 133). CP comes from plan 042's Life & CP card when the profile
-shows it, else the operator's typed value. Prices are the market cache only
+shows it, else the newer of the operator's typed value and the newest CP
+screenshot read; the mastery bonus is the newer of the typed value and the
+newest mastery window read (plan 117: a typed value expires as an override
+after TYPED_TTL_S). Prices are the market cache only
 (never fetched here): payout on the item's base price, input cost on its last
 sold price. Delivered counts are operator ticks; nothing is read from the game.
 """
@@ -38,6 +41,10 @@ COUNT_MAX = CP_MAX  # no cap is known without CP: clamp the tick count here
 MASTERY_MAX = 500
 MAX_BOXES = 60
 BEST_N = 3
+# Plan 117: a typed CP / mastery is an override for this long; past it any
+# screenshot read wins whatever its age (with no read the typed value stays,
+# flagged expired).
+TYPED_TTL_S = derived.STALE_S
 
 
 def _is_int(v):
@@ -198,9 +205,10 @@ def _iso(when):
 
 class ImperialService:
     """Store domain `imperial`: {"day": last reset date, "delivered": {type: n},
-    "cp": int | null, "mastery": {type: pct}, "boxes": [{id, type, name,
-    items}], "updated"}. Delivered counts belong to `day`; a later reset reads
-    them as zero. Every write returns the GET body."""
+    "cp": int | null, "cp_at", "mastery": {type: pct}, "mastery_at": {type:
+    set time} (plan 117), "boxes": [{id, type, name, items}], "updated"}.
+    Delivered counts belong to `day`; a later reset reads them as zero. Every
+    write returns the GET body."""
 
     def __init__(self, store, clock=time.time, cp=None, prices=None, name=None,
                  data_path=None, reads=None):
@@ -242,6 +250,8 @@ class ImperialService:
         m = doc.get("mastery") if isinstance(doc.get("mastery"), dict) else {}
         mastery = {t: m[t] if _is_num(m.get(t)) and 0 <= m[t] <= MASTERY_MAX else 0
                    for t in TYPES}
+        ma = doc.get("mastery_at") if isinstance(doc.get("mastery_at"), dict) else {}
+        mastery_at = {t: ma[t] for t in TYPES if isinstance(ma.get(t), str)}
         boxes, seen = [], set()
         for b in doc.get("boxes") if isinstance(doc.get("boxes"), list) else []:
             try:
@@ -256,7 +266,7 @@ class ImperialService:
                 boxes.append({"id": b["id"], "type": b["type"], "name": b["name"].strip(),
                               "items": items})
         return {"day": day, "delivered": delivered, "cp": cp, "cp_at": cp_at, "mastery": mastery,
-                "boxes": boxes[:MAX_BOXES]}
+                "mastery_at": mastery_at, "boxes": boxes[:MAX_BOXES]}
 
     def _write(self, fn):
         with self._lock:
@@ -269,35 +279,68 @@ class ImperialService:
     def _cp(self, doc):
         return self._cp_row(doc)[:2]
 
+    def _read(self, kind, ok):
+        """The newest committed OCR read of `kind` as a derived.pick live row."""
+        try:
+            r = self.reads(kind)
+        except Exception:  # noqa: BLE001 - a broken OCR feed falls back to typed
+            r = None
+        if isinstance(r, dict) and ok(r.get("value")):
+            return {"value": r["value"], "at": r.get("at"), "source": "ocr"}
+        return None
+
+    def _pick(self, typed, live, default=None):
+        """Plan 117: derived.pick, except a typed value older than TYPED_TTL_S
+        no longer overrides a read (any age). -> (pick, expires_at, expired):
+        `expired` only while the expired typed value is still in force."""
+        now = self.clock()
+        t_at = derived._ts(typed.get("at")) if typed else None
+        exp = t_at + TYPED_TTL_S if t_at is not None else None
+        over = exp is not None and now >= exp
+        p = derived.pick(None if over and live is not None else typed, live, now, default)
+        return (p, _iso(_dt.datetime.fromtimestamp(exp, _dt.timezone.utc)) if exp else None,
+                over and p["source"] == "typed")
+
     def _cp_row(self, doc):
-        """(cp, source, at, age_s, stale): the plan 042 profile CP wins; else
-        (plan 081) the newer of the typed value and the newest committed OCR CP
-        read (source "ocr")."""
+        """(cp, source, at, age_s, stale, expires_at, expired): the plan 042
+        profile CP wins; else (plan 081) the newer of the typed value and the
+        newest committed OCR CP read (source "ocr"); plan 117: a typed value
+        past TYPED_TTL_S loses to any read."""
         try:
             v = self.cp_source()
         except Exception:  # noqa: BLE001 - a broken profile never breaks the card
             v = None
         if _is_num(v) and 0 <= v <= CP_MAX:
-            return int(v), "profile", None, None, False
-        try:
-            r = self.reads("cp")
-        except Exception:  # noqa: BLE001 - a broken OCR feed falls back to typed
-            r = None
-        live = None
-        if isinstance(r, dict) and _is_int(r.get("value")) and 0 <= r["value"] <= CP_MAX:
-            live = {"value": r["value"], "at": r.get("at"), "source": "ocr"}
+            return int(v), "profile", None, None, False, None, False
+        live = self._read("cp", lambda x: _is_int(x) and 0 <= x <= CP_MAX)
         typed = {"value": doc["cp"], "at": doc["cp_at"]} if doc["cp"] is not None else None
-        p = derived.pick(typed, live, self.clock())
+        p, exp, expired = self._pick(typed, live)
         if p["value"] is None:
-            return None, None, None, None, False
+            return None, None, None, None, False, None, False
         src = "operator" if p["source"] == "typed" else p["source"]
-        return p["value"], src, p["at"], p["age_s"], p["stale"]
+        return (p["value"], src, p["at"], p["age_s"], p["stale"],
+                exp if src == "operator" else None, expired)
+
+    def _mastery_row(self, doc, t):
+        """Plan 117: {pct, source: operator|ocr|default, typed, at, age_s,
+        stale, expires_at, expired} for one type - the newer of the typed bonus
+        and the newest mastery window read; a pre-117 typed bonus (no set time)
+        loses to any read."""
+        at = doc["mastery_at"].get(t)
+        typed = ({"value": doc["mastery"][t], "at": at}
+                 if at is not None or doc["mastery"][t] else None)
+        live = self._read(f"mastery:{t}", lambda x: _is_num(x) and 0 <= x <= MASTERY_MAX)
+        p, exp, expired = self._pick(typed, live, default=0)
+        src = "operator" if p["source"] == "typed" else p["source"]
+        return {"pct": p["value"], "source": src, "typed": p["typed"], "at": p["at"],
+                "age_s": p["age_s"], "stale": p["stale"],
+                "expires_at": exp if src == "operator" else None, "expired": expired}
 
     def cp_info(self):
         """Plan 084 card: {value, source, at} - the same CP the card shows."""
         with self._lock:
             doc = self._load(self._day(self._now()))
-        cp, src, at, _, _ = self._cp_row(doc)
+        cp, src, at = self._cp_row(doc)[:3]
         return {"value": cp, "source": src, "at": at}
 
     def _cap(self, doc):
@@ -336,27 +379,48 @@ class ImperialService:
 
     def typed_overrides(self):
         """Plan 081: the typed CP while it is the value in force, as an
-        /api/overrides row (a profile or newer OCR read supersedes it)."""
+        /api/overrides row (a profile or newer OCR read supersedes it); plan
+        117: + each typed mastery bonus in force, both with `expires_at`."""
         with self._lock:
             doc = self._load(self._day(self._now()))
-        cp, src, at, _, _ = self._cp_row(doc)
-        if src != "operator":
-            return []
-        return [{"key": "imperial.cp", "label": "Contribution points (typed)", "value": cp,
-                 "set_at": at, "reason": "the next CP screenshot supersedes it",
-                 "cards": ["imperial"]}]
+        out = []
+        cp, src, at, _, _, exp, _ = self._cp_row(doc)
+        if src == "operator":
+            out.append({"key": "imperial.cp", "label": "Contribution points (typed)",
+                        "value": cp, "set_at": at, "expires_at": exp,
+                        "reason": "the next CP screenshot supersedes it",
+                        "cards": ["imperial"]})
+        for t in TYPES:
+            m = self._mastery_row(doc, t)
+            if m["source"] == "operator":
+                out.append({"key": f"imperial.mastery.{t}",
+                            "label": f"Imperial {t} mastery bonus (typed)", "value": m["pct"],
+                            "set_at": m["at"], "expires_at": m["expires_at"],
+                            "reason": "the next mastery window screenshot supersedes it",
+                            "cards": ["imperial"]})
+        return out
 
     def set_mastery(self, arg):
-        """{type, pct}: the operator's mastery bonus on imperial payouts."""
+        """{type, pct}: the operator's mastery bonus on imperial payouts (plan
+        117: an expiring override; pct null clears it)."""
         if not isinstance(arg, dict) or set(arg) != {"type", "pct"}:
             raise ValueError("mastery must be {type, pct}")
         t = self._type(arg["type"])
         pct = arg["pct"]
-        if not _is_num(pct) or not 0 <= pct <= MASTERY_MAX:
-            raise ValueError(f"pct must be a number in 0..{MASTERY_MAX}")
-        pct = round(float(pct), 2)
-        pct = int(pct) if pct == int(pct) else pct
-        return self._write(lambda doc: doc["mastery"].update({t: pct}))
+        if pct is not None and (not _is_num(pct) or not 0 <= pct <= MASTERY_MAX):
+            raise ValueError(f"pct must be null or a number in 0..{MASTERY_MAX}")
+        if pct is not None:
+            pct = round(float(pct), 2)
+            pct = int(pct) if pct == int(pct) else pct
+        at = _iso(self._now())
+
+        def go(doc):
+            doc["mastery"][t] = 0 if pct is None else pct
+            if pct is None:
+                doc["mastery_at"].pop(t, None)
+            else:
+                doc["mastery_at"][t] = at
+        return self._write(go)
 
     def box_add(self, arg):
         """{type, name, items: [{id, qty}]}: an operator box row."""
@@ -409,26 +473,32 @@ class ImperialService:
         now = self._now()
         with self._lock:
             doc = self._load(self._day(now))
-        cp, cp_src, cp_at, cp_age, cp_stale = self._cp_row(doc)
+        cp, cp_src, cp_at, cp_age, cp_stale, cp_exp, cp_expired = self._cp_row(doc)
         cap = daily_cap(cp, self.divisor)
         nxt = today.next_reset(self.rule, now)
-        types = []
+        types, mastery = [], {}
         for t in TYPES:
             d = doc["delivered"][t]
             left = None if cap is None else max(0, cap - d)
+            m = self._mastery_row(doc, t)
+            mastery[t] = m["pct"]
             types.append({"type": t, "cap": cap, "delivered": d, "left": left,
-                          "done": left == 0, "mastery_pct": doc["mastery"][t]})
+                          "done": left == 0, "mastery_pct": m["pct"],
+                          "mastery_source": m["source"], "mastery_typed": m["typed"],
+                          "mastery_at": m["at"], "mastery_age_s": m["age_s"],
+                          "mastery_stale": m["stale"], "mastery_expires_at": m["expires_at"],
+                          "mastery_expired": m["expired"]})
         rows = []
         for b in (self.data or {}).get("boxes", []):
-            rows.append(self._row(b, "seed", doc["mastery"][b["type"]], b["source"],
-                                  b["verified"]))
+            rows.append(self._row(b, "seed", mastery[b["type"]], b["source"], b["verified"]))
         for b in doc["boxes"]:
-            rows.append(self._row(b, "operator", doc["mastery"][b["type"]]))
+            rows.append(self._row(b, "operator", mastery[b["type"]]))
         rules = self.data["rules"] if self.data else None
         return {"now": _iso(now), "day": doc["day"],
                 "reset": {"next_utc": _iso(nxt), "left_s": int((nxt - now).total_seconds())},
                 "cp": {"value": cp, "source": cp_src, "typed": doc["cp"], "at": cp_at,
-                       "age_s": cp_age, "stale": cp_stale},
+                       "age_s": cp_age, "stale": cp_stale, "expires_at": cp_exp,
+                       "expired": cp_expired},
                 "types": types, "boxes": rows,
                 "best": {t: best_boxes([r for r in rows if r["type"] == t]) for t in TYPES},
                 "rules": None if rules is None else {
