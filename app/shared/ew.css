@@ -312,6 +312,9 @@ html, body {
 .ew-lform .ew-lname { flex: 1; min-width: 60px; }
 .ew-ldet { margin-top: 2px; }
 .ew-ldet summary { cursor: pointer; font-size: 12px; }
+/* Plan 110: the Leveling Zones table. */
+.ew-ztable { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ew-ztable th, .ew-ztable td { text-align: left; padding: 1px 6px 1px 0; font-weight: 400; }
 .ew-ldays { display: flex; gap: 2px; width: 100%; }
 .ew-lday { display: flex; align-items: center; gap: 1px; font-size: 12px; cursor: pointer; }
 .ew-lday input { margin: 0; accent-color: var(--fk-accent); }

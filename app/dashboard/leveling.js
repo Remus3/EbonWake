@@ -58,6 +58,36 @@
     getJSON('/api/leveling').then(function (d) {
       if (!accept(d)) throw new Error('bad reply from server');
     }).catch(function (e) { S.err = e.message; }).then(draw);
+    // Plan 110: the Zones table (plan 088 in-game zone reads); a failure keeps the last rows.
+    getJSON('/api/zones/xp').then(function (d) { S.zones = d; },
+      function () { /* keep the last rows */ }).then(drawZones);
+  }
+
+  function drawZones() {
+    const ui = S.ui;
+    if (!ui || !ui.zones || !ui.card.isConnected) return;
+    const v = C.zonesRows(S.zones, Date.now());
+    ui.zonesSum.textContent = 'Zones (in-game reads)' + (v.rows.length ? ': ' + v.rows.length : '');
+    ui.zones.textContent = '';
+    if (!v.rows.length) { ui.zones.appendChild(el('div', 'ew-muted ew-lnote', v.empty)); return; }
+    const tbl = el('table', 'ew-ztable');
+    const hr = el('tr');
+    ['zone', 'rec Lv', 'EXP / kill', 'to next level', '', 'read'].forEach(function (h) { hr.appendChild(el('th', 'ew-muted', h)); });
+    tbl.appendChild(hr);
+    v.rows.forEach(function (r) {
+      const tr = el('tr', r.current ? null : 'ew-muted');
+      [r.name, r.level, r.exp, r.kills].forEach(function (t) { tr.appendChild(el('td', 'ew-gnum', t)); });
+      const cap = el('td');
+      if (r.cap) {
+        const p = el('span', 'ew-pill warn', r.cap);
+        p.title = 'every monster here is at the EXP cap - XP buffs add nothing';
+        cap.appendChild(p);
+      }
+      tr.appendChild(cap);
+      tr.appendChild(el('td', 'ew-muted', r.age));
+      tbl.appendChild(tr);
+    });
+    ui.zones.appendChild(tbl);
   }
 
   // SSE `leveling` (plan 049: via the dashboard bus) carries the full GET body;
@@ -306,6 +336,7 @@
     drawLive(Date.now());
     drawDeadlines();
     drawEditor();
+    drawZones();
   }
 
   // ---- mount ----
@@ -531,6 +562,12 @@
     body.appendChild(ui.books);
     ui.msg = el('div', 'ew-muted ew-msg', '');
     body.appendChild(ui.msg);
+    const zd = el('details', 'ew-ldet'); // plan 110: Zones table
+    ui.zonesSum = el('summary', 'ew-muted', 'Zones (in-game reads)');
+    zd.appendChild(ui.zonesSum);
+    ui.zones = el('div', 'ew-list');
+    zd.appendChild(ui.zones);
+    body.appendChild(zd);
     body.appendChild(editor(ui));
     c.appendChild(body);
     // Second card on the tab, right after Character.

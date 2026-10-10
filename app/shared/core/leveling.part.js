@@ -10,9 +10,9 @@
   'use strict';
 
   // from earlier parts
-  const { ISO_TS, LEVEL, XP_PCT, exact, inRange, isNum, pad2, parseLocalDateTime,
-    parseLocalTime, patchNote, plainObject, sinceFetch, utcMsOf, validRef, wholeIn, zoneName,
-    zoneOffsetMin } = K;
+  const { ISO_TS, LEVEL, XP_PCT, exact, fmtAge, inRange, isInt, isNum, pad2, parseLocalDateTime,
+    parseLocalTime, patchNote, plainObject, sinceFetch, utcMsOf, validRef, wholeIn, zoneKillsText,
+    zoneName, zoneOffsetMin } = K;
 
   // ---- Leveling (plan 011) ----
   // Operator-typed level + XP percent samples; rate, ETA and Hot Time windows
@@ -500,6 +500,31 @@
     return parts.join(' | ');
   }
 
+  // ---- Zones table (plan 110 over plan 088 GET /api/zones/xp) ----
+  // One row per in-game Monster Zone Info read: zone, recommended Lv, EXP per
+  // kill (the zone's average effective % of a level), kills to the next level,
+  // cap-bound badge, read age. Sorted by recommended level, none last.
+  const ZONES_EMPTY = 'Take a screenshot of a Monster Zone Info panel to fill this';
+  function zonesRows(d, nowMs) {
+    if (!plainObject(d) || !Array.isArray(d.zones)) return { rows: [], empty: 'zone reads unavailable', error: true };
+    const rows = d.zones.filter(function (z) {
+      return plainObject(z) && typeof z.zone_name === 'string' && z.zone_name.length > 0 && z.zone_name.length <= 100;
+    }).map(function (z) {
+      const lv = isInt(z.recommended_level, 1) ? z.recommended_level : null;
+      const current = z.current !== false;
+      const at = typeof z.read_at === 'string' ? Date.parse(z.read_at) : NaN;
+      return { name: z.zone_name, lv: lv, level: lv === null ? '-' : 'Lv ' + lv,
+        exp: current && isNum(z.effective_pct) && z.effective_pct > 0 ? Number(z.effective_pct.toFixed(4)) + '%/kill' : '-',
+        kills: zoneKillsText(z) || '-', cap: current && z.cap_bound === true ? 'cap-bound' : '',
+        age: isFinite(at) && isNum(nowMs) ? fmtAge((nowMs - at) / 1000) + ' ago' : '-', current: current };
+    });
+    rows.sort(function (a, b) {
+      if (a.lv !== b.lv) return a.lv === null ? 1 : (b.lv === null ? -1 : a.lv - b.lv);
+      return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0);
+    });
+    return { rows: rows, empty: rows.length ? '' : ZONES_EMPTY, error: false };
+  }
+
   Object.assign(K, { PCT_RE: PCT_RE, HHMM_RE: HHMM_RE, HOT_ID_RE: HOT_ID_RE,
     HOT_LABEL_MAX: HOT_LABEL_MAX, MILESTONES_MAX: MILESTONES_MAX, DAY_NAMES: DAY_NAMES,
     validXpPct: validXpPct, validLabel: validLabel, validDays: validDays,
@@ -514,6 +539,7 @@
     fmtMonthDay: fmtMonthDay, deadlinePill: deadlinePill, deadlineLine: deadlineLine,
     deadlineAlert: deadlineAlert, normalizeBooks: normalizeBooks, fmtBookPct: fmtBookPct,
     booksLine: booksLine, booksToNextText: booksToNextText, parseBookForm: parseBookForm,
-    hotLive: hotLive, fmtLevelLine: fmtLevelLine, levelingLine: levelingLine });
+    hotLive: hotLive, fmtLevelLine: fmtLevelLine, levelingLine: levelingLine,
+    ZONES_EMPTY: ZONES_EMPTY, zonesRows: zonesRows });
   return function link() {};
 });

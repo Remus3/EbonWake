@@ -443,6 +443,10 @@
     ["serverRows","function"],
     ["validAccelerator","function"],
     ["hotkeys","function"],
-    ["DEFAULT_HOTKEYS","object"]
+    ["DEFAULT_HOTKEYS","object"],
+    ["withCurrency","function"],
+    ["ZONES_EMPTY","string"],
+    ["zonesRows","function"],
+    ["verdictRows","function"]
   ]
 }

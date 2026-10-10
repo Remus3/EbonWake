@@ -81,6 +81,36 @@ test('eventGameRows + eventTickBody', () => {
   assert.deepStrictEqual(C.eventTickBody('10673:game1', false), { event_untick: '10673:game1' });
 });
 
+// Plan 110 slice 1: an event tick (Today tab) re-reads only GET
+// /api/events/currency and swaps the `currency` block into the Events body.
+test('withCurrency: replaces only the currency block, keeps every other field', () => {
+  const data = { items: [{ id: 'e1' }], suggested: { codes: [] }, currency: { events: [row()] } };
+  const fresh = { events: [row({ earned: 180 })] };
+  const out = C.withCurrency(data, fresh);
+  assert.notStrictEqual(out, data);
+  assert.strictEqual(out.items, data.items);
+  assert.strictEqual(out.suggested, data.suggested);
+  assert.strictEqual(out.currency, fresh);
+  assert.strictEqual(C.currencyRows(out.currency)[0].earned, 180);
+  assert.strictEqual(data.currency.events[0].earned, 140, 'input not mutated');
+});
+
+test('withCurrency: a bad block or no events body changes nothing', () => {
+  const data = { items: [], currency: { events: [row()] } };
+  assert.strictEqual(C.withCurrency(data, null), data);
+  assert.strictEqual(C.withCurrency(data, { events: 'x' }), data);
+  assert.strictEqual(C.withCurrency(data, []), data);
+  assert.strictEqual(C.withCurrency(null, { events: [] }), null);
+  assert.strictEqual(C.withCurrency({ nope: 1 }, { events: [] }).nope, 1);
+});
+
+test('static: Events tab re-reads /api/events/currency on a today push', () => {
+  const ev = read('dashboard/events.js');
+  assert.ok(ev.includes("getJSON('/api/events/currency')"));
+  assert.ok(ev.includes('C.withCurrency('));
+  assert.ok(/EWBus\.on\('today'/.test(ev));
+});
+
 test('static: Events tab draws the currency card, Today ticks event rows', () => {
   const ev = read('dashboard/events.js');
   assert.ok(ev.includes("card('Event currency')") && ev.includes('C.currencyText('));
