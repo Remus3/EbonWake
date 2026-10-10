@@ -72,9 +72,25 @@
     return plainObject(it) && it.ready === true && it.done !== true;
   }
 
+  // Plan 114: a chip on rows ticked from a screenshot cue or boss loot ticks;
+  // other rules (and manual rows) get none.
+  function todayAutoChip(it) {
+    if (!plainObject(it) || typeof it.auto !== 'string') return '';
+    if (/^shot:[a-z0-9_]{1,40}$/.test(it.auto)) return 'auto: screenshot';
+    if (/^bosses:[1-9]\d{0,2}$/.test(it.auto)) return 'auto: boss loot';
+    return '';
+  }
+
   function todayAutoTitle(it) {
     if (!plainObject(it) || typeof it.auto !== 'string') return '';
     if (it.auto === 'login') return 'auto-ticks on the first login after reset';
+    const kind = todayAutoChip(it);
+    if (kind === 'auto: screenshot') {
+      return 'auto-ticks when a screenshot you take while logged in shows it done';
+    }
+    if (kind === 'auto: boss loot') {
+      return 'auto-ticks after ' + it.auto.slice(7) + ' world boss loot tick(s) since reset';
+    }
     const m = /^(logged|ready)_minutes:(\d+)$/.exec(it.auto);
     if (!m) return '';
     return (m[1] === 'logged' ? 'auto-ticks after ' : 'shown ready after ') + m[2] +
@@ -401,7 +417,7 @@
   Object.assign(K, { DICE_ITEM_ID: DICE_ITEM_ID, DICE_ITEM_RE: DICE_ITEM_RE,
     isDiceItem: isDiceItem, normalizeDice: normalizeDice, diceMin: diceMin, diceLine: diceLine,
     diceSuggest: diceSuggest, todayAutoMark: todayAutoMark, todayReady: todayReady,
-    todayAutoTitle: todayAutoTitle, THEMES: THEMES, UI_SCALE: UI_SCALE,
+    todayAutoTitle: todayAutoTitle, todayAutoChip: todayAutoChip, THEMES: THEMES, UI_SCALE: UI_SCALE,
     INCIDENT_KEYS: INCIDENT_KEYS, LABELS: LABELS, MODE_TEXT: MODE_TEXT,
     MUTE_CHOICES: MUTE_CHOICES, MUTE_MAX_MS: MUTE_MAX_MS, SETTINGS_GROUPS: SETTINGS_GROUPS,
     DIR_MAX: DIR_MAX, SETTINGS_FIELDS: SETTINGS_FIELDS, SETTINGS_KEYS: SETTINGS_KEYS,

@@ -66,3 +66,44 @@ log state, EW's own boss ticks. No screen capture by EW, no input to the
 game window.
 
 Depends on: 111.
+
+## As-built deviations
+
+1. Chip scope. Decision: `todayAutoChip` returns "auto: screenshot" /
+   "auto: boss loot" for `shot:` / `bosses:` rows only, and the chip is
+   hidden once the row is auto-ticked (the plan 068 "auto" pill + undo shows
+   instead). Alternatives: a chip for every rule kind (login, minutes).
+   Why: the plan says the manual rows show nothing new, and login / dice rows
+   already have their own pills. Reverses if: the operator asks to see the
+   rule on every row.
+2. Logged-in test for shots. Decision: `AutoTick.on_doc` checks its own
+   logged_in spans (strict), not the OCR worker's 60 s post-logout grace.
+   Alternatives: reuse the worker's eligibility. Why: the plan requires that
+   a shot outside logged-in windows ticks nothing. Reverses if: real shots
+   taken in the logout fade are missed.
+3. `bosses:N` counts loot ticks by when the tick was made
+   (`BossService.looted_since`), not by the boss's spawn day. Alternatives:
+   map each key's PT spawn day to UTC and count spawns after the reset. Why:
+   ticks are made at or after the loot, the store already keeps the tick time
+   and the Garmoth cap uses the same rule. Reverses if: back-dated ticks of a
+   last-week boss are seen to tick the new week's row.
+4. Cue patterns ship `verified: false` (community UI wording, no operator
+   screenshot checked yet); a wording fix is a data change in
+   `server/ew/data/today_cues.json`.
+5. Existing tests that used "Barter run" as the rule-less row now use an
+   operator-added row (every seed row has a rule after this plan).
+6. Build lane could not write its progress file in the MAIN checkout (write
+   outside the worktree was not permitted in that run); gates were run
+   inline instead. Reverses if: the lane sandbox allows the kit
+   `write_progress` path.
+7. Merge with main (plan 115): `AutoOcr.__init__` conflict in
+   `server/ew/ocrauto.py`. Decision: keep both keyword args and both attrs
+   (`currency` from 115, `on_doc` from 114; `on_doc` last). Alternatives:
+   fold `on_doc` into one hook dict. Why: both are independent optional
+   collaborators wired by keyword in `app.py`; no ordering coupling. Reverses
+   if: a third doc consumer appears and a hook list is wanted.
+8. Merge with main (plan 118): same `AutoOcr.__init__` conflict again.
+   Decision: signature `..., currency=None, deadeye=None, on_doc=None`; attrs
+   `deadeye` (118) and `on_doc` (114) both kept. Alternatives: hook dict.
+   Why: independent optional collaborators wired by keyword. Reverses if: a
+   third doc consumer appears.
