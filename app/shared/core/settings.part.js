@@ -139,8 +139,9 @@
       { key: 'profile.base_url', label: 'Self-hosted profile API base (blank = off)', type: 'baseurl' },
       // Off = one character: Tag / alt-only maintenance loss warnings are hidden.
       { key: 'profile.multi_character', label: 'More than one character (Tag / alts)', type: 'bool' },
-      // Plan 027 / 079: sale tax facts (an armed Value Pack timer wins over the box).
-      { key: 'market.vp', label: 'Value Pack active', type: 'bool' },
+      // Plan 027 / 079 / 109: sale tax facts. The Value Pack state comes from the
+      // buff timer (auto-OCR arms it); the box is a fallback override.
+      { key: 'market.vp', label: 'Override: Value Pack active', type: 'bool', derived: 'Value Pack' },
       // Plan 108: derived (sell dialog screenshot / profile fame); the input is
       // an override behind a disclosure, the line above it shows the value in force.
       { key: 'market.fame_pct', label: 'Override (0-1.5 %)', type: 'number', min: 0, max: 1.5, step: 0.05,
@@ -325,6 +326,7 @@
   function derivedSettingLine(key, row) {
     const f = SETTINGS_FIELDS[key];
     if (!f || !f.derived) return null;
+    if (f.type === 'bool') return derivedBoolLine(f, row);
     if (!plainObject(row) || !isNum(row.value)) return { text: f.derived + ': -', stale: false, override: false };
     if (row.source === 'default') {
       return { text: f.derived + ': ' + row.value + ' % (no screenshot read yet)', stale: false, override: false };
@@ -333,6 +335,30 @@
     const note = typeof row.note === 'string' && row.note ? ' - ' + row.note : '';
     return { text: f.derived + ': ' + row.value + ' % (' + src.text + note + ')', stale: src.stale,
       override: row.source === 'typed' };
+  }
+
+  // Local "MM-DD" of an ISO time, or null.
+  function monthDay(iso) {
+    const t = typeof iso === 'string' ? Date.parse(iso) : NaN;
+    if (!isNum(t)) return null;
+    const d = new Date(t);
+    const p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
+  // Plan 109: the Value Pack line ({value, source: timer|expired|typed|config|
+  // default, ends}): "active until 11-02 (buff timer)", "off (expired 10-05)",
+  // "unknown - no VP assumed", or the typed / config value in force.
+  function derivedBoolLine(f, row) {
+    const out = function (text, override) { return { text: f.derived + ': ' + text, stale: false, override: override }; };
+    if (!plainObject(row) || typeof row.value !== 'boolean') return out('-', false);
+    const on = row.value ? 'active' : 'off';
+    const md = monthDay(row.ends);
+    if (row.source === 'timer' && md) return out('active until ' + md + ' (buff timer)', false);
+    if (row.source === 'expired' && md) return out('off (expired ' + md + ')', false);
+    if (row.source === 'typed') return out(on + ' (typed)', true);
+    if (row.source === 'config') return out(on + ' (config/local.json)', false);
+    return out(row.value ? 'active' : 'unknown - no VP assumed', false);
   }
 
   function sameSetting(a, b) {

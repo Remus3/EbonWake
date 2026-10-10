@@ -70,6 +70,11 @@ TIME_NEIGHBOUR = 0.85    # the time came from a line beside / below the name
 TIME_ODD = 0.6           # units out of order, repeated, or out of range
 TIME_STRAY = 0.8         # another bare number sits beside the time
 TIME_AT_CAP = 0.7        # clamped to the 30-day maximum
+# Plan 109: a Value Pack lasts 30 days, so a read at the cap is a normal read
+# for it; a read ending this much earlier than the armed timer is held (the
+# tooltip shows whole hours, so a re-read of the same timer stays inside it).
+VP_NAME = "value pack"
+VP_EARLY_SLACK_S = 3600
 
 _SEP_RUN = re.compile(r"[,. ]+")
 _BROKEN_AFTER = re.compile(r"^ ?[,.] ?[^\s,.]")
@@ -130,8 +135,9 @@ def silver_field(doc, last=None, alt=None):
             "conf": round(conf, 3), "why": "; ".join(whys)}
 
 
-def time_conf(text):
-    """(minutes or None, conf, why) for the duration in one text run."""
+def time_conf(text, cap_ok=False):
+    """(minutes or None, conf, why) for the duration in one text run.
+    `cap_ok`: the 30-day cap is the buff's own length (plan 109 Value Pack)."""
     hits = list(ocr.DURATION.finditer(text if isinstance(text, str) else ""))
     minutes = ocr.duration_minutes(text)
     if minutes is None:
@@ -147,9 +153,13 @@ def time_conf(text):
     rest = ocr.DURATION.sub(" ", text)
     if re.search(r"\d", rest):
         conf, why = min(conf, TIME_STRAY), "stray number beside the time"
-    if minutes >= MAX_BUFF_MINUTES:
+    if minutes >= MAX_BUFF_MINUTES and not cap_ok:
         conf, why = min(conf, TIME_AT_CAP), "time at the 30-day cap"
     return minutes, conf, why
+
+
+def _is_vp(name):
+    return isinstance(name, str) and name.strip().lower() == VP_NAME
 
 
 def buff_fields(doc, names=SEED_BUFFS):
@@ -173,16 +183,16 @@ def buff_fields(doc, names=SEED_BUFFS):
         if not found:
             name, d = ocr._best_name(ln["text"], known) if known else (None, None)
             if name is not None:
-                minutes, tconf, why = time_conf(ln["text"])
+                minutes, tconf, why = time_conf(ln["text"], _is_vp(name))
                 add(name, round(1 - d, 2), minutes, tconf, why)
             continue
         for name, rest in found:
-            minutes, tconf, why = time_conf(rest)
+            minutes, tconf, why = time_conf(rest, _is_vp(name))
             if minutes is None and len(found) == 1:
                 for b in ocr._neighbours(lines, i):
                     if ocr._find_name(b["text"], names)[0] is not None:
                         continue
-                    minutes, tconf, why = time_conf(b["text"])
+                    minutes, tconf, why = time_conf(b["text"], _is_vp(name))
                     if minutes is not None:
                         tconf, why = min(tconf, TIME_NEIGHBOUR), why + " (neighbour line)"
                         break
@@ -450,6 +460,10 @@ class AutoOcr:
                 else:
                     before = (ocrinfer.prev_sample(samples, shot_at), self.leveling.rate())
             agree = None
+            if f["kind"] == "buff" and f["conf"] >= mn and _is_vp(f["name"]):
+                hold = self._vp_hold(f["name"], f["value"], shot_at)
+                if hold is not None:
+                    f = dict(f, why=f"{f['why']}; {hold}")
             if f["kind"] == "fame" and f["conf"] >= mn:
                 hold, agree = self._fame_hold(shot["name"], f["value"], shot_at)
                 if hold is not None:
@@ -603,6 +617,21 @@ class AutoOcr:
                 return None, i.get("id")
         return (f"fame went down from {cur['value']} %; held until a second screenshot "
                 "agrees"), None
+
+    # -- plan 109: Value Pack renewal guard -------------------------------------------
+
+    def _vp_hold(self, name, minutes, shot_at):
+        """Why a Value Pack read is held, or None. A read ending later than the
+        armed timer is a renewal and commits; one ending earlier (beyond the
+        tooltip's hour granularity) is queued - a misread must not cut VP short."""
+        cur = self._buff_state(name)
+        ends = _ts(cur["ends"]) if cur else None
+        if ends is None or ends <= self.clock():
+            return None
+        if shot_at + minutes * 60 < ends - VP_EARLY_SLACK_S:
+            return ("Value Pack ends earlier than the armed timer; held until the operator "
+                    "accepts it")
+        return None
 
     def _drop_review(self, rid):
         with self._lock:

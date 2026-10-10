@@ -68,3 +68,47 @@ Retires: the typed `market.vp` Settings bool as a required input (fallback
 override only).
 
 Depends on: 108.
+
+## As-built deviations
+
+Self-adjudicated in the build lane (refute-rounds: 0/3 at hand-in).
+
+1. A typed value newer than the run-out timer wins. Decision: `_vp_live`
+   returns None (not `vp_expired`) while a `typed` ledger entry has a
+   `set_at` after the timer's end, so the operator can say "bought a new VP"
+   before a screenshot reads it; a config value never beats the expired
+   signal. Alternatives: the expired signal retires every override for 7 days
+   (slice 1 read literally). Why: same precedence as plan 108 (a read beats
+   config always and typed only when newer); otherwise a fresh purchase typed
+   in Settings would be retired at once. Reverses if: VP purchases are read
+   automatically at purchase time.
+2. Source wording "(buff timer)", not "(OCR)". Decision: the derived row's
+   source is `timer` / `expired` and the Settings line says "active until
+   11-02 (buff timer)". Alternatives: "(OCR)" as in slice 4. Why: the same
+   Grind buff row is armed by the auto-OCR or by hand in the Grind tab; the
+   signal is the timer, whoever armed it. Reverses if: a hand-armed timer is
+   ever treated differently from an OCR-armed one.
+3. Timers row is pinned below the soonest-first rows and does not count
+   toward TIMERS_MAX. Alternatives: sort it in with the other rows (a 30-day
+   end would always fall past the 6-row cut and never show). Why: the row is
+   only useful if it is visible; it is one informational line, warn-styled
+   in the last 24 h.
+4. Digest row: `GET /api/maint/digest` carries `value_pack` {ends, in_s}
+   from T-24 h before the VP end; the Home digest card renders it as a
+   "Value Pack" row when the card itself shows (maintenance within 24 h).
+   Alternatives: force the digest card to show for a VP end alone. Why: the
+   card is titled "Before maintenance (in N h)"; outside that window the
+   pinned Timers row (warn inside the last day) carries the same fact.
+5. Renewal guard slack. A Value Pack read ending earlier than the armed end
+   by more than `VP_EARLY_SLACK_S` (1 h, the tooltip's hour granularity) is
+   queued; within it the read commits as before (a re-read of the same timer).
+6. Zero-touch guard needs a definition of "no live signal" for
+   `profile.multi_character`, which has one (plan 080 profile characters).
+   Decision: `App.LIVE_PARTIAL` names live signals that do not cover every
+   operator, with a reason (private profile / no family name); the guard
+   counts them as needing an operator value. `App.live_signals()` is the one
+   map `eff_settings` and the guard read. FIXED keys (plan 080) count as
+   "fixed default"; exemptions with reasons live in the test.
+7. Progress file: the build run's permissions blocked writes outside the
+   worktree and running scratch scripts, so
+   `ops/loop/control/progress/p109-build.json` was not written by this run.

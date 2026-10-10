@@ -105,9 +105,30 @@
     });
   }
 
+  // Plan 109: local "MM-DD HH:MM" of an epoch ms.
+  function monthDayClock(ms) {
+    const d = new Date(ms);
+    const p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+
+  // Plan 109: "Value Pack ends MM-DD HH:MM" while the timer is armed; pinned
+  // under the soonest-first rows (a 30-day end would never make the cut).
+  // Informational only: warn inside the last day, no What now row.
+  function timerValuePack(grind, now) {
+    const b = (plainObject(grind) && Array.isArray(grind.buffs) ? grind.buffs : []).filter(function (x) {
+      return plainObject(x) && typeof x.name === 'string' && x.name.trim().toLowerCase() === 'value pack';
+    })[0];
+    const ends = b && typeof b.ends === 'string' ? Date.parse(b.ends) : NaN;
+    if (isNaN(ends) || ends <= now) return null;
+    return timerRow('Value Pack ends ' + monthDayClock(ends), fmtDuration(ends - now), '',
+      ends - now <= 86400000 ? 'warn' : '', 'vp', ends);
+  }
+
   // bosses / events: the GET payloads or null (absent, 404); at: the events
-  // fetch time; whatnow: the GET /api/whatnow view or null.
-  function nowTimers(today, bosses, events, at, now, whatnow) {
+  // fetch time; whatnow: the GET /api/whatnow view or null; grind (plan 109):
+  // the GET /api/grind view or null, for the Value Pack row.
+  function nowTimers(today, bosses, events, at, now, whatnow, grind) {
     let rows = timerResets(today, now);
     if (bosses) rows = rows.concat(timerBosses(bosses, now));
     if (events) rows = rows.concat(timerEnding(events, at, now), timerClaims(events, at, now));
@@ -117,6 +138,8 @@
     });
     rows = rows.filter(function (r) { return !shown[dueKey(r.source, r.due)]; })
       .sort(function (a, b) { return a.due - b.due; }).slice(0, TIMERS_MAX);
+    const vp = timerValuePack(grind, now);
+    if (vp) rows.push(vp);
     const c = nowCard('timers', 'Timers', 'today', rows, 'no timers due');
     c.meta = bosses ? bossGarmothText(bosses) : '';
     return c;
@@ -407,6 +430,10 @@
       if (isNaN(ends)) return;
       rows.push(nowRow(e.title, fmtDuration(ends - now), typeof e.kind === 'string' ? e.kind + ' ends' : 'ends'));
     });
+    // Plan 109: a Value Pack ending within 24 h (server `value_pack`), informational.
+    const vp = plainObject(view.value_pack) && typeof view.value_pack.ends === 'string' ?
+      Date.parse(view.value_pack.ends) : NaN;
+    if (!isNaN(vp) && vp > now) rows.push(nowRow('Value Pack', fmtDuration(vp - now), 'ends ' + monthDayClock(vp)));
     return nowCard('maintdigest', 'Before maintenance (' + maintInText(start - now) + ')', 'events', rows,
       'nothing ends at this maintenance');
   }
@@ -433,7 +460,8 @@
     const wnView = has('whatnow') ? s.whatnow : null;
     const all = [];
     if (today) all.push(nowDailies(today, nowMs));
-    all.push(nowTimers(today, has('bosses', 'next') ? s.bosses : null, events, at('events'), nowMs, wnView));
+    all.push(nowTimers(today, has('bosses', 'next') ? s.bosses : null, events, at('events'), nowMs, wnView,
+      has('grind') ? s.grind : null));
     if (has('grind')) {
       all.push(nowBuffs(s.grind, at('grind'), nowMs));
       all.push(nowSession(s.grind, at('grind'), nowMs));

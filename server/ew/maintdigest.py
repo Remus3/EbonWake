@@ -318,10 +318,12 @@ class DigestService:
     (plan 064 dated Hot Time windows), `weekly` (plan 011 weekly Hot Time
     windows), `maint_inputs` -> {slot, notices}, `multi_character` -> the
     profile.multi_character setting (off: Tag / alt-only warnings go to
-    `suppressed`, never to `warnings`, the ladder or an ack)."""
+    `suppressed`, never to `warnings`, the ladder or an ack). Plan 109:
+    `vp_ends` -> epoch end of the armed Value Pack timer or None; from LEAD_S
+    before it the view carries `value_pack` {ends, in_s} (informational)."""
 
     def __init__(self, store, loss_rows, items, hot, maint_inputs, clock=time.time,
-                 weekly=None, multi_character=None):
+                 weekly=None, multi_character=None, vp_ends=None):
         self.store = store
         self.loss_rows = loss_rows
         self.items = items
@@ -329,6 +331,7 @@ class DigestService:
         self.weekly = weekly or (lambda: [])
         self.maint_inputs = maint_inputs
         self.multi_character = multi_character or (lambda: False)
+        self.vp_ends = vp_ends or (lambda: None)
         self.clock = clock
         self._lock = threading.Lock()
         self._multi_pats = multi_character_patterns()
@@ -363,13 +366,26 @@ class DigestService:
                                          self._multi(), self._multi_pats)
         return nxt, warns, ending(self._safe(self.items), hot, now, start), hidden
 
+    def _value_pack(self, now):
+        """Plan 109: {ends, in_s} of a Value Pack timer ending within LEAD_S, or None."""
+        try:
+            ends = self.vp_ends()
+        except Exception:  # noqa: BLE001 - an unreadable timer shows no row
+            return None
+        if not isinstance(ends, (int, float)) or isinstance(ends, bool):
+            return None
+        in_s = int(ends - now.timestamp())
+        if not 0 < in_s <= LEAD_S:
+            return None
+        return {"ends": _iso(_dt.datetime.fromtimestamp(ends, _UTC)), "in_s": in_s}
+
     def view(self):
         now = self._now()
         nxt, warns, ends, hidden = self._all(now)
         with self._lock:
             acked = {a["key"] for a in _clean_acked(self.store.get(DOMAIN))
                      if _parse(a["until"]) > now}
-        base = {"now": _iso(now), "lead_s": LEAD_S}
+        base = {"now": _iso(now), "lead_s": LEAD_S, "value_pack": self._value_pack(now)}
         if nxt is None:
             return dict(base, maint=None, show=False, in_s=None, warnings=[], ending=[],
                         acked=[], suppressed=[])

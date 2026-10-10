@@ -77,14 +77,21 @@ test('composeNow: card order is fixed (dailies, Timers, then content cards)', ()
 test('composeNow: Timers merges resets, custom rules and events ending, sorted by due', () => {
   const r = card(now(full()), 'timers');
   assert.strictEqual(r.title, 'Timers');
+  // Plan 109: the armed Value Pack row is pinned last (its 10-day end sorts past the cut).
+  const vpEnd = new Date(T0 + 10 * 86400000);
+  const p2 = (n) => String(n).padStart(2, '0');
   assert.deepStrictEqual(r.rows.map((x) => x.label),
-    ['Soon event', 'Daily reset', 'Weekend coupon', 'Weekly reset', 'Sunday shop']);
+    ['Soon event', 'Daily reset', 'Weekend coupon', 'Weekly reset', 'Sunday shop',
+      'Value Pack ends ' + p2(vpEnd.getMonth() + 1) + '-' + p2(vpEnd.getDate()) + ' ' +
+      p2(vpEnd.getHours()) + ':' + p2(vpEnd.getMinutes())]);
   assert.strictEqual(r.rows[1].value, C.fmtDuration(C.nextDailyReset(T0) - T0));
   assert.strictEqual(r.rows[3].value, C.fmtDuration(C.nextWeeklyReset(T0) - T0));
   assert.strictEqual(r.rows[4].note, 'Sun 00:00 UTC');
   assert.strictEqual(r.rows[4].value, C.fmtDuration(6 * 86400000 + 12 * H)); // next Sun 00:00
   assert.strictEqual(r.rows[2].note, 'ABCD-1234');
-  assert.deepStrictEqual(r.rows.map((x) => x.source), ['event', 'reset', 'coupon', 'reset', 'reset']);
+  assert.deepStrictEqual(r.rows.map((x) => x.source), ['event', 'reset', 'coupon', 'reset', 'reset', 'vp']);
+  assert.strictEqual(r.rows[5].value, C.fmtDuration(10 * 86400000));
+  assert.strictEqual(r.rows[5].cls, '');
 });
 
 // Plan 076 fixture: a boss and the daily reset both 3 min out, What now
@@ -190,7 +197,7 @@ test('composeNow: market alert hits only', () => {
 test('composeNow: events ending within 48 h fold into Timers; new coupons only', () => {
   const cards = now(full());
   assert.ok(!card(cards, 'ending'), 'no separate ending card');
-  const e = card(cards, 'timers').rows.filter((x) => x.source !== 'reset');
+  const e = card(cards, 'timers').rows.filter((x) => x.source !== 'reset' && x.source !== 'vp');
   assert.deepStrictEqual(e.map((x) => x.label), ['Soon event', 'Weekend coupon']);
   assert.strictEqual(e[1].cls, 'warn');
   const c = card(cards, 'coupons');
@@ -207,7 +214,7 @@ test('composeNow: 48 h window edges (exactly 48 h in, 48 h + 1 s out, ended out)
     { id: 'e4', kind: 'event', title: 'Done', ends: iso(T0 + H), done: true },
     { id: 'e5', kind: 'event', title: 'No end' }
   ];
-  const e = card(now(snap), 'timers').rows.filter((x) => x.source !== 'reset');
+  const e = card(now(snap), 'timers').rows.filter((x) => x.source !== 'reset' && x.source !== 'vp');
   assert.deepStrictEqual(e.map((x) => x.label), ['Edge in']);
 });
 

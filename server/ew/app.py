@@ -75,6 +75,9 @@ SSE_TICK_S = 0.25  # SSE wakes this often to notice a leveling change (plan 011)
 # Plan 069: each SSE stream re-checks What now at most this often (the result is
 # shared across streams) and at once after any domain change.
 WHATNOW_CHECK_S = 10.0
+# Plan 109: a Value Pack timer that ran out says "VP off" this long with no
+# newer read or typed value; after it the fallback chain decides again.
+VP_GRACE_S = 7 * 86400
 # Plan 049: a 200 POST on these routes pushes `event: <domain>` (data: the JSON
 # domain name); clients re-GET. /api/leveling keeps its plan 011 full-view event.
 POST_DOMAINS = {"/api/today": "today", "/api/grind": "grind", "/api/market/watch": "market",
@@ -280,7 +283,7 @@ class EWServer(ThreadingHTTPServer):
             hot=lambda: self.leveling.view()["hot_auto"],
             weekly=lambda: self.leveling.view()["hot_windows"],
             maint_inputs=self._maint_inputs, clock=today_clock or time.time,
-            multi_character=self._multi_character)
+            multi_character=self._multi_character, vp_ends=self._vp_ends)  # plan 109
         # Plan 031: NA world boss table + operator loot ticks.
         self.bosses = bosses.BossService(self.store, clock=bosses_clock or time.time)
         # Plan 072: daily robots-gated diff against a public NA table; off
@@ -489,14 +492,48 @@ class EWServer(ThreadingHTTPServer):
                                 maint.slot(value), self.notices.maint_notices())
         return win[1].timestamp() if win else None
 
-    def _vp_live(self):
-        """An armed plan 005 "Value Pack" timer (plan 066 OCR arms the same row)."""
-        for b in self.grind.view()["buffs"]:
-            left = b.get("left_s")
-            if (str(b.get("name") or "").strip().lower() == inventory.VP_BUFF
-                    and isinstance(left, int) and left > 0):
-                return {"value": True, "signal": "vp_timer"}
+    def _vp_ends(self):
+        """End (epoch) of the stored plan 005 "Value Pack" timer, armed or run
+        out (plan 066 OCR arms the same row); None when never armed / cleared.
+        Read from the store, never through the grind lock (see fixed_settings)."""
+        doc = self.store.get("grind")
+        for b in doc.get("buffs") if isinstance(doc.get("buffs"), list) else []:
+            if isinstance(b, dict) and str(b.get("name") or "").strip().lower() == inventory.VP_BUFF:
+                return overrides._ts(b.get("ends"))
         return None
+
+    def _vp_live(self):
+        """Plan 109 tri-state: an armed timer is VP on (with its end); a timer
+        that ran out is VP off for VP_GRACE_S unless the operator typed a value
+        after it ran out; else None (typed / config / default decide)."""
+        ends = self._vp_ends()
+        if ends is None:
+            return None
+        now = float(self.overrides.clock())
+        if ends > now:
+            return {"value": True, "signal": "vp_timer", "ends": overrides._iso(ends)}
+        if now - ends >= VP_GRACE_S:
+            return None
+        e = self.overrides.doc()["live"].get("market.vp")
+        if e is not None and e["source"] == "typed":
+            e_at = overrides._ts(e.get("set_at"))
+            if e_at is not None and e_at > ends:
+                return None
+        return {"value": False, "signal": "vp_expired", "ends": overrides._iso(ends)}
+
+    def _vp_row(self):
+        """Plan 109: the Value Pack state in force with its source - `timer`
+        (armed, `ends`), `expired` (ran out at `ends`), else the ledger entry's
+        source (typed / config) or `default` (no VP assumed)."""
+        vp = self.tax()["vp"]
+        live = self._live(self._vp_live)
+        if live is not None and live["value"] == vp:
+            return {"value": vp, "source": "timer" if vp else "expired", "ends": live["ends"],
+                    "at": None}
+        e = self.overrides.doc()["live"].get("market.vp")
+        if e is not None:
+            return {"value": vp, "source": e["source"], "ends": None, "at": e["set_at"]}
+        return {"value": vp, "source": "default", "ends": None, "at": None}
 
     def _multi_live(self):
         """Characters on the family in the newest profile refresh (BDO-REST-API)."""
@@ -591,13 +628,28 @@ class EWServer(ThreadingHTTPServer):
 
     def settings_out(self, view):
         """Plan 108: a /api/settings body plus `derived` {key: row} - the value
-        in force for a key that is read, not typed, with its source and age."""
-        return dict(view, derived={"market.fame_pct": self._live(self._fame_row)})
+        in force for a key that is read, not typed, with its source and age.
+        Plan 109: + market.vp from the Value Pack buff timer."""
+        return dict(view, derived={"market.fame_pct": self._live(self._fame_row),
+                                   "market.vp": self._live(self._vp_row)})
 
     def _hot_until(self, now):
         """Plan 081: end (utc datetime) of the next maintenance after `now`."""
         end = self._maint_end_after(now.timestamp(), self._maint_start())
         return _dt.datetime.fromtimestamp(end, _dt.timezone.utc) if end else None
+
+    def live_signals(self):
+        """Plan 079 ledger keys with a live signal -> zero-arg reader. Plan 109:
+        the zero-touch guard (tests/test_zero_touch_keys.py) reads this map."""
+        return {"market.vp": self._vp_live, "events.maintenance_start_utc": self._maint_live,
+                "market.fame_pct": self._fame_live, "profile.multi_character": self._multi_live}
+
+    # Plan 109: live signals that do not cover every operator, so the key still
+    # needs an operator value (the one zero-touch gap left), with the reason.
+    LIVE_PARTIAL = {
+        "profile.multi_character": "the profile signal needs a typed family name and a public "
+                                   "profile; a private profile hides the character list",
+    }
 
     def fixed_settings(self):
         """Plan 080: effective settings for readers of the FIXED keys - no live
@@ -619,9 +671,7 @@ class EWServer(ThreadingHTTPServer):
         except OSError:
             mtime = float(self.overrides.clock())
         self.overrides.sync_config(s, dflt, mtime)
-        live = ({"market.vp": self._vp_live, "events.maintenance_start_utc": self._maint_live,
-                 "market.fame_pct": self._fame_live, "profile.multi_character": self._multi_live}
-                if live else {})
+        live = self.live_signals() if live else {}
         spec = {k: (self._live(live[k]) if k in live else None, dflt[k]) for k in s}
         for k, out in self.overrides.effective_many(spec).items():
             s[k] = out["value"]
