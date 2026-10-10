@@ -103,7 +103,9 @@
   // file name as the watcher lists it - never a path. The server checks the list.
   function validOcrBody(body) {
     if (exact(body, ['review'])) return validOcrReview(body.review);
-    if (exact(body, ['undo'])) return typeof body.undo === 'string' && OCR_UNDO_RE.test(body.undo);
+    if (exact(body, ['undo'])) {
+      return typeof body.undo === 'string' && (OCR_UNDO_RE.test(body.undo) || OCR_APPLIED_RE.test(body.undo));
+    }
     if (exact(body, ['loot'])) {
       const l = body.loot;
       return exact(l, ['shot', 'spot']) && validShotName(l.shot) &&
@@ -125,6 +127,10 @@
 
   const OCR_REVIEW_RE = /^r[0-9]{1,9}$/;
   const OCR_UNDO_RE = /^u[0-9]{1,9}$/;
+  // Plan 111: auto-applied rows (book use, zone read, boss loot tick), Undo by id.
+  const OCR_APPLIED_RE = /^a[0-9]{1,9}$/;
+  const OCR_APPLIED_KINDS = ['book_use', 'zone_xp', 'boss'];
+  const OCR_APPLIED_VIEW = 10;
   // Plan 066: + level {level, pct}, gear (ap / aap / dp int) and book_use
   // {size, pct_before, pct_after} (accept / discard only).
   const OCR_AUTO_KINDS = ['silver', 'buff', 'level', 'gear', 'book_use'];
@@ -191,8 +197,69 @@
       pending: Number.isInteger(d.pending) && d.pending >= 0 ? d.pending : 0,
       review: pick(d.review, OCR_REVIEW_RE),
       commits: pick(d.commits, OCR_UNDO_RE),
+      applied: (Array.isArray(d.applied) ? d.applied : []).map(ocrAppliedRow).filter(Boolean)
+        .slice(0, OCR_APPLIED_VIEW),
       silverH: ocrSilverHRow(d.silver_h)
     };
+  }
+
+  // Plan 111: one GET /api/ocr/auto `applied` row, or null.
+  function ocrAppliedRow(r) {
+    if (!plainObject(r) || typeof r.id !== 'string' || !OCR_APPLIED_RE.test(r.id)) return null;
+    if (OCR_APPLIED_KINDS.indexOf(r.kind) < 0) return null;
+    const v = r.value;
+    let value = null;
+    if (r.kind === 'book_use') {
+      value = ocrBookValue(v) ? { size: v.size, pct_before: v.pct_before, pct_after: v.pct_after } : null;
+    } else if (r.kind === 'boss') {
+      value = plainObject(v) && typeof v.boss === 'string' && v.boss && typeof v.day === 'string'
+        ? { boss: v.boss.slice(0, 60), day: v.day.slice(0, 10) } : null;
+    } else if (plainObject(v) && typeof v.zone_name === 'string') {
+      value = { zone_name: v.zone_name.slice(0, 60),
+        recommended_level: Number.isInteger(v.recommended_level) ? v.recommended_level : null,
+        monsters: Array.isArray(v.monsters) ? v.monsters.length : 0 };
+    }
+    if (value === null) return null;
+    return {
+      id: r.id, kind: r.kind, value: value,
+      conf: isNum(r.conf) && r.conf >= 0 && r.conf <= 1 ? r.conf : null,
+      file: typeof r.file === 'string' ? r.file.slice(0, OCR_NAME_MAX) : '',
+      undone: r.undone === true
+    };
+  }
+
+  // "large book used 10% -> 17.5% (97%)" / "Kzarka loot ticked 2026-09-21" /
+  // "zone Polly's Forest Lv 56, 3 monsters"; + " - undone" once undone.
+  function ocrAppliedLabel(r) {
+    const v = r.value;
+    let t;
+    if (r.kind === 'book_use') t = v.size + ' book used ' + v.pct_before + '% -> ' + v.pct_after + '%';
+    else if (r.kind === 'boss') t = v.boss + ' loot ticked ' + v.day;
+    else {
+      t = 'zone ' + v.zone_name + (v.recommended_level === null ? '' : ' Lv ' + v.recommended_level) +
+        ', ' + v.monsters + ' monster' + (v.monsters === 1 ? '' : 's');
+    }
+    const c = r.conf === null || r.conf === undefined ? '' : ' (' + Math.round(r.conf * 100) + '%)';
+    return t + c + (r.undone ? ' - undone' : '');
+  }
+
+  // Undo POST body for one applied row, or null (already undone / bad id).
+  function ocrAppliedUndo(r) {
+    if (!plainObject(r) || r.undone === true || typeof r.id !== 'string' || !OCR_APPLIED_RE.test(r.id)) return null;
+    return { undo: r.id };
+  }
+
+  // Notify rule `ocrApplied`: one toast per new auto-applied row (not on the
+  // baseline look, never for an undone one). Plan 070 holds it while the game is closed.
+  function ocrAppliedHits(prev, next) {
+    if (!prev || !plainObject(prev.ocr) || !plainObject(next.ocr)) return [];
+    const before = (Array.isArray(prev.ocr.applied) ? prev.ocr.applied : [])
+      .map(function (r) { return plainObject(r) ? r.id : null; });
+    return (Array.isArray(next.ocr.applied) ? next.ocr.applied : []).map(ocrAppliedRow)
+      .filter(function (r) { return r && !r.undone && before.indexOf(r.id) < 0; })
+      .map(function (r) {
+        return { key: 'ocrApplied:' + r.id, title: 'Applied automatically', body: ocrAppliedLabel(r) };
+      });
   }
 
   // Plan 066 silver/h between OCR silver reads in one play session.
@@ -370,6 +437,9 @@
     OCR_UNMATCHED_MAX: OCR_UNMATCHED_MAX, normalizeLootOcr: normalizeLootOcr,
     lootImportCounts: lootImportCounts, lootImportText: lootImportText,
     normalizeOcr: normalizeOcr, ocrBuffBody: ocrBuffBody, ocrSilverInput: ocrSilverInput,
-    ocrBuffLabel: ocrBuffLabel });
+    ocrBuffLabel: ocrBuffLabel, OCR_APPLIED_RE: OCR_APPLIED_RE,
+    OCR_APPLIED_KINDS: OCR_APPLIED_KINDS, ocrAppliedRow: ocrAppliedRow,
+    ocrAppliedLabel: ocrAppliedLabel, ocrAppliedUndo: ocrAppliedUndo,
+    ocrAppliedHits: ocrAppliedHits });
   return function link() {};
 });

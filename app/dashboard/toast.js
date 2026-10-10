@@ -17,7 +17,8 @@
   const DATA_MS = 60000;
   const SOURCES = [
     ['market', '/api/market/watch'], ['grind', '/api/grind'], ['leveling', '/api/leveling'],
-    ['events', '/api/events'], ['today', '/api/today'], ['bosses', '/api/bosses']
+    ['events', '/api/events'], ['today', '/api/today'], ['bosses', '/api/bosses'],
+    ['ocr', '/api/ocr/auto']  // plan 111: ocrApplied toasts
   ];
   const queue = C.toastQueue();
   const ledger = C.notifyLedger();
@@ -121,7 +122,7 @@
       const next = { at: t, market: docs.market || null, grind: docs.grind || null, grindAt: at.grind,
         leveling: docs.leveling || null, levelingAt: at.leveling, events: docs.events || null,
         today: docs.today || null, game: docs.game || null, bosses: docs.bosses || null,
-        prompts: docs.prompts || null };
+        prompts: docs.prompts || null, ocr: docs.ocr || null };
       // Plan 070: game-closed quiet; a ladder step missed while closed is
       // consumed (never fires late), other held hits re-fire at login.
       // Plan 080: notify.mute_until drops (consumes) every hit while it holds.

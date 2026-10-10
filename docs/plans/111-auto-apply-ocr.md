@@ -64,3 +64,48 @@ verifier PASS within 3 rounds; one push.
 Retires: the accept click on confident book-use, zone and boss suggestions.
 
 Depends on: 088.
+
+## As-built deviations (build lane, 2026-10-10)
+
+Each self-adjudicated (decision / alternatives / why / reverses if).
+
+1. Zone gate. Decision: a zone read still commits at the plan 088 gate
+   (`AUTO_COMMIT_MIN`, 0.9) and every committed zone read gets an
+   `auto_applied` row with Undo. Alternatives: raise zone reads to 0.95.
+   Why: "below it queues as today" - a 0.90-0.95 read commits today; raising
+   it would park reads 088 already applies (the opposite of zero-touch).
+   Reverses if: a 0.90-0.95 zone read is found wrong in use.
+2. Boss untick. Decision: no new `untick(day, boss, by=)` signature; the
+   existing `BossService.untick({boss, day})` serves Undo, and every untick
+   (operator or Undo) lists the key in store `bosses.no_auto` so a later shot
+   never re-ticks it; the auto tick is `BossService.auto_tick(day, boss)` with
+   `by: {key: "auto"}`. Alternatives: a `by` kwarg that only Undo blocks.
+   Why: an operator untick means "not looted" just as much as Undo does;
+   one call shape keeps the POST API unchanged. Reverses if: the operator
+   wants an untick that a later loot screen may re-tick.
+3. Loot box names. Decision: matched by the boss name only (plan 040 fold /
+   edit distance); the loot window reads "<boss>'s ...". Alternatives: a
+   loot-box name table. Why: the plan 031 table carries no loot-box names and
+   none is sourced. Reverses if: a sourced loot-box table lands.
+4. Window proximity. Decision: 1.0 at or after the spawn (within
+   BOSS_WINDOW_MIN), 0.5 before it (the boss was not up). Alternatives: a
+   linear fall-off. Why: loot exists only after the spawn; any shot after it
+   inside the window is equally plausible. Reverses if: false ticks appear
+   late in the window.
+5. Level-up span. Decision: a jump across a level-up yields no book
+   suggestion at all (book_suggestion is same-level only, as before) rather
+   than conf 0. Why: nothing to queue either way.
+6. Undo route. Decision: POST `/api/ocr` `{"undo": "a<n>"}` (the existing
+   undo body, routed by id prefix to `AutoOcr.undo_applied`). Why: no new
+   route; the bridge validator already gates `/api/ocr`.
+7. Toast. Decision: new notify rule `ocrApplied` (one toast per new live
+   row, never on the baseline look); toast.js polls `/api/ocr/auto`; plan
+   070 `promptGate` holds it while the game is closed.
+8. Tests. JS tests live in `app/test/ocr_auto_applied.test.js` (not appended
+   to ocr_auto.test.js); the Garmoth test fills the real weekly cap (3)
+   rather than a "second" tick. `test_ocr_infer` book-review test moved to a
+   below-gate jump (a 7.6 % jump now auto-applies).
+9. Progress file. The lane run's permissions denied writes outside the
+   worktree (Write tool and helper scripts), so
+   `progress/p111-build.json` was not written. Reverses if: the lane grants
+   the kit `write_progress` call.

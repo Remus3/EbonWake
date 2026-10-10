@@ -66,6 +66,8 @@
     ["ocrBuffBody","function"],
     ["ocrSilverInput","function"],
     ["ocrBuffLabel","function"],
+    ["ocrAppliedLabel","function"],
+    ["ocrAppliedUndo","function"],
     ["normalizeLootOcr","function"],
     ["lootImportCounts","function"],
     ["lootImportText","function"],

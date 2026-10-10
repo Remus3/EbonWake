@@ -169,7 +169,10 @@ def next_spawns(now_utc, n=3, table=None):
 
 class BossService:
     """Store domain `bosses`: {"looted": {"<PT day>|<boss>": "<iso ticked_at>"},
-    "updated": "<iso>"}."""
+    "by": {"<PT day>|<boss>": "auto"}, "no_auto": ["<PT day>|<boss>"],
+    "updated": "<iso>"}. Plan 111: `by` marks the ticks an OCR loot read made;
+    an untick (operator or Undo) lists the key in `no_auto` so no later shot
+    re-ticks it."""
 
     def __init__(self, store, clock=time.time, table=None):
         self.store = store
@@ -208,10 +211,29 @@ class BossService:
             raise ValueError(f"boss must be one that spawns on {day} (PT)")
         return f"{day}|{boss}"
 
-    def _save(self, looted, now):
+    def _extra(self):
+        """({key: "auto"}, [blocked key]) - plan 111 auto-tick bookkeeping."""
+        doc = self.store.get("bosses")
+        by = doc.get("by") if isinstance(doc.get("by"), dict) else {}
+        blocked = doc.get("no_auto") if isinstance(doc.get("no_auto"), list) else []
+        return ({k: v for k, v in by.items() if isinstance(k, str) and v == "auto"},
+                [k for k in blocked if isinstance(k, str)])
+
+    def _save(self, looted, now, by=None, blocked=None):
+        if by is None or blocked is None:
+            by, blocked = self._extra()
         floor = (utc_to_pt(now).date() - TICK_WINDOW_DAYS * _DAY).isoformat()
         looted = {k: v for k, v in looted.items() if k.split("|", 1)[0] >= floor}
-        self.store.put("bosses", {"looted": looted, "updated": _iso(now)})
+        self.store.put("bosses", {"looted": looted,
+                                  "by": {k: v for k, v in by.items() if k in looted},
+                                  "no_auto": sorted({k for k in blocked
+                                                     if k.split("|", 1)[0] >= floor}),
+                                  "updated": _iso(now)})
+
+    def _garmoth(self, looted, now):
+        reset = last_weekly_reset(now)
+        return sum(1 for k, v in looted.items()
+                   if k.endswith("|" + GARMOTH) and _parse_iso(v) >= reset)
 
     def view(self):
         """GET /api/bosses body."""
@@ -225,19 +247,20 @@ class BossService:
                 remaining.append(dict(row, up=at <= now))
             slots.append(dict(row, up=at <= now and not gone, past=gone))  # plan 032
         looted_raw = self._load()
-        looted = {}
+        by = self._extra()[0]
+        looted, auto = {}, {}
         for k in sorted(looted_raw):
             day, _, boss = k.partition("|")
             looted.setdefault(day, []).append(boss)
-        reset = last_weekly_reset(now)
-        garmoth = sum(1 for k, v in looted_raw.items()
-                      if k.endswith("|" + GARMOTH) and _parse_iso(v) >= reset)
+            if by.get(k) == "auto":
+                auto.setdefault(day, []).append(boss)
+        garmoth = self._garmoth(looted_raw, now)
         return {"now": _iso(now), "tz": self.table["tz"], "source": self.table["source"],
                 "verified": self.table["verified"], "dst_assumption": DST_ASSUMPTION,
                 "rules": self.table["rules"],
                 "next": next_spawns(now, 3, self.table),
                 "today": {"day": today.isoformat(), "remaining": remaining, "slots": slots},
-                "looted": looted,
+                "looted": looted, "auto": auto,
                 "garmoth": {"looted": garmoth,
                             "cap": self.table["rules"]["garmoth_loot_per_week"],
                             "week_reset": _iso(next_weekly_reset(now))}}
@@ -252,10 +275,33 @@ class BossService:
         return self.view()
 
     def untick(self, arg):
+        """Operator untick or plan 111 Undo: the key is also blocked from a
+        later auto tick."""
         with self._lock:
             now = self._now()
             key = self._check(arg, now)
             looted = self._load()
             looted.pop(key, None)
-            self._save(looted, now)
+            by, blocked = self._extra()
+            self._save(looted, now, by, blocked + [key])
         return self.view()
+
+    def auto_tick(self, day, boss):
+        """Plan 111: an OCR loot read ticks `boss` on PT `day` with by: auto.
+        False (nothing written) when it is ticked already, an untick blocked
+        it, or the Garmoth weekly cap is reached; ValueError on a bad day /
+        boss (as tick)."""
+        with self._lock:
+            now = self._now()
+            key = self._check({"boss": boss, "day": day}, now)
+            looted = self._load()
+            by, blocked = self._extra()
+            if key in looted or key in blocked:
+                return False
+            if boss == GARMOTH and \
+                    self._garmoth(looted, now) >= self.table["rules"]["garmoth_loot_per_week"]:
+                return False
+            looted[key] = _iso(now)
+            by[key] = "auto"
+            self._save(looted, now, by, blocked)
+        return True
