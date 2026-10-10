@@ -30,7 +30,7 @@ import threading
 import time
 
 from . import autotick, ocr, ocrinfer, zoneinfo
-from .grind import MAX_BUFF_MINUTES, MAX_SILVER, SEED_BUFFS
+from .grind import MAX_BUFF_MINUTES, MAX_LOOT_COUNT, MAX_SILVER, SEED_BUFFS
 from .leveling import _ok_pct
 from .levels import LEVEL_RANGE
 from .progress import GS_KEYS, GS_RANGE
@@ -59,9 +59,13 @@ MAX_LOOT_ROWS = 60
 # Plan 081: planner reads (inventory weight / slots, CP, market fame bonus).
 PLANNER_KINDS = ("weight", "slots", "cp", "fame")
 # Plan 088: a Monster Zone Info read (zone, recommended level, per-kill EXP).
-KINDS = ("silver", "buff", "level", "gear", "book_use") + PLANNER_KINDS + (zoneinfo.KIND,)
-# a book suggestion and a zone read are accept / discard only
-FIX_KINDS = ("silver", "buff", "level", "gear") + PLANNER_KINDS
+# Plan 113: a loot-window row (table or catalog item + count) under the gate.
+KINDS = ("silver", "buff", "level", "gear", "book_use") + PLANNER_KINDS + (zoneinfo.KIND,
+                                                                           "loot")
+# a book suggestion and a zone read are accept / discard only; a loot fix is a count
+FIX_KINDS = ("silver", "buff", "level", "gear") + PLANNER_KINDS + ("loot",)
+LOOT_KEYS = {"name", "count", "id", "source", "spot", "started"}
+LOOT_SOURCES = ("table", "catalog")
 
 # Silver confidence (separators between the digit groups of the read amount).
 CONF_GROUPED = 0.97      # 1,234,567 - the game's own format
@@ -297,6 +301,15 @@ def _check_value(kind, v):
         if _ok_num(v) and 0 <= v <= ocrinfer.FAME_MAX_READ:
             return v
         raise ValueError(f"fame value must be a number 0..{ocrinfer.FAME_MAX_READ}")
+    if kind == "loot":
+        if (isinstance(v, dict) and set(v) == LOOT_KEYS and isinstance(v["name"], str)
+                and v["name"].strip() and len(v["name"]) <= 200
+                and _ok_int(v["count"], 1, MAX_LOOT_COUNT) and v["source"] in LOOT_SOURCES
+                and (v["id"] is None or _ok_int(v["id"], 1, 2 ** 31 - 1))
+                and isinstance(v["spot"], str) and _ts(v["started"]) is not None):
+            return dict(v)
+        raise ValueError(f"loot value must be {{name, count 1..{MAX_LOOT_COUNT}, id, "
+                         "source: table|catalog, spot, started}")
     ranges = {"silver": f"0..{MAX_SILVER}", "buff": f"1..{MAX_BUFF_MINUTES}",
               "gear": f"{GS_RANGE[0]}..{GS_RANGE[1]}", "cp": f"0..{ocrinfer.CP_MAX_READ}"}
     raise ValueError(f"{kind} value must be an int {ranges.get(kind, '')}".rstrip())
@@ -312,7 +325,7 @@ class AutoOcr:
 
     def __init__(self, store, game, reader, grind, settings=None, clock=time.time,
                  on_change=None, leveling=None, progress=None, play=None, regions=None,
-                 loot_target=None, zones=None, bosses=None):
+                 loot_target=None, zones=None, bosses=None, catalog=None):
         self.store = store
         self.game = game
         self.reader = reader              # OcrService (plan 009): .doc(name) -> {text, lines}
@@ -321,9 +334,13 @@ class AutoOcr:
         self.leveling = leveling          # LevelingService: level / XP samples, books
         self.progress = progress          # ProgressService: gs stats
         self.play = play                  # fn() -> PlaySession.view() (silver/h window)
-        # Plan 081: fn() -> {spot, started, names} of the running grind session, or
-        # None; its loot counts read from each shot prefill the loot form.
+        # Plan 081: fn() -> {spot, started, names, end?} of the running grind session
+        # (plan 113: or the just-closed auto one, with its `end`), or None; its loot
+        # counts read from each shot land in `ocr_loot`.
         self.loot_target = loot_target
+        # Plan 113: fn() -> {(id, sid): name}, the plan 028 item-name index; off-table
+        # loot lines are matched against it. Without one only the table matches.
+        self.catalog = catalog
         # Plan 088: ZoneXpService; without one zone panels are not read.
         self.zones = zones
         # Plan 111: BossService; without one boss loot is never auto-ticked.
@@ -716,43 +733,98 @@ class AutoOcr:
         except Exception:  # noqa: BLE001 - no grind session read = no loot prefill
             return None
         if not (isinstance(t, dict) and isinstance(t.get("spot"), str)
-                and _ts(t.get("started")) is not None and t.get("names")):
+                and _ts(t.get("started")) is not None and isinstance(t.get("names"), list)
+                and (t.get("end") is None or _ts(t.get("end")) is not None)):
             return None
         return t
 
+    def _catalog(self):
+        if self.catalog is None:
+            return None
+        try:
+            c = self.catalog()
+        except Exception:  # noqa: BLE001 - no index read = table names only
+            return None
+        return c if isinstance(c, dict) else None
+
     def _loot_read(self, file, doc, shot_at, mn):
         """Loot counts read from a shot taken during the running grind session
+        (plan 113: or the just-closed auto one, up to AFTER_LOGOUT_S past its end)
         land in store domain `ocr_loot` {spot, started, items: {name: {count,
-        conf, low, at, file}}}; a newer read of one item replaces the older one
-        (the loot window shows running totals). True when something changed."""
+        conf, low, at, file, id, source}}}; a newer read of one item replaces the
+        older one (the loot window shows running totals). Plan 113: rows under
+        the gate go to review (kind `loot`) instead. True when something changed."""
         t = self._target()
         if t is None or shot_at < _ts(t["started"]):
             return False
-        rows = [r for r in ocr.extract_loot(doc.get("lines") or [], t["names"])["rows"]
-                if _ok_int(r.get("count"), 1, 10 ** 9)]
-        if not rows:
+        if t.get("end") is not None and shot_at > _ts(t["end"]) + AFTER_LOGOUT_S:
             return False
+        cat = self._catalog()
+        if not t["names"] and not cat:
+            return False
+        rows = [r for r in ocr.extract_loot(doc.get("lines") or [], t["names"], cat)["rows"]
+                if _ok_int(r.get("count"), 1, MAX_LOOT_COUNT)]
+        keep = []
+        for r in rows:
+            conf = r.get("confidence") if _ok_conf(r.get("confidence")) else 0
+            if conf >= mn:
+                keep.append(r)
+                continue
+            value = {"name": r["name"], "count": r["count"], "id": r.get("id"),
+                     "source": r.get("source", "table"), "spot": t["spot"],
+                     "started": t["started"]}
+            self._enqueue_review(file, {"kind": "loot", "name": r["name"], "value": value,
+                                        "conf": conf, "why": "loot name read below the gate"},
+                                 shot_at)
+        if keep:
+            self._loot_put(t["spot"], t["started"], keep, shot_at, file)
+        return bool(rows)
+
+    def _loot_put(self, spot, started, rows, shot_at, file):
+        """Write `rows` [{name, count, confidence, id?, source?}] read at
+        `shot_at` into `ocr_loot` for that session. Returns {name: previous item
+        or None} for the rows written (an older read never replaces a newer one)."""
+        prev = {}
         with self._lock:
             cur = self.store.get("ocr_loot")
-            same = cur.get("spot") == t["spot"] and cur.get("started") == t["started"]
+            same = cur.get("spot") == spot and cur.get("started") == started
             items = dict(cur.get("items")) if same and isinstance(cur.get("items"), dict) else {}
             for r in rows:
                 old = items.get(r["name"])
                 if isinstance(old, dict) and (_ts(old.get("at")) or 0) > shot_at:
                     continue
                 conf = r.get("confidence") if _ok_conf(r.get("confidence")) else 0
-                items[r["name"]] = {"count": r["count"], "conf": conf, "low": conf < mn,
-                                    "at": _iso(shot_at), "file": _str(file, 255)}
+                prev[r["name"]] = old if isinstance(old, dict) else None
+                items[r["name"]] = {"count": r["count"], "conf": conf, "low": False,
+                                    "at": _iso(shot_at), "file": _str(file, 255),
+                                    "id": r.get("id") if _ok_int(r.get("id"), 1, 2 ** 31 - 1)
+                                    else None,
+                                    "source": r.get("source") if r.get("source") in LOOT_SOURCES
+                                    else "table"}
             if len(items) > MAX_LOOT_ROWS:
                 items = dict(sorted(items.items(), key=lambda kv: kv[1]["at"])[-MAX_LOOT_ROWS:])
-            self.store.put("ocr_loot", {"spot": t["spot"], "started": t["started"],
-                                        "items": items})
-        return True
+            self.store.put("ocr_loot", {"spot": spot, "started": started, "items": items})
+        return prev
+
+    def _loot_restore(self, spot, started, name, written, prev):
+        """Undo one loot commit while the item is still the one it wrote."""
+        with self._lock:
+            cur = self.store.get("ocr_loot")
+            items = cur.get("items") if isinstance(cur.get("items"), dict) else {}
+            if cur.get("spot") != spot or cur.get("started") != started \
+                    or items.get(name) != written:
+                raise ValueError(f"{name} was read again since this commit")
+            items = dict(items)
+            if isinstance(prev, dict):
+                items[name] = prev
+            else:
+                items.pop(name, None)
+            self.store.put("ocr_loot", {"spot": spot, "started": started, "items": items})
 
     def loot_prefill(self, spot, started):
         """{source: "ocr", spot, started, at, items: [{name, count, conf, low,
-        at, file}]} read during the grind session that started at `started` on
-        `spot`, or None."""
+        at, file, id, source}]} read during the grind session that started at
+        `started` on `spot`, or None."""
         cur = self.store.get("ocr_loot")
         if cur.get("spot") != spot or cur.get("started") != started \
                 or not isinstance(cur.get("items"), dict):
@@ -810,6 +882,17 @@ class AutoOcr:
                 level = self.leveling.level_at(shot_at) if self.leveling is not None else None
                 key, prev = self.zones.commit(value, _str(file, 255), shot_at, level)
                 entry.update(key=key, prev=prev, read_at=_iso(shot_at))
+            elif kind == "loot":
+                cur = self.store.get("ocr_loot")
+                if (_ts(cur.get("started")) or 0) > _ts(value["started"]):
+                    raise ValueError("that grind session's loot was replaced by a newer one")
+                row = {"name": value["name"], "count": value["count"], "confidence": 1.0,
+                       "id": value["id"], "source": value["source"]}
+                prev = self._loot_put(value["spot"], value["started"], [row], shot_at, file)
+                if value["name"] not in prev:
+                    raise ValueError(f"{value['name']} has a newer read")
+                items = self.store.get("ocr_loot").get("items") or {}
+                entry.update(prev=prev[value["name"]], written=items.get(value["name"]))
             elif kind in PLANNER_KINDS:
                 reads = self._reads()
                 reads[kind] = (reads.get(kind, []) + [{
@@ -876,6 +959,10 @@ class AutoOcr:
             elif c.get("kind") == zoneinfo.KIND:
                 self._need(self.zones).restore(c.get("key"), c.get("prev"), c.get("read_at"),
                                                c.get("file"))
+            elif c.get("kind") == "loot":
+                v = c.get("value") if isinstance(c.get("value"), dict) else {}
+                self._loot_restore(v.get("spot"), v.get("started"), v.get("name"),
+                                   c.get("written"), c.get("prev"))
             elif c.get("kind") in PLANNER_KINDS:
                 reads = self._reads()
                 reads[c["kind"]] = [r for r in reads.get(c["kind"], []) if r.get("id") != uid]
@@ -992,6 +1079,11 @@ class AutoOcr:
                 raise ValueError(f"a {item['kind']} suggestion is accepted or discarded")
             if action != "discard":
                 value = arg["value"] if action == "fix" else item.get("value")
+                if action == "fix" and item["kind"] == "loot":
+                    # Plan 113: a loot fix is the corrected count.
+                    if not _ok_int(value, 1, MAX_LOOT_COUNT):
+                        raise ValueError(f"a loot fix is a count 1..{MAX_LOOT_COUNT}")
+                    value = dict(item.get("value") or {}, count=value)
                 self._commit(item.get("file"), item["kind"], item.get("name"), value,
                              _ts(item.get("shot_at")) or self.clock(), via=action,
                              at_shot=action == "accept")

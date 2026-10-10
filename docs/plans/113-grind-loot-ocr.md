@@ -56,3 +56,46 @@ Retires: the loot prefill confirm on Stop and typed loot counts for auto
 sessions.
 
 Depends on: 112.
+
+## As-built deviations
+
+Adjudicated in the build lane (operator standing order 6); each line is
+decision / alternatives / why / reverses if.
+
+1. Late shots fill the closed session through `GrindService.refill_loot()`,
+   not plan 112 `auto_fill` (silver-only, `{sid, delta}` shaped).
+   `loot_target()` also names the newest auto session closed within
+   `REFILL_MAX_S` (with its `end`); a shot taken up to `AFTER_LOGOUT_S` past
+   the end is read into it. Alternatives: widen `auto_fill` to loot; drop
+   late shots. Why: OCR is async, a loot shot is often read after the close,
+   and a separate idempotent re-apply keeps the silver path untouched.
+   Reverses if: plan 112's fill grows a generic field-fill API.
+2. "Valued later by the next refresh": `refill_loot()` runs on every
+   auto-OCR change and before each plan 071 watch refresh (`app._curate`),
+   and catalog rows of the newest loot-valued session join
+   `loot_candidates()`, so the watch refresh fetches their price and the next
+   curate re-values the session. The close path itself reads only
+   `market.cached_price` (no fetch). Alternatives: a timer; a price-on-view.
+   Why: reuses the existing refresh cadence, no new thread, view stays
+   read-only. Reverses if: auto-watch is retired.
+3. Catalog matching: base items only (sid 0); exact fold of the whole line,
+   or of a word window of 8+ characters ("You obtained X x3"); otherwise the
+   whole line within 2 edits of a name of 8+ characters. Fuzzy conf =
+   (1 - edits / length) x 0.9, exact = 0.9 (= the 0.9 gate, so an exact
+   catalog hit applies and any fuzzy one is reviewed). Alternatives: word
+   windows for fuzzy too. Why: bounded cost over a large catalog, and a short
+   catalog name ("Coal") never matches a stray word. Reverses if: bench
+   shots show acquisition-log prefixes defeating the whole-line fuzzy pass.
+4. `extract_loot` rows carry `source` only when a catalog is passed, so the
+   plan 040 import body (`POST /api/ocr` loot) keeps its exact shape.
+   Reverses if: the import UI shows sources.
+5. Under-gate rows (table or catalog) now queue as review kind `loot` instead
+   of being stored with `low: true`; a `loot` fix is the corrected count; an
+   accepted / fixed row is undoable while unchanged. The dashboard OCR review
+   card lists the kind ("loot <name> x<count> (<source>)"). Why: plan slice 2
+   ("like other kinds"); the `low` flag had no consumer that acted on it.
+6. "Loot (OCR): N items" counts distinct item rows, not units. Why: the
+   details list shows one line per row; units vary by orders of magnitude.
+7. Typed loot (`stop` / `log` with `loot`) is never overwritten: a session
+   is re-applied only while its loot is unset or `loot_src: "ocr"`. The
+   manual-stop prefill (plan 081) stays for manual sessions.

@@ -231,6 +231,23 @@
     return parts.join(', ');
   }
 
+  // Plan 113: {text: "Loot (OCR): 3 items, 38.2M", rows: [{text, source}]} for
+  // an auto session closed with OCR-read loot, else null.
+  function ocrLootView(s) {
+    if (!plainObject(s) || s.loot_src !== 'ocr' || !Array.isArray(s.loot)) return null;
+    const rows = s.loot.filter(function (r) {
+      return plainObject(r) && typeof r.name === 'string' && isNum(r.count);
+    }).map(function (r) {
+      const worth = r.kind === 'unknown' || !isNum(r.value) ? 'no price' : fmtSilver(r.value);
+      return { text: r.name + ' x' + r.count + ' - ' + worth,
+        source: r.source === 'table' || r.source === 'catalog' ? r.source : '' };
+    });
+    if (!rows.length) return null;
+    const v = plainObject(s.loot_value) ? s.loot_value : {};
+    return { text: 'Loot (OCR): ' + rows.length + (rows.length === 1 ? ' item' : ' items') + ', ' +
+      fmtSilver(isNum(v.total) ? v.total : s.valued_silver), rows: rows };
+  }
+
   // Plan 112: badge {text, title} for silver derived from the OCR silver delta
   // across an auto session (typed or manual silver: null).
   function silverSrcBadge(s) {
@@ -562,7 +579,7 @@
     LOOT_MAX: LOOT_MAX, LOOT_COUNT: LOOT_COUNT, VENDOR_PRICE: VENDOR_PRICE, ITEM_ID: ITEM_ID,
     validLootList: validLootList, withLoot: withLoot, validLootItem: validLootItem,
     lootHintText: lootHintText, sessionSilver: sessionSilver, trashPileText: trashPileText,
-    silverSrcBadge: silverSrcBadge, validGrindBody: validGrindBody, DROP_ROW_RE: DROP_ROW_RE, DROP_FIELD_RE: DROP_FIELD_RE,
+    silverSrcBadge: silverSrcBadge, ocrLootView: ocrLootView, validGrindBody: validGrindBody, DROP_ROW_RE: DROP_ROW_RE, DROP_FIELD_RE: DROP_FIELD_RE,
     DROP_BYPASS: DROP_BYPASS, validDropValue: validDropValue, pctText: pctText,
     dropView: dropView, agrisLine: agrisLine, parseGrindForm: parseGrindForm,
     SPOT_GOALS: SPOT_GOALS, SPOT_STAT: SPOT_STAT, SPOT_LEVEL: SPOT_LEVEL, spotsPath: spotsPath,

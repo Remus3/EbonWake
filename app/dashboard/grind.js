@@ -393,6 +393,16 @@
       });
       r.appendChild(x);
       box.appendChild(r);
+      // Plan 113: an auto session closed with OCR loot lists it in a details row.
+      const lootOcr = C.ocrLootView(s);
+      if (lootOcr) {
+        const d = el('details', 'ew-muted');
+        d.appendChild(el('summary', '', lootOcr.text));
+        lootOcr.rows.forEach(function (lr) {
+          d.appendChild(el('div', 'ew-srow', lr.text + (lr.source ? ' (' + lr.source + ')' : '')));
+        });
+        box.appendChild(d);
+      }
     });
     body.appendChild(box);
   }
