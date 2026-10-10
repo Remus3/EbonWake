@@ -141,7 +141,10 @@
       { key: 'profile.multi_character', label: 'More than one character (Tag / alts)', type: 'bool' },
       // Plan 027 / 079: sale tax facts (an armed Value Pack timer wins over the box).
       { key: 'market.vp', label: 'Value Pack active', type: 'bool' },
-      { key: 'market.fame_pct', label: 'Family fame bonus (0-1.5 %)', type: 'number', min: 0, max: 1.5, step: 0.05 }
+      // Plan 108: derived (sell dialog screenshot / profile fame); the input is
+      // an override behind a disclosure, the line above it shows the value in force.
+      { key: 'market.fame_pct', label: 'Override (0-1.5 %)', type: 'number', min: 0, max: 1.5, step: 0.05,
+        derived: 'Family fame bonus' }
     ] },
     { id: 'display', title: 'Display', fields: [
       { key: 'ui.theme', label: 'Theme', type: 'enum', options: THEMES },
@@ -316,6 +319,22 @@
     return { text: '= ' + c.hhmm + ' local' + day, title: 'UTC ' + v };
   }
 
+  // Plan 108: the read-only line of a derived setting from GET /api/settings
+  // `derived[key]` ({value, source, age_s, stale, note?}) -> {text, stale,
+  // override: a typed value is in force}, or null for any other field.
+  function derivedSettingLine(key, row) {
+    const f = SETTINGS_FIELDS[key];
+    if (!f || !f.derived) return null;
+    if (!plainObject(row) || !isNum(row.value)) return { text: f.derived + ': -', stale: false, override: false };
+    if (row.source === 'default') {
+      return { text: f.derived + ': ' + row.value + ' % (no screenshot read yet)', stale: false, override: false };
+    }
+    const src = K.derivedText(row);
+    const note = typeof row.note === 'string' && row.note ? ' - ' + row.note : '';
+    return { text: f.derived + ': ' + row.value + ' % (' + src.text + note + ')', stale: src.stale,
+      override: row.source === 'typed' };
+  }
+
   function sameSetting(a, b) {
     if (plainObject(a) && plainObject(b)) return a.x === b.x && a.y === b.y;
     return a === b;
@@ -365,7 +384,7 @@
     muteValue: muteValue, muteOptions: muteOptions, settingValueOk: settingValueOk,
     validSettingsBody: validSettingsBody, parseSettingInput: parseSettingInput,
     settingInputText: settingInputText, settingDetectedNote: settingDetectedNote,
-    settingLocalNote: settingLocalNote, sameSetting: sameSetting, settingsBody: settingsBody,
+    settingLocalNote: settingLocalNote, derivedSettingLine: derivedSettingLine, sameSetting: sameSetting, settingsBody: settingsBody,
     settingsEffects: settingsEffects, themeAttr: themeAttr, uiScale: uiScale });
   return function link() {};
 });

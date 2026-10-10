@@ -366,6 +366,7 @@
     ["settingsRows","function"],
     ["enumOptions","function"],
     ["settingLocalNote","function"],
+    ["derivedSettingLine","function"],
     ["SETTINGS_KEYS","object"],
     ["INCIDENT_KEYS","object"],
     ["validMute","function"],

@@ -10,7 +10,7 @@
   'use strict';
   const C = window.EWCore;
   const S = { panel: null, saved: null, defaults: null, restartKeys: [], err: null, msg: null,
-    msgCls: 'ok', busy: false, inputs: {}, theme: 'system' };
+    msgCls: 'ok', busy: false, inputs: {}, theme: 'system', derived: null };
 
   function el(tag, cls, text) {
     const e = document.createElement(tag);
@@ -54,6 +54,8 @@
     S.defaults = doc.defaults || null;
     S.restartKeys = Array.isArray(doc.restart_keys) ? doc.restart_keys : [];
     S.detected = doc.detected && typeof doc.detected === 'object' ? doc.detected : null;
+    // Plan 108: values read, not typed (fame bonus) - shown above their override.
+    if (doc.derived && typeof doc.derived === 'object') S.derived = doc.derived;
     S.err = typeof doc.error === 'string' ? doc.error : null;
     applyTheme(S.saved['ui.theme']);
   }
@@ -183,6 +185,45 @@
     return row;
   }
 
+  // Plan 108: {clear: key} retires a typed override; the derived value returns.
+  function clearOverride(key) {
+    const b = bridge();
+    if (S.busy || !b) return;
+    S.busy = true;
+    window.EWToast.via(b).post('/api/settings', { clear: key }).then(function (res) {
+      if (!res || !res.ok) throw new Error((res && res.error) || 'unknown error');
+      take(res.data);
+      if (window.EWOverrides) window.EWOverrides.refresh(true);
+      say('ok', 'override cleared');
+    }).catch(function (e) {
+      say('bad', 'clear failed: ' + String(e && e.message || e));
+    }).then(function () {
+      S.busy = false;
+      draw();
+    });
+  }
+
+  // Plan 108: a derived setting - the value in force with its source and age,
+  // the number input inside an "override" disclosure (open while typed wins).
+  function derivedField(f) {
+    const wrap = el('div', 'ew-srow ew-sderived');
+    const d = C.derivedSettingLine(f.key, S.derived && S.derived[f.key]);
+    wrap.appendChild(el('span', 'ew-slabel' + (d.stale ? ' ew-muted' : ''), d.text));
+    const det = el('details', 'ew-soverride');
+    det.open = d.override;
+    det.appendChild(el('summary', null, d.override ? 'override (typed, in force)' : 'override'));
+    det.appendChild(field(f));
+    if (d.override) {
+      const clr = el('button', 'ew-btn', 'Clear override');
+      clr.type = 'button';
+      clr.disabled = S.busy;
+      clr.addEventListener('click', function () { clearOverride(f.key); });
+      det.appendChild(clr);
+    }
+    wrap.appendChild(det);
+    return wrap;
+  }
+
   function draw() {
     const p = S.panel;
     if (!p) return;
@@ -203,7 +244,7 @@
       const sec = el('section', 'ew-card ew-sgroup');
       sec.dataset.group = g.id;
       sec.appendChild(el('h2', null, g.title));
-      C.settingsRows(g).forEach(function (f) { sec.appendChild(field(f)); });
+      C.settingsRows(g).forEach(function (f) { sec.appendChild(f.derived ? derivedField(f) : field(f)); });
       p.appendChild(sec);
     });
     const bar = el('div', 'ew-sbar');
