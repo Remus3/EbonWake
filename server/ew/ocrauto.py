@@ -501,10 +501,15 @@ class AutoOcr:
             hold, before = None, None
             if f["kind"] == "level":
                 samples = self.leveling.samples()
-                hold = ocrinfer.check_level(samples, f["value"]["level"], f["value"]["pct"],
-                                            shot_at)
-                if hold is not None:
-                    f = dict(f, why=f"{f['why']}; {hold}")  # S7: never auto-committed
+                held = ocrinfer.level_hold(samples, f["value"]["level"], f["value"]["pct"],
+                                           shot_at)
+                if held is not None:
+                    hold = held[1]
+                    f = dict(f, why=f"{f['why']}; {hold}", hold=held[0])  # S7: not committed
+                    if held[0] in ocrinfer.RESOLVABLE and f["conf"] >= mn \
+                            and self._level_agree(shot["name"], f, shot_at, samples, mn):
+                        touched = True  # plan 116: a second read agreed; both committed
+                        continue
                 else:
                     before = (ocrinfer.prev_sample(samples, shot_at), self.leveling.rate())
             agree = None
@@ -566,6 +571,47 @@ class AutoOcr:
         if self.progress is not None:
             out += ocrinfer.gear_fields(doc, size=size, regions=self.regions)
         return out
+
+    def _level_agree(self, file, f, shot_at, samples, mn):
+        """Plan 116: a held level read agreeing with an earlier held one (another
+        shot, ocrinfer.agrees) commits both - the counted samples above them
+        are marked superseded (kept, listed), the review item is dropped and
+        both commits are logged in `auto_applied`. True when it resolved."""
+        mine = {"level": f["value"]["level"], "pct": f["value"]["pct"], "shot_ts": shot_at}
+        with self._lock:
+            items = list(self._review()["items"])
+        for i in reversed(items):
+            at = _ts(i.get("shot_at"))
+            if i.get("kind") != "level" or i.get("hold") not in ocrinfer.RESOLVABLE \
+                    or i.get("file") == file or at is None or not _ok_conf(i.get("conf")) \
+                    or i["conf"] < mn:
+                continue
+            try:
+                v = _check_value("level", i.get("value"))
+            except ValueError:
+                continue
+            other = {"level": v["level"], "pct": v["pct"], "shot_ts": at}
+            if not ocrinfer.agrees(mine, other):
+                continue
+            stale = ocrinfer.conflicting(samples, [mine, other])
+            self.leveling.supersede(stale)
+            try:
+                u1 = self._commit(i.get("file"), "level", i.get("name"), v, at, via="agree")
+            except ValueError:
+                self.leveling.supersede(stale, on=False)
+                return False
+            try:
+                u2 = self._commit(file, "level", f["name"], f["value"], shot_at,
+                                  extra={"superseded": stale})
+            except ValueError:
+                self.undo(u1)
+                self.leveling.supersede(stale, on=False)
+                return False
+            self._drop_review(i.get("id"))
+            self._log_applied("level", v, i["conf"], i.get("file"), u1)
+            self._log_applied("level", f["value"], f["conf"], file, u2)
+            return True
+        return False
 
     def _suggest_book(self, file, value, shot_at, prev, rate, level_conf=1.0):
         """A book use for an XP jump: applied at AUTO_APPLY_MIN or over (plan
@@ -846,8 +892,9 @@ class AutoOcr:
                 return {"ends": b.get("ends"), "armed": b.get("armed")}
         return None
 
-    def _commit(self, file, kind, name, value, shot_at, via="auto", at_shot=True):
-        """Commit one field to its domain; returns the undo id."""
+    def _commit(self, file, kind, name, value, shot_at, via="auto", at_shot=True, extra=None):
+        """Commit one field to its domain; returns the undo id. `extra` is
+        kept on the commit entry (plan 116: the samples it superseded)."""
         value = _check_value(kind, value)
         now = self.clock()
         with self._lock:
@@ -855,7 +902,7 @@ class AutoOcr:
             uid = f"u{d['next']}"
             entry = {"id": uid, "file": _str(file, 255), "kind": kind, "name": name,
                      "value": value, "at": _iso(now), "shot_at": _iso(shot_at),
-                     "via": via, "undone": False}
+                     "via": via, "undone": False, **(extra or {})}
             if kind == "silver":
                 doc = self.store.get("silver")
                 samples = doc.get("samples") if isinstance(doc.get("samples"), list) else []
@@ -947,6 +994,9 @@ class AutoOcr:
                                                               and s.get("id") == uid)]})
             elif c.get("kind") == "level":
                 self._need(self.leveling).ocr_sample_del(c.get("ts"))
+                stale = c.get("superseded")
+                if isinstance(stale, list) and stale:  # plan 116: they count again
+                    self.leveling.supersede([t for t in stale if isinstance(t, str)], on=False)
             elif c.get("kind") == "book_use":
                 lev = self._need(self.leveling)
                 idx = lev.books.used_index(c.get("row") or {}) if lev.books else None
@@ -1054,10 +1104,13 @@ class AutoOcr:
     def _enqueue_review(self, file, f, shot_at):
         with self._lock:
             r = self._review()
-            r["items"].append({"id": f"r{r['next']}", "file": _str(file, 255),
-                               "kind": f["kind"], "name": f["name"], "value": f["value"],
-                               "conf": f["conf"], "why": _str(f["why"]),
-                               "at": _iso(self.clock()), "shot_at": _iso(shot_at)})
+            item = {"id": f"r{r['next']}", "file": _str(file, 255),
+                    "kind": f["kind"], "name": f["name"], "value": f["value"],
+                    "conf": f["conf"], "why": _str(f["why"]),
+                    "at": _iso(self.clock()), "shot_at": _iso(shot_at)}
+            if f.get("hold") in ("older",) + ocrinfer.RESOLVABLE:
+                item["hold"] = f["hold"]  # plan 116: why a level read is held
+            r["items"].append(item)
             r["next"] += 1
             r["items"] = r["items"][-MAX_REVIEW:]
             self.store.put("ocr_review", r)

@@ -4,7 +4,7 @@ from real state on every read.
 Inputs: EW's own gitignored config/local.json (profile.family, overlay.anchor,
 the plan 008 `bdo` folders), the plan 008 folders themselves (existence /
 listing only, no file is ever opened) and the EW store (market watch, today
-ticks, leveling samples). A view never carries a path. Store domain
+ticks, leveling samples - plan 116: OCR reads and profile markers count). A view never carries a path. Store domain
 `onboarding`: {"dismissed": "<iso>" | null}.
 
 Plan 065: steps tick themselves from detection and data - the auto-detected
@@ -53,8 +53,8 @@ STEPS = (
     ("daily", "Tick your first daily",
      "Today > tick a daily once it is done.",
      {"tab": "today"}, True),
-    ("leveling", "Log an XP sample",
-     "Progress > type your level and percent for the ETA.",
+    ("leveling", "Record your XP",
+     "Take a screenshot with the XP bar visible (or refresh the profile) for the ETA.",
      {"tab": "progress"}, True),
 )
 
@@ -159,7 +159,10 @@ def _ticked_daily(store):
 
 
 def _has_sample(store):
-    return bool(leveling._points(store.get("leveling").get("samples")))
+    """Plan 116: any sample counts - typed, a plan 066 OCR read or a plan 041
+    profile marker (no typing asked)."""
+    raw = store.get("leveling").get("samples")
+    return any(leveling._clean_sample(s) is not None for s in (raw if isinstance(raw, list) else []))
 
 
 def _dismissed(store):

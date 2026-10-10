@@ -47,7 +47,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from . import __version__, claimwindows, logindays, maint, maintdigest, patchverify
+from . import __version__, claimwindows, logindays, maint, maintdigest, noticedeadlines
+from . import patchverify
 from .coupons import DETAIL_PATHS, HOST, MAX_BYTES, ROBOTS, TIMEOUT_S, UA_TOKEN, is_detail_href
 from .coupons import robots_verdict
 from .coupons import _TOKEN_RE, _clean_title, copy_codes, is_code, is_word_code, parse_date
@@ -595,7 +596,8 @@ def parse_notice(page, title, ref_year, ref_month=None):
     """Everything plan 059 + 064 + 074 read from one Detail page: {window,
     maint, hot, codes, loss, parse_v}; `loss` only on a maintenance notice;
     + plan 075 `login` (a suggested login rule, or None); + plan 086 `claims`
-    [{text, until}] (raw claim deadlines)."""
+    [{text, until}] (raw claim deadlines); + plan 116 `deadlines` [{text,
+    level, kind, conf, until}] (raw level-gated deadlines)."""
     text = page if isinstance(page, str) else _decode(page)
     lines = _lines(text)
     unwrapped = _lines(text, unwrap=True)
@@ -608,6 +610,7 @@ def parse_notice(page, title, ref_year, ref_month=None):
             "login": logindays.suggest_rule([title] + lines if isinstance(title, str) else lines),
             "loss": maintdigest.loss_lines(unwrapped) if m is not None else [],
             "claims": claimwindows.claim_lines(unwrapped, ref_year, ref_month),
+            "deadlines": noticedeadlines.deadline_lines(unwrapped, ref_year, ref_month),
             "parse_v": maintdigest.PARSE_V}
 
 
@@ -712,9 +715,10 @@ def _clean_codes(raw):
 
 
 def _clean_detail(entry):
-    """{stamp, fetched_at, window, maint, hot, codes, login, loss, claims, parse_v}
-    or None (a pre-064 entry has no maint / hot / codes: None, None, []; a
-    pre-074 one no loss / parse_v: [], 1; a pre-086 one no claims: [])."""
+    """{stamp, fetched_at, window, maint, hot, codes, login, loss, claims,
+    deadlines, parse_v} or None (a pre-064 entry has no maint / hot / codes:
+    None, None, []; a pre-074 one no loss / parse_v: [], 1; a pre-086 one no
+    claims: []; a pre-116 one no deadlines: [])."""
     if not isinstance(entry, dict):
         return None
     at = entry.get("fetched_at")
@@ -739,6 +743,7 @@ def _clean_detail(entry):
             "login": logindays.clean_suggestion(entry.get("login")),  # plan 075; pre-075 None
             "loss": maintdigest.clean_loss(entry.get("loss")) if cm is not None else [],
             "claims": claimwindows.clean_claims(entry.get("claims")),  # plan 086
+            "deadlines": noticedeadlines.clean_lines(entry.get("deadlines")),  # plan 116
             "parse_v": pv}
 
 
@@ -1199,6 +1204,20 @@ class NoticeService:
                                                 lambda pt: _point_utc(pt, slot, True, mn))
         return out
 
+    @staticmethod
+    def deadline_rows(notices, details, slot, mn):
+        """Plan 116: plan 024 deadline rows (+ conf, group_no) from the
+        level-gated deadline lines of each listed notice's cached Detail read
+        (maintenance notices skipped)."""
+        out = []
+        for n in notices:
+            d = details.get(n["group_no"])
+            if d is None or _MAINT_TITLE_RE.match(n["title"]):
+                continue
+            out += noticedeadlines.rows(n, d.get("deadlines"),
+                                        lambda pt: _point_utc(pt, slot, True, mn))
+        return out
+
     def claimed(self, group_no):
         """Plan 086 ack: the operator claimed a notice's rewards (Mail / Safe);
         its claim window is hidden everywhere. Returns the events view."""
@@ -1209,11 +1228,15 @@ class NoticeService:
     def _import(self, notices, details, slot, now):
         """Maintenance notices always; the rest only with auto_add() true.
         Plan 086: claim windows sync onto the stored items of their notice
-        always (they decorate what is there, they add nothing)."""
+        always (they decorate what is there, they add nothing). Plan 116:
+        level-gated deadline rows sync into leveling always (each row is gated
+        by its own conf, not by auto_add)."""
         mn = self._import_maint(notices, details)
         self._auto_import(notices, details, slot, mn, now)
         self.events.sync_claims({url: None if c is None else (_iso(c[0]), c[1]) for url, c in
                                  self.claim_windows(notices, details, slot, mn).items()})
+        if self.leveling is not None:
+            self.leveling.notice_deadlines(self.deadline_rows(notices, details, slot, mn))
         return mn
 
     def _auto_import(self, notices, details, slot, mn, now):

@@ -30,7 +30,8 @@ from pathlib import Path
 from . import maint as _maint
 
 PATTERNS_FILE = Path(__file__).resolve().parent / "data" / "maint_loss_patterns.json"
-PARSE_V = 3  # Detail cache entries before plan 074 count as 1; plan 086 claims = 3
+PARSE_V = 4  # Detail cache entries before plan 074 count as 1; plan 086 claims = 3;
+# plan 116 level deadlines = 4
 MAX_LOSS = 5
 MAX_TEXT = 200
 MAX_PATTERNS = 50
@@ -45,7 +46,7 @@ _SENT_RE = re.compile(r"[.!?]\s+(?=[A-Z0-9\"'(])")
 # a period after one of these ("Oct. 8", "No. 3", "e.g. ...") ends no sentence
 _ABBR = {"jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec",
          "mon", "tue", "tues", "wed", "thu", "thur", "thurs", "fri", "sat", "sun", "no", "vs",
-         "approx", "e.g", "i.e", "etc", "st", "mr", "ms", "dr"}
+         "approx", "e.g", "i.e", "etc", "st", "mr", "ms", "dr", "lv"}
 _WORD_END_RE = re.compile(r"([A-Za-z.]+)$")
 _SPACES_RE = re.compile(r"\s+")
 _FOLD = {0x2018: "'", 0x2019: "'", 0x201c: '"', 0x201d: '"', 0x2013: "-", 0x2014: "-",

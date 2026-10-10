@@ -245,3 +245,42 @@ test('leveling.js renders the level through fmtLevelLine and marks profile sampl
   assert.doesNotMatch(src, /'Lv ' \+ d\.level \+ '  ' \+ d\.pct/);
   assert.match(src, /\(profile\)/);
 });
+
+// ---- plan 116: automatic samples, source badges, notice deadlines ----
+
+test('sampleBadge: typed / OCR / profile, superseded marked', () => {
+  assert.strictEqual(C.sampleBadge({ ts: 't', level: 61, pct: 12.5 }).text, 'typed');
+  assert.strictEqual(C.sampleBadge({ level: 61, pct: 12.5, source: 'ocr' }).text, 'OCR');
+  assert.strictEqual(C.sampleBadge({ level: 61, pct: null, source: 'profile' }).text, 'profile');
+  const sup = C.sampleBadge({ level: 61, pct: 50, source: 'ocr', superseded: true });
+  assert.strictEqual(sup.text, 'OCR (superseded)');
+  assert.match(sup.cls, /ew-stale/);
+  assert.match(sup.title, /not counted/);
+  assert.strictEqual(C.sampleBadge({ level: 61, pct: 1, source: 'bogus' }).text, 'typed');
+  for (const s of [null, 5, 'x']) assert.doesNotMatch(C.sampleBadge(s).text, /undefined|null/);
+});
+
+test('leveling card: typed sample form lives in the details row; badges per sample', () => {
+  const src = read('dashboard/leveling.js');
+  assert.match(src, /C\.sampleBadge\(/);
+  const mountBody = src.slice(src.indexOf('function mount('));
+  assert.doesNotMatch(mountBody, /parseSampleForm/, 'no typed entry on the card face');
+  const ed = src.slice(src.indexOf('function editor('), src.indexOf('function mount('));
+  assert.match(ed, /sampleForm\(\)/, 'the form is appended inside the details editor');
+  assert.match(src, /function sampleForm\(\)[\s\S]*C\.parseSampleForm\(/);
+});
+
+test('notice deadlines: by notice tag, suggestions normalized, accept body valid', () => {
+  const row = { id: 'notice-10700-61', label: 'Olvia', needs_level: 61, enrol_by_utc: '2026-11-26T08:00:00+00:00',
+    state: 'unknown', reach_utc: null, margin_h: null, verified: false, by: 'notice', source: 'https://x' };
+  assert.strictEqual(C.deadlineLine(row), 'Olvia: Lv 61 by Nov 26 (from notice) - log XP for an ETA (no rate)');
+  assert.strictEqual(C.deadlineBrief(Object.assign({}, row, { by: 'weird' })).by, 'tracked');
+  const d = C.normalizeLeveling({ milestones: [], deadline_suggestions: [row, { junk: 1 }] });
+  assert.strictEqual(d.deadline_suggestions.length, 1);
+  assert.deepStrictEqual(C.normalizeLeveling({ milestones: [] }).deadline_suggestions, []);
+  assert.strictEqual(C.validLevelingBody({ deadline_accept: 'notice-10700-61' }), true);
+  assert.strictEqual(C.validLevelingBody({ deadline_accept: 'Bad Id' }), false);
+  const src = read('dashboard/leveling.js');
+  assert.match(src, /deadline_accept: dl\.id/);
+  assert.match(src, /deadline_del: id/);
+});

@@ -72,6 +72,7 @@
     if (k === 'milestones') return validMilestones(v);
     if (k === 'epoch_del') return validRef(v, EPOCH_ID_RE);
     if (k === 'deadline_del') return validRef(v, EPOCH_ID_RE);
+    if (k === 'deadline_accept') return validRef(v, EPOCH_ID_RE);  // plan 116 notice suggestion
     if (k === 'deadline_set') {
       const keys = ['id', 'label', 'needs_level', 'enrol_by_utc', 'quests_by_utc', 'source', 'verified'];
       const extra = plainObject(v) ? Object.keys(v).filter(function (x) { return keys.indexOf(x) < 0; }) : [];
@@ -287,6 +288,9 @@
           source: typeof d.zone_cap.source === 'string' ? d.zone_cap.source : null } : null,
       // Plan 024 level-gated deadlines, already decorated with state by the server.
       deadlines: (Array.isArray(d.deadlines) ? d.deadlines : []).map(deadlineBrief).filter(function (x) { return x !== null; }),
+      // Plan 116: notice-derived rows under the auto-add gate (Accept / x).
+      deadline_suggestions: (Array.isArray(d.deadline_suggestions) ? d.deadline_suggestions : [])
+        .map(deadlineBrief).filter(function (x) { return x !== null; }),
       // Plan 060 Combat Secret Book ledger (null on a pre-060 server).
       books: normalizeBooks(d.books),
       samples: (Array.isArray(d.samples) ? d.samples : []).filter(plainObject)
@@ -303,8 +307,12 @@
       DEADLINE_STATES.indexOf(d.state) < 0) return null;
     return { id: d.id, label: d.label, needs_level: d.needs_level, enrol_by_utc: d.enrol_by_utc,
       state: d.state, reach_utc: typeof d.reach_utc === 'string' ? d.reach_utc : null,
-      margin_h: isNum(d.margin_h) ? d.margin_h : null, verified: d.verified === true };
+      margin_h: isNum(d.margin_h) ? d.margin_h : null, verified: d.verified === true,
+      // Plan 116: tracked data row, typed, or derived from an official notice.
+      by: DEADLINE_BY.indexOf(d.by) >= 0 ? d.by : 'tracked',
+      source: typeof d.source === 'string' ? d.source : null };
   }
+  const DEADLINE_BY = ['tracked', 'typed', 'notice'];
 
   // ISO time -> "Nov 5" (UTC date: deadlines are published as UTC days), '?' for junk.
   function fmtMonthDay(iso) {
@@ -330,7 +338,7 @@
     const b = deadlineBrief(d);
     if (!b) return '';
     const head = b.label + ': Lv ' + b.needs_level + ' by ' + fmtMonthDay(b.enrol_by_utc) +
-      (b.verified ? '' : ' (verify date)') + ' - ';
+      (b.by === 'notice' ? ' (from notice)' : b.verified ? '' : ' (verify date)') + ' - ';
     let tail;
     if (b.state === 'done') tail = 'Lv ' + b.needs_level + ' reached';
     else if (b.reach_utc) tail = 'you reach ' + b.needs_level + ' ~' + fmtMonthDay(b.reach_utc);
@@ -481,6 +489,21 @@
     return 'Lv ' + d.level + (d.level_source === 'profile' ? ' (profile)' : '');
   }
 
+  // Plan 116: where one sample came from - {text, cls, title}: typed, OCR
+  // (screenshot read) or profile (BDO-REST-API level marker); a superseded
+  // sample (a later agreeing read replaced it) is listed but marked.
+  const SAMPLE_BADGES = { typed: 'typed', ocr: 'OCR', profile: 'profile' };
+  function sampleBadge(s) {
+    if (!plainObject(s)) return { text: '?', cls: 'ew-sbadge', title: '' };
+    const src = s.source === 'ocr' || s.source === 'profile' ? s.source : 'typed';
+    const sup = s.superseded === true;
+    return { text: SAMPLE_BADGES[src] + (sup ? ' (superseded)' : ''),
+      cls: 'ew-sbadge ew-sbadge-' + src + (sup ? ' ew-stale' : ''),
+      title: { typed: 'typed in the dashboard', ocr: 'read from a screenshot',
+        profile: 'level from the profile refresh' }[src] +
+        (sup ? ' - replaced by two agreeing later reads; not counted' : '') };
+  }
+
   // Overlay one-liner: "Lv 52 37.5% | 4.1 %/h | ETA 15h12m | HOT 1h03m +50%".
   function levelingLine(body, fetchedMs, now) {
     const d = normalizeLeveling(body);
@@ -539,7 +562,7 @@
     fmtMonthDay: fmtMonthDay, deadlinePill: deadlinePill, deadlineLine: deadlineLine,
     deadlineAlert: deadlineAlert, normalizeBooks: normalizeBooks, fmtBookPct: fmtBookPct,
     booksLine: booksLine, booksToNextText: booksToNextText, parseBookForm: parseBookForm,
-    hotLive: hotLive, fmtLevelLine: fmtLevelLine, levelingLine: levelingLine,
+    hotLive: hotLive, fmtLevelLine: fmtLevelLine, sampleBadge: sampleBadge, levelingLine: levelingLine,
     ZONES_EMPTY: ZONES_EMPTY, zonesRows: zonesRows });
   return function link() {};
 });

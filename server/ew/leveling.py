@@ -36,6 +36,13 @@ MILESTONE_LABELS = {56: "main questline end", 60: "Rebirth of Darkness", 61: "Ol
 MAX_EPOCHS = 20  # operator-added epochs
 MAX_DEADLINES = 20  # operator-set deadline rows (plan 024)
 DEADLINE_TIGHT_H = 72
+# Plan 116: notice-derived deadline rows at or over the plan 111 gate
+# (ocrauto.AUTO_APPLY_MIN; a test pins the two equal) are added, lower ones are
+# suggestions; a row within DEADLINE_DUP_S of a tracked / set row of the same
+# level is that row.
+NOTICE_AUTO_MIN = 0.95
+MAX_NOTICE_DEADLINES = 20
+DEADLINE_DUP_S = 2 * 86400
 HOT_ID_RE = re.compile(r"^h[0-9]{1,9}$")
 AUTO_ID_RE = re.compile(r"^a[0-9]{1,9}$")  # plan 064 auto (notice) windows
 AUTO_KEEP_S = 7 * 86400  # an auto window ended this long ago is pruned on the next add
@@ -74,10 +81,11 @@ def _norm_pct(v):
 
 def _points(samples):
     """Usable samples -> [(utc datetime, cumulative pct)] oldest first; a level
-    rollover counts +100 pct per level."""
+    rollover counts +100 pct per level. A plan 116 superseded sample is not
+    usable."""
     pts = []
     for s in samples if isinstance(samples, list) else []:
-        if not isinstance(s, dict):
+        if not isinstance(s, dict) or s.get("superseded") is True:
             continue
         when = _parse_iso(s.get("ts"))
         if (when is None or not _ok_int(s.get("level"), *LEVEL_RANGE)
@@ -111,6 +119,26 @@ def rate_pct_h(samples, since=None):
         return None
     rate = statistics.median(deltas)
     return rate if rate > 0 else None
+
+
+def segment_start(samples):
+    """Plan 116: ts (utc datetime) of the newest plan 041 profile marker whose
+    level is above the newest pct sample before it (a level gained with no
+    screenshot in between), else None. The rate restarts there, so a missed
+    screenshot day does not blend offline time into it."""
+    rows = []
+    for s in samples if isinstance(samples, list) else []:
+        when = _parse_iso(s.get("ts")) if isinstance(s, dict) else None
+        if when is not None and s.get("superseded") is not True \
+                and _ok_int(s.get("level"), *LEVEL_RANGE):
+            rows.append((when, s))
+    start, last = None, None  # last = level of the newest pct sample so far
+    for when, s in sorted(rows, key=lambda r: r[0]):
+        if s.get("pct") is not None:
+            last = s["level"]
+        elif last is not None and s["level"] > last:
+            start = when
+    return start
 
 
 def eta_next_s(pct, rate):
@@ -305,17 +333,22 @@ def _clean_sample(s):
     except (OverflowError, ValueError):
         return None
     if marker:
-        return {"ts": ts, "level": s["level"], "pct": None, "source": MARKER_SOURCE}
-    out = {"ts": ts, "level": s["level"], "pct": _norm_pct(s["pct"])}
-    if s.get("source") == OCR_SOURCE:
-        out["source"] = OCR_SOURCE
+        out = {"ts": ts, "level": s["level"], "pct": None, "source": MARKER_SOURCE}
+    else:
+        out = {"ts": ts, "level": s["level"], "pct": _norm_pct(s["pct"])}
+        if s.get("source") == OCR_SOURCE:
+            out["source"] = OCR_SOURCE
+    if s.get("superseded") is True:
+        out["superseded"] = True  # plan 116: kept for the record, never counted
     return out
 
 
 def _level_now(samples):
     """(level, pct, level_source) from cleaned samples, oldest first: pct from
     the last typed (or plan 066 `ocr`, level_source "ocr") sample; level = max(last typed, last marker); a higher
-    marker level means the XP percent of that level is unknown (pct None)."""
+    marker level means the XP percent of that level is unknown (pct None).
+    Plan 116: superseded samples are skipped."""
+    samples = [s for s in samples if s.get("superseded") is not True]
     typed = next((s for s in reversed(samples) if not _is_marker(s)), None)
     mark = next((s for s in reversed(samples) if _is_marker(s)), None)
     if typed is not None and (mark is None or mark["level"] <= typed["level"]):
@@ -402,6 +435,25 @@ def _clean_deadline(d):
         return None
 
 
+def _clean_notice_deadline(d):
+    """Plan 116 notice-derived row: a plan 024 row + {conf 0..1, group_no}."""
+    if not isinstance(d, dict):
+        return None
+    conf, gno = d.get("conf"), d.get("group_no")
+    if not (isinstance(conf, (int, float)) and not isinstance(conf, bool) and 0 <= conf <= 1
+            and _ok_int(gno, 1, 10 ** 9 - 1)):
+        return None
+    row = _clean_deadline({k: v for k, v in d.items() if k not in ("conf", "group_no")})
+    return None if row is None else dict(row, conf=conf, group_no=gno)
+
+
+def _same_deadline(a, b):
+    """Plan 116 dedupe: same level, enrolment within DEADLINE_DUP_S."""
+    return a["needs_level"] == b["needs_level"] and abs(
+        (_parse_iso(a["enrol_by_utc"]) - _parse_iso(b["enrol_by_utc"])).total_seconds()
+    ) <= DEADLINE_DUP_S
+
+
 def _clean_ids(raw):
     return sorted({d for d in (raw if isinstance(raw, list) else [])
                    if isinstance(d, str) and levels.ID_RE.match(d)})
@@ -431,7 +483,9 @@ class LevelingService:
     Plan 024 deadlines work the same way: tracked `data/deadlines.json` rows
     (`deadlines`, injected for tests) + "deadlines_added" / "deadlines_deleted".
     Plan 060: `books` is the Combat Secret Book ledger (xpbooks.XpBooksService,
-    its own store domain); without one the view's `books` is None."""
+    its own store domain); without one the view's `books` is None.
+    Plan 116: a sample may carry `superseded: true` (kept, never counted);
+    "deadlines_notice" / "deadlines_suggested" hold notice-derived rows."""
 
     def __init__(self, store, clock=time.time, buffs=None, epochs=None, deadlines=None,
                  books=None, maint_end=None):
@@ -509,7 +563,13 @@ class LevelingService:
                 "epochs_deleted": _clean_ids(doc.get("epochs_deleted")),
                 "deadlines_added": _clean_rows(doc.get("deadlines_added"), _clean_deadline,
                                                MAX_DEADLINES),
-                "deadlines_deleted": _clean_ids(doc.get("deadlines_deleted"))}
+                "deadlines_deleted": _clean_ids(doc.get("deadlines_deleted")),
+                # plan 116: rows derived from official notices / low-conf suggestions
+                "deadlines_notice": _clean_rows(doc.get("deadlines_notice"),
+                                                _clean_notice_deadline, MAX_NOTICE_DEADLINES),
+                "deadlines_suggested": _clean_rows(doc.get("deadlines_suggested"),
+                                                   _clean_notice_deadline,
+                                                   MAX_NOTICE_DEADLINES)}
 
     def epochs(self, doc=None):
         """Effective XP epochs, oldest first."""
@@ -518,21 +578,29 @@ class LevelingService:
                                    set(doc["epochs_deleted"]))
 
     def deadlines(self, doc=None):
-        """Effective deadline rows, soonest enrolment first."""
+        """Effective deadline rows, soonest enrolment first. Plan 116: notice
+        rows (+ conf, group_no) join unless a tracked / set row is the same."""
         doc = self._load() if doc is None else doc
-        return levels.merge_deadlines(self.tracked_deadlines, doc["deadlines_added"],
+        base = levels.merge_deadlines(self.tracked_deadlines, doc["deadlines_added"],
                                       set(doc["deadlines_deleted"]))
+        ids = {d["id"] for d in base}
+        extra = [n for n in doc["deadlines_notice"]
+                 if n["id"] not in ids and n["id"] not in doc["deadlines_deleted"]
+                 and not any(_same_deadline(n, d) for d in base)]
+        return levels.sort_deadlines(base + extra)
 
-    def _deadline_rows(self, doc, now, level, pct, rate):
+    def _deadline_rows(self, doc, now, level, pct, rate, rows=None):
         tracked = {d["id"] for d in self.tracked_deadlines}
+        added = {d["id"] for d in doc["deadlines_added"]}
         out = []
-        for d in self.deadlines(doc):
+        for d in self.deadlines(doc) if rows is None else rows:
             enrol = _parse_iso(d["enrol_by_utc"])
             if _parse_iso(d["quests_by_utc"] or d["enrol_by_utc"]) <= now:
                 continue  # final cut-off passed: nothing left to act on
             eta = eta_to_level_s(level, pct, rate, d["needs_level"])
+            by = "notice" if "group_no" in d else "typed" if d["id"] in added else "tracked"
             out.append(dict(d, **deadline_status(d, level, eta, now), tracked=d["id"] in tracked,
-                            enrol_in_s=int((enrol - now).total_seconds())))
+                            by=by, enrol_in_s=int((enrol - now).total_seconds())))
         return out
 
     def deadline_rows(self):
@@ -571,7 +639,15 @@ class LevelingService:
         epoch = levels.active_epoch(epochs, now)
         upcoming = levels.next_epoch(epochs, now)
         since = _parse_iso(epoch["starts_utc"]) if epoch else None
-        rate = rate_pct_h(samples, since)
+        # Plan 116: a profile level-up with no screenshot between restarts the
+        # rate there; until two reads follow it, the rate measured before it
+        # stands (no delta ever spans the gap).
+        segment = segment_start(samples)
+        if segment is not None and since is not None and since > segment:
+            segment = None  # a newer XP epoch already cut the history
+        rate = rate_pct_h(samples, since if segment is None else segment)
+        if rate is None and segment is not None:
+            rate = rate_pct_h([s for s in samples if _parse_iso(s["ts"]) < segment], since)
         hot = hot_status(doc["hot_windows"], now, doc["hot_auto"])
         buffs = _live_xp_buffs(self.buffs() if self.buffs is not None else [])
         parts = ([{"name": a["label"], "pct": a["pct"]} for a in hot["active"]]
@@ -609,6 +685,12 @@ class LevelingService:
                 "epochs": [dict(brief(e), tracked=e["id"] in tracked) for e in epochs],
                 "epoch_error": self.epoch_error,
                 "deadlines": deadlines,
+                # plan 116: notice rows under the gate, for one-click accept
+                "deadline_suggestions": self._deadline_rows(
+                    doc, now, level, pct, rate,
+                    [d for d in doc["deadlines_suggested"]
+                     if d["id"] not in {x["id"] for x in deadlines}]),
+                "segment_utc": None if segment is None else _iso(segment),
                 "books": books,
                 "deadline_error": self.deadline_error,
                 # the newest STARTED epoch that carries caps: a later operator
@@ -666,7 +748,8 @@ class LevelingService:
         the newest sample at that level (None with no level)."""
         samples = self._load()["samples"]
         level, _, src = _level_now(samples)
-        at = next((s["ts"] for s in reversed(samples) if s["level"] == level), None) \
+        at = next((s["ts"] for s in reversed(samples)
+                   if s["level"] == level and not s.get("superseded")), None) \
             if level is not None else None
         return {"level": level, "level_source": src, "level_at": at}
 
@@ -727,6 +810,76 @@ class LevelingService:
                 raise ValueError("that OCR sample was replaced or deleted; edit it in Leveling")
             doc["samples"] = keep
             self._save(doc)
+
+    def supersede(self, stamps, on=True):
+        """Plan 116, server side only: mark the samples at `stamps` superseded
+        (on) or count them again (off); they stay listed either way. Returns
+        the stamps that changed."""
+        want = set(stamps)
+        changed = []
+        with self._lock:
+            doc = self._load()
+            for s in doc["samples"]:
+                if s["ts"] in want and bool(s.get("superseded")) != on:
+                    if on:
+                        s["superseded"] = True
+                    else:
+                        s.pop("superseded", None)
+                    changed.append(s["ts"])
+            if changed:
+                self._save(doc)
+        return changed
+
+    def notice_deadlines(self, rows):
+        """Plan 116, server side only: sync notice-derived deadline rows (from
+        noticedeadlines.rows). A row at or over NOTICE_AUTO_MIN is added, a
+        lower one is a suggestion; a deleted id never returns; a row that is a
+        tracked / set row (same level, enrolment within DEADLINE_DUP_S) is
+        skipped; rows whose final cut-off passed are pruned. True on a change."""
+        now = self._now()
+        with self._lock:
+            doc = self._load()
+            base = levels.merge_deadlines(self.tracked_deadlines, doc["deadlines_added"],
+                                          set(doc["deadlines_deleted"]))
+            gone = set(doc["deadlines_deleted"]) | {d["id"] for d in base}
+            notice = {d["id"]: d for d in doc["deadlines_notice"]}
+            sugg = {d["id"]: d for d in doc["deadlines_suggested"]}
+            for r in rows if isinstance(rows, list) else []:
+                c = _clean_notice_deadline(r)
+                if c is None or c["id"] in gone or any(_same_deadline(c, d) for d in base):
+                    continue
+                if c["id"] in notice or c["conf"] >= NOTICE_AUTO_MIN:
+                    notice[c["id"]] = c  # an accepted suggestion stays accepted
+                    sugg.pop(c["id"], None)
+                else:
+                    sugg[c["id"]] = c
+
+            def live(d):
+                return _parse_iso(d["quests_by_utc"] or d["enrol_by_utc"]) > now
+
+            keep_n = [d for d in notice.values() if live(d)][-MAX_NOTICE_DEADLINES:]
+            keep_s = [d for d in sugg.values() if live(d)][-MAX_NOTICE_DEADLINES:]
+            if keep_n == doc["deadlines_notice"] and keep_s == doc["deadlines_suggested"]:
+                return False
+            doc["deadlines_notice"], doc["deadlines_suggested"] = keep_n, keep_s
+            self._save(doc)
+        return True
+
+    def deadline_accept(self, did):
+        """Plan 116: a notice deadline suggestion becomes a notice row."""
+        if not isinstance(did, str) or not levels.ID_RE.match(did):
+            raise ValueError("deadline_accept must be a suggested deadline id")
+        with self._lock:
+            doc = self._load()
+            row = next((d for d in doc["deadlines_suggested"] if d["id"] == did), None)
+            if row is None:
+                raise ValueError(f"unknown suggested deadline: {did}")
+            doc["deadlines_suggested"] = [d for d in doc["deadlines_suggested"]
+                                          if d["id"] != did]
+            doc["deadlines_notice"] = ([d for d in doc["deadlines_notice"] if d["id"] != did]
+                                       + [row])[-MAX_NOTICE_DEADLINES:]
+            self._save(doc)
+        return self.view()
 
     def source(self):
         """`/api/state` sources.leveling: {updated, status: "ok"}."""
@@ -933,10 +1086,16 @@ class LevelingService:
             raise ValueError("deadline_del must be a deadline id")
         with self._lock:
             doc = self._load()
-            if did not in {d["id"] for d in self.deadlines(doc)}:
+            derived = {d["id"] for d in doc["deadlines_notice"] + doc["deadlines_suggested"]}
+            if did not in {d["id"] for d in self.deadlines(doc)} | derived:
                 raise ValueError(f"unknown deadline: {did}")
             doc["deadlines_added"] = [d for d in doc["deadlines_added"] if d["id"] != did]
-            if did in {d["id"] for d in self.tracked_deadlines}:
+            # plan 116: a notice row / suggestion is the undo of an auto-add and
+            # is remembered, so the next notice sync never brings it back
+            doc["deadlines_notice"] = [d for d in doc["deadlines_notice"] if d["id"] != did]
+            doc["deadlines_suggested"] = [d for d in doc["deadlines_suggested"]
+                                          if d["id"] != did]
+            if did in {d["id"] for d in self.tracked_deadlines} | derived:
                 doc["deadlines_deleted"] = sorted(set(doc["deadlines_deleted"]) | {did})
             self._save(doc)
         return self.view()
