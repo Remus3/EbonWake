@@ -167,8 +167,8 @@ def test_five_am_daily_item(tmp_path):
 def test_legacy_items_unchanged_and_rule_survives_reload(tmp_path):
     svc, clk = _svc(tmp_path)
     svc.add({"title": "Altar", "kind": "weekly", "reset": SUNDAY})
-    v = svc.view()
-    assert set(_item(v, "barter-run")) == {"id", "title", "kind", "until", "done", "ticked_at"}
+    v = svc.add({"title": "Manual chore", "kind": "daily"})  # plan 114: seed rows carry rules
+    assert set(_item(v, "manual-chore")) == {"id", "title", "kind", "until", "done", "ticked_at"}
     svc2 = today.TodayService(Store(tmp_path / "store"), clock=clk)
     assert _item(svc2.view(), "altar")["reset"] == SUNDAY
     svc2.move({"id": "altar", "to": 0})  # rewrite keeps the rule

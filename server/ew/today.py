@@ -54,9 +54,23 @@ DICE_FALLBACK = {"every": "day", "at": "05:00"}, [0, 30, 60]
 # first logged_in seen after the row's reset; `logged_minutes:N` ticks once the
 # plan 056 dice clock counts N logged-in minutes since the reset;
 # `ready_minutes:N` only marks the row ready (the dice roll stays a tick).
-AUTO_RE = re.compile(r"^(login|(logged_minutes|ready_minutes):([1-9]\d{0,3}))$")
+# Plan 114: `shot:<cue>` ticks when the OCR text of a logged-in screenshot
+# matches a tracked cue (data/today_cues.json); `bosses:N` once N world boss
+# loot ticks (plan 031, incl. plan 111 auto ticks) fall in the row's period.
+AUTO_RE = re.compile(r"^(login|(logged_minutes|ready_minutes|bosses):([1-9]\d{0,3})"
+                     r"|shot:([a-z0-9_]{1,40}))$")
 AUTO_MAX_MIN = 1440
-SEED_AUTO = {"attendance-reward": "login", "black-spirits-adventure-dice": "ready_minutes:60"}
+AUTO_MAX_BOSSES = 100
+SEED_AUTO = {"attendance-reward": "login", "black-spirits-adventure-dice": "ready_minutes:60",
+             "daily-challenges-y": "shot:challenges_daily", "barter-run": "shot:barter",
+             "guild-mission": "shot:guild_mission",
+             "black-spirit-weekly-quests": "shot:bs_weekly",
+             "weekly-boss-rewards": "bosses:1",
+             "pearl-shop-weekly-free-item": "shot:pearl_free"}
+CUES_FILE = Path(__file__).resolve().parent / "data" / "today_cues.json"
+CUE_ID_RE = re.compile(r"^[a-z0-9_]{1,40}$")
+CUE_FIELDS = ("patterns", "source", "verified")
+MAX_CUE_PATTERNS = 20
 
 
 # -- reset clocks (same rule as app/shared/ewcore.js) --------------------------
@@ -247,12 +261,60 @@ def _presets():
 
 
 def parse_auto(rule):
-    """Plan 068 row rule -> (kind, minutes|None); raises ValueError."""
-    m = AUTO_RE.match(rule) if isinstance(rule, str) else None
-    if m is None or (m.group(3) and int(m.group(3)) > AUTO_MAX_MIN):
+    """Plan 068 row rule -> (kind, minutes|None); plan 114 adds ("shot", cue id)
+    and ("bosses", N). Raises ValueError."""
+    m = AUTO_RE.fullmatch(rule) if isinstance(rule, str) else None
+    cap = AUTO_MAX_BOSSES if m and m.group(2) == "bosses" else AUTO_MAX_MIN
+    if m is None or (m.group(3) and int(m.group(3)) > cap):
         raise ValueError("auto must be login, logged_minutes:N or ready_minutes:N"
-                         f" (N 1..{AUTO_MAX_MIN})")
+                         f" (N 1..{AUTO_MAX_MIN}), shot:<cue> or bosses:N"
+                         f" (N 1..{AUTO_MAX_BOSSES})")
+    if m.group(4) is not None:
+        return "shot", m.group(4)
     return (m.group(1), None) if m.group(2) is None else (m.group(2), int(m.group(3)))
+
+
+def load_cues(path=None):
+    """Plan 114: tracked `data/today_cues.json` {cue: {patterns, all?, source,
+    verified}} -> {cue: {patterns: [re], all: [re], source, verified}}. A cue
+    matches when any `patterns` regex and every `all` regex find the OCR text
+    (case-insensitive). Raises ValueError on a malformed file."""
+    try:
+        doc = json.loads(Path(path or CUES_FILE).read_text(encoding="ascii"))
+    except (OSError, ValueError) as e:
+        raise ValueError(f"today cues unreadable: {type(e).__name__}") from e
+    if not isinstance(doc, dict) or not doc:
+        raise ValueError("today cues must be a non-empty object")
+    out = {}
+    for cue, row in doc.items():
+        if not CUE_ID_RE.match(cue) or not isinstance(row, dict) \
+                or not set(CUE_FIELDS) <= set(row) or set(row) - set(CUE_FIELDS) - {"all"}:
+            raise ValueError(f"cue rows must be [a-z0-9_] ids with {', '.join(CUE_FIELDS)}"
+                             " (+ optional all)")
+        if not (isinstance(row["source"], str) and 0 < len(row["source"].strip()) <= MAX_SOURCE
+                and isinstance(row["verified"], bool)):
+            raise ValueError("cue source must be text and verified a bool")
+        compiled = {}
+        for key in ("patterns", "all"):
+            pats = row.get(key, [])
+            if (not isinstance(pats, list) or len(pats) > MAX_CUE_PATTERNS
+                    or (key == "patterns" and not pats)
+                    or any(not isinstance(p, str) or not p for p in pats)):
+                raise ValueError(f"cue {key} must be a list of regex strings")
+            try:
+                compiled[key] = [re.compile(p, re.IGNORECASE) for p in pats]
+            except re.error as e:
+                raise ValueError(f"cue {cue} has a bad regex") from e
+        out[cue] = dict(compiled, source=row["source"], verified=row["verified"])
+    return out
+
+
+def cue_matches(cue, text):
+    """Plan 114: any `patterns` and every `all` regex of a loaded cue find `text`."""
+    if not isinstance(text, str) or not text:
+        return False
+    return any(p.search(text) for p in cue["patterns"]) and all(
+        p.search(text) for p in cue["all"])
 
 
 def _check_auto(kind, auto):

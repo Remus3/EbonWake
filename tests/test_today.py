@@ -123,12 +123,13 @@ def test_seed_once(tmp_path):
 
 def test_view_shape(tmp_path):
     svc, _ = _svc(tmp_path, T(2026, 10, 4, 12, 0, 5))
-    v = svc.view()
+    v = svc.add({"title": "Manual chore", "kind": "daily"})
     assert v["now"] == "2026-10-04T12:00:05+00:00"
     assert v["daily_reset"] == "2026-10-05T00:00:00+00:00"
     assert v["weekly_reset"] == "2026-10-08T00:00:00+00:00"
-    # plan 068: rows without an auto rule keep the plan 003 shape
-    row = next(i for i in v["items"] if i["id"] == "barter-run")
+    # plan 068: rows without an auto rule keep the plan 003 shape (plan 114:
+    # every seed row now has one, so an operator-added row)
+    row = next(i for i in v["items"] if i["id"] == "manual-chore")
     assert set(row) == {"id", "title", "kind", "until", "done", "ticked_at"}
 
 

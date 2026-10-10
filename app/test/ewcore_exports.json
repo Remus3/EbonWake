@@ -302,6 +302,7 @@
     ["todayAutoMark","function"],
     ["todayReady","function"],
     ["todayAutoTitle","function"],
+    ["todayAutoChip","function"],
     ["ovServerRowHidden","function"],
     ["validPetsBody","function"],
     ["parsePetForm","function"],
