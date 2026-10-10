@@ -102,7 +102,7 @@ def test_seed_rows_carry_rules(tmp_path):
     v = svc.view()
     assert _item(v, "attendance-reward")["auto"] == "login"
     assert _item(v, "black-spirits-adventure-dice")["auto"] == "ready_minutes:60"
-    assert "auto" not in _item(v, "barter-run")
+    assert _item(v, "barter-run")["auto"] == "shot:barter"  # plan 114
 
 
 def test_existing_store_gets_seed_rules_once(tmp_path):

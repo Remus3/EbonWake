@@ -8,9 +8,12 @@ the row's next reset (TodayService). A screenshot (plan 008 watcher) taken while
 logged in within BOSS_WINDOW_MIN of a plan 031 spawn suggests that boss as
 "probably done" - a suggestion only, never a loot tick (plan 111: the OCR
 worker ticks it when the shot's text also names the boss, `ocrauto`).
+Plan 114: `shot:<cue>` rows tick from the OCR worker's doc of a logged-in shot
+(`on_doc`), `bosses:N` rows once the period's boss loot ticks reach N.
 
-Inputs are the session-log state, screenshot file times and the clock: nothing
-is read from or sent to the game.
+Inputs are the session-log state, screenshot file times, the OCR text of shots
+the operator saved, EW's own boss ticks and the clock: nothing is read from or
+sent to the game.
 """
 
 import datetime as _dt
@@ -69,12 +72,21 @@ class AutoTick:
     session spanning a reset, new screenshots)."""
 
     def __init__(self, store, today, dice, game, table=None, settings=None,
-                 clock=time.time, on_change=None):
+                 clock=time.time, on_change=None, bosses=None, cues=None):
         self.store = store
         self.today = today
         self.dice = dice
         self.game = game
         self.table = table or _bosses.load_table()
+        # Plan 114: BossService for `bosses:N` (without one the rule never
+        # ticks); the tracked shot cues (a malformed file = no shot cues).
+        self.bosses = bosses
+        if cues is None:
+            try:
+                cues = _today.load_cues()
+            except ValueError:
+                cues = {}
+        self.cues = cues
         self.settings = settings or (lambda: {})
         self.clock = clock
         self.on_change = on_change
@@ -158,6 +170,32 @@ class AutoTick:
                 played = played or self._played_min(now)
                 if self._minutes_ok(n, row_rule, now, played):
                     ticked = self.today.auto_tick(iid, now) or ticked
+            elif kind == "bosses" and self.bosses is not None:
+                since = _today.last_reset(row_rule, _dt.datetime.fromtimestamp(now, _UTC))
+                if self.bosses.looted_since(since) >= n:
+                    ticked = self.today.auto_tick(iid, now) or ticked
+        if ticked:
+            self._changed()
+        return ticked
+
+    def on_doc(self, file, doc, shot_at):
+        """Plan 114: the plan 063 worker's OCR doc of a shot taken at epoch
+        `shot_at` (no second OCR). A shot inside a logged_in span whose text
+        matches a row's `shot:<cue>` ticks that row (by: auto) in the period in
+        force at the shot. True when a row ticked."""
+        if not self._enabled() or not self._in_window(shot_at):
+            return False
+        text = doc.get("text") if isinstance(doc, dict) else None
+        if not isinstance(text, str) or not text.strip():
+            lines = doc.get("lines") if isinstance(doc, dict) else None
+            text = "\n".join(ln.get("text") for ln in (lines if isinstance(lines, list) else [])
+                             if isinstance(ln, dict) and isinstance(ln.get("text"), str))
+        text = " ".join(text.split())
+        ticked = False
+        for iid, rule, _ in self.today.auto_rows():
+            kind, cue = _today.parse_auto(rule)
+            if kind == "shot" and cue in self.cues and _today.cue_matches(self.cues[cue], text):
+                ticked = self.today.auto_tick(iid, shot_at) or ticked
         if ticked:
             self._changed()
         return ticked

@@ -286,6 +286,11 @@ class BossService:
             self._save(looted, now, by, blocked + [key])
         return self.view()
 
+    def looted_since(self, since):
+        """Plan 114: loot ticks (operator or auto) made at or after `since`
+        (aware datetime)."""
+        return sum(1 for v in self._load().values() if _parse_iso(v) >= since)
+
     def auto_tick(self, day, boss):
         """Plan 111: an OCR loot read ticks `boss` on PT `day` with by: auto.
         False (nothing written) when it is ticked already, an untick blocked

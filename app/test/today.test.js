@@ -229,3 +229,26 @@ test('overlay reads /api/today with GET only and shows daily n/m', () => {
   assert.match(src, /60000/);
   assert.match(read('overlay/index.html'), /id="ov-today"/);
 });
+
+// Plan 114: the auto chip per rule kind; login / minutes rows and manual rows
+// show nothing new.
+test('todayAutoChip: screenshot / boss loot chips, nothing else', () => {
+  assert.strictEqual(C.todayAutoChip({ auto: 'shot:barter' }), 'auto: screenshot');
+  assert.strictEqual(C.todayAutoChip({ auto: 'shot:pearl_free' }), 'auto: screenshot');
+  assert.strictEqual(C.todayAutoChip({ auto: 'bosses:1' }), 'auto: boss loot');
+  assert.strictEqual(C.todayAutoChip({ auto: 'login' }), '');
+  assert.strictEqual(C.todayAutoChip({ auto: 'ready_minutes:60' }), '');
+  assert.strictEqual(C.todayAutoChip({ auto: 'shot:' }), '');
+  assert.strictEqual(C.todayAutoChip({ auto: 'bosses:0' }), '');
+  assert.strictEqual(C.todayAutoChip({}), '');
+  assert.strictEqual(C.todayAutoChip(null), '');
+});
+
+test('todayAutoTitle names the screenshot and boss rules', () => {
+  assert.match(C.todayAutoTitle({ auto: 'shot:barter' }), /screenshot/);
+  assert.match(C.todayAutoTitle({ auto: 'bosses:2' }), /2 world boss loot/);
+});
+
+test('today.js renders the auto chip', () => {
+  assert.match(read('dashboard/today.js'), /C\.todayAutoChip\(/);
+});
