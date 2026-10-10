@@ -59,7 +59,8 @@ LOGGED_IN = "logged_in"
 MAX_READS = 50
 MAX_LOOT_ROWS = 60
 # Plan 081: planner reads (inventory weight / slots, CP, market fame bonus).
-PLANNER_KINDS = ("weight", "slots", "cp", "fame")
+# Plan 117: + mastery (name = cooking|alchemy, value = imperial bonus pct).
+PLANNER_KINDS = ("weight", "slots", "cp", "fame", "mastery")
 # Plan 088: a Monster Zone Info read (zone, recommended level, per-kill EXP).
 # Plan 113: a loot-window row (table or catalog item + count) under the gate.
 # Plan 115: an event currency balance (exchange window / tooltip) -> eventcurrency.
@@ -307,6 +308,11 @@ def _check_value(kind, v):
         if _ok_num(v) and 0 <= v <= ocrinfer.FAME_MAX_READ:
             return v
         raise ValueError(f"fame value must be a number 0..{ocrinfer.FAME_MAX_READ}")
+    if kind == "mastery":
+        if _ok_num(v) and 0 <= v <= ocrinfer.MASTERY_MAX_READ and round(v, 2) == v:
+            return v
+        raise ValueError(f"mastery value must be a percent 0..{ocrinfer.MASTERY_MAX_READ} "
+                         "with at most 2 decimals")
     if kind == "loot":
         if (isinstance(v, dict) and set(v) == LOOT_KEYS and isinstance(v["name"], str)
                 and v["name"].strip() and len(v["name"]) <= 200
@@ -702,6 +708,8 @@ class AutoOcr:
             for r in rows:
                 if not (isinstance(r, dict) and _ts(r.get("at")) is not None):
                     continue
+                if kind == "mastery" and r.get("name") not in ocrinfer.MASTERY_TYPES:
+                    continue
                 try:
                     _check_value(kind, r.get("value"))
                 except ValueError:
@@ -712,7 +720,15 @@ class AutoOcr:
 
     def latest(self, kind):
         """Plan 081: {value, at, source} of the newest committed `kind` read (by
-        shot time; silver from the plan 063 samples), or None."""
+        shot time; silver from the plan 063 samples), or None. Plan 117:
+        "mastery:<cooking|alchemy>" is the newest mastery read of that type."""
+        sub = None
+        if isinstance(kind, str) and kind.startswith("mastery:"):
+            kind, sub = "mastery", kind[len("mastery:"):]
+            if sub not in ocrinfer.MASTERY_TYPES:
+                raise ValueError(f"unknown mastery type: {sub}")
+        elif kind == "mastery":
+            raise ValueError("a mastery read needs a type: mastery:<cooking|alchemy>")
         if kind == "silver":
             samples = self.store.get("silver").get("samples")
             rows = [s for s in samples if isinstance(s, dict)
@@ -721,6 +737,8 @@ class AutoOcr:
         elif kind in PLANNER_KINDS:
             with self._lock:
                 rows = self._reads()[kind]
+            if sub is not None:
+                rows = [r for r in rows if r.get("name") == sub]
         else:
             raise ValueError(f"unknown read kind: {kind}")
         if not rows:
@@ -966,10 +984,15 @@ class AutoOcr:
                 entry["prev"] = self._need(self.currency).set_balance(
                     name, value, source=f"ocr:{_str(file, 255)}", at=shot_at, uid=uid)
             elif kind in PLANNER_KINDS:
+                row = {"id": uid, "at": _iso(shot_at), "value": value,
+                       "source": f"ocr:{_str(file, 255)}"}
+                if kind == "mastery":
+                    if name not in ocrinfer.MASTERY_TYPES:
+                        raise ValueError(f"mastery type must be one of "
+                                         f"{', '.join(ocrinfer.MASTERY_TYPES)}")
+                    row["name"] = name  # plan 117: per-type reads
                 reads = self._reads()
-                reads[kind] = (reads.get(kind, []) + [{
-                    "id": uid, "at": _iso(shot_at), "value": value,
-                    "source": f"ocr:{_str(file, 255)}"}])[-MAX_READS:]
+                reads[kind] = (reads.get(kind, []) + [row])[-MAX_READS:]
                 self.store.put("ocr_reads", reads)
                 cur = _ts(self.store.get("fame").get("at")) if kind == "fame" else None
                 if kind == "fame" and (cur is None or shot_at >= cur):

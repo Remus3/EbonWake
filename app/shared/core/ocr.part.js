@@ -135,8 +135,12 @@
   // {size, pct_before, pct_after} (accept / discard only).
   // Plan 113: + loot {name, count, id, source} (a fix is the count).
   // Plan 115: + currency_balance (name = event number, value = balance).
+  // Plan 117: + cp (total CP int) and mastery (name = cooking|alchemy, value =
+  // imperial bonus pct, at most 2 decimals; a fix is the corrected pct).
   const OCR_AUTO_KINDS = ['silver', 'buff', 'level', 'gear', 'book_use', 'loot',
-    'currency_balance'];
+    'currency_balance', 'cp', 'mastery'];
+  const OCR_CP_MAX = 10000;      // server ocrinfer.CP_MAX_READ
+  const OCR_MASTERY_MAX = 500;   // server ocrinfer.MASTERY_MAX_READ
   const OCR_LOOT_MAX = 1e7;  // server grind.MAX_LOOT_COUNT
   const OCR_REVIEW_MAX = 50;
   const OCR_LEVEL_MAX = 75;  // server levels.LEVEL_MAX
@@ -168,14 +172,20 @@
         id: Number.isInteger(v.id) && v.id > 0 ? v.id : null,
         source: v.source === 'catalog' ? 'catalog' : 'table' };
     }
+    if (kind === 'mastery') return ocrMasteryPct(v) ? v : null;
     return Number.isInteger(v) && v >= 0 ? v : null;
+  }
+
+  // Plan 117: an imperial mastery bonus pct, 0..500 with at most 2 decimals.
+  function ocrMasteryPct(v) {
+    return isNum(v) && v >= 0 && v <= OCR_MASTERY_MAX && Math.round(v * 100) / 100 === v;
   }
 
   function validOcrReview(r) {
     if (!plainObject(r) || typeof r.id !== 'string' || !OCR_REVIEW_RE.test(r.id)) return false;
     if (r.action === 'fix') {
       return exact(r, ['id', 'action', 'value']) && (ocrLevelValue(r.value) ||
-        (Number.isInteger(r.value) && r.value >= 0 && r.value <= 1e13));
+        (Number.isInteger(r.value) && r.value >= 0 && r.value <= 1e13) || ocrMasteryPct(r.value));
     }
     return (r.action === 'accept' || r.action === 'discard') && exact(r, ['id', 'action']);
   }
@@ -293,6 +303,8 @@
     if (r.kind === 'level') return 'Lv ' + r.value.level + ' ' + r.value.pct + '%';
     if (r.kind === 'gear') return r.name.toUpperCase() + ' ' + r.value;
     if (r.kind === 'currency_balance') return 'event ' + r.name + ' currency ' + r.value;
+    if (r.kind === 'cp') return 'CP ' + r.value;
+    if (r.kind === 'mastery') return r.name + ' imperial mastery +' + r.value + '%';
     if (r.kind === 'book_use') {
       return r.value.size + ' book used? ' + r.value.pct_before + '% -> ' + r.value.pct_after + '%';
     }
@@ -309,7 +321,8 @@
   // Fix input placeholder per kind; '' = no fix (a book suggestion).
   function ocrFixHint(kind) {
     return { silver: 'silver', buff: 'minutes left now', level: 'level pct, e.g. 61 12.5',
-      gear: 'stat 0-999', loot: 'count', currency_balance: 'balance at the shot' }[kind] || '';
+      gear: 'stat 0-999', loot: 'count', currency_balance: 'balance at the shot',
+      cp: 'total CP', mastery: 'bonus %, e.g. 40.5' }[kind] || '';
   }
 
   // Header line of the System card: "N to review".
@@ -331,6 +344,13 @@
       const lv = { review: { id: id, action: 'fix', value: { level: Number(m[1]), pct: Number(m[2]) } } };
       return validOcrBody(lv) ? lv : null;
     }
+    if (kind === 'mastery') {
+      // "40.5" / "+40.5%"
+      const m = /^\s*\+?([0-9]{1,3}(?:\.[0-9]{1,2})?)\s*%?\s*$/
+        .exec(String(text === undefined || text === null ? '' : text));
+      const mb = m && { review: { id: id, action: 'fix', value: Number(m[1]) } };
+      return mb && ocrMasteryPct(mb.review.value) && validOcrBody(mb) ? mb : null;
+    }
     const s = String(text === undefined || text === null ? '' : text).replace(/[,.\s]/g, '');
     if (!/^[0-9]{1,14}$/.test(s)) return null;
     const v = Number(s);
@@ -338,6 +358,7 @@
     if (kind === 'gear' && v > 999) return null;
     if (kind === 'loot' && (v < 1 || v > OCR_LOOT_MAX)) return null;
     if (kind === 'currency_balance' && v > 1e7) return null;
+    if (kind === 'cp' && v > OCR_CP_MAX) return null;
     const body = { review: { id: id, action: 'fix', value: v } };
     return validOcrBody(body) ? body : null;
   }
