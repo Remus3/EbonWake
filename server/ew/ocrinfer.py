@@ -46,6 +46,11 @@ BOOK_WINDOW_S = 3600
 BOOK_RECENT_S = 86400
 BOOK_TOL = 0.35
 SILVER_MIN_SPAN_S = 60
+# Plan 112: silver delta across a play window.
+BASELINE_MAX_S = 6 * 3600   # a pre-login sample this recent is the baseline
+AFTER_LOGOUT_S = 600        # a shot this soon after the window end still counts
+DIP_TOL_FRAC = 0.001        # a step down within 0.1% of the balance is OCR noise
+CONF_DIP = 0.6              # silver dropped mid-session: the gains were summed
 
 
 # -- regions -----------------------------------------------------------------------
@@ -525,3 +530,63 @@ def silver_rate(samples, window):
     return {"session": window.get("id"),
             "per_h": int(round((pts[-1][1] - pts[0][1]) * 3600 / span)),
             "span_s": int(span), "n": len(pts)}
+
+
+def _ocr_points(samples):
+    """Sorted [(ts, value, iso)] of the plan 063 OCR silver samples."""
+    pts = []
+    for s in samples if isinstance(samples, list) else []:
+        if not (isinstance(s, dict) and isinstance(s.get("source"), str)
+                and s["source"].startswith("ocr:") and isinstance(s.get("value"), int)
+                and not isinstance(s.get("value"), bool) and s["value"] >= 0):
+            continue
+        ts = _parse(s.get("at"))
+        if ts is not None:
+            pts.append((ts, s["value"], s["at"]))
+    pts.sort(key=lambda p: p[0])
+    return pts
+
+
+def silver_delta(samples, window, why=None):
+    """Plan 112: {silver, first, last, n, conf, why} earned across one play
+    window {start, end|None}. Baseline: the last OCR sample at or before the
+    start (within BASELINE_MAX_S), else the first inside; end: the last sample
+    inside (or up to AFTER_LOGOUT_S past the end). A step down beyond
+    DIP_TOL_FRAC (silver spent mid-session) sums the gains instead, at
+    CONF_DIP. None with fewer than 2 points or no gain; the reason is appended
+    to `why` (a list) when one is passed."""
+    def no(reason):
+        if isinstance(why, list):
+            why.append(reason)
+        return None
+    if not isinstance(window, dict):
+        return no("no play window")
+    start = _parse(window.get("start"))
+    end = _parse(window.get("end")) if window.get("end") else None
+    if start is None:
+        return no("no play window")
+    pts = _ocr_points(samples)
+    before = [p for p in pts if start - BASELINE_MAX_S <= p[0] <= start]
+    inside = [p for p in pts if p[0] > start and (end is None or p[0] <= end + AFTER_LOGOUT_S)]
+    use = before[-1:] + inside
+    if len(use) < 2:
+        return no(f"{len(use)} OCR silver sample(s) in the session; 2 needed")
+    gains, dips = 0, 0
+    for (_, a, _), (_, b, _) in zip(use, use[1:]):
+        if b >= a:
+            gains += b - a
+        elif a - b > a * DIP_TOL_FRAC:
+            dips += a - b
+    net = use[-1][1] - use[0][1]
+    if dips:
+        if gains <= 0:
+            return no(f"silver fell {net} across the session")
+        silver, conf = gains, CONF_DIP
+        reason = f"silver dropped {dips} mid-session (spent?); summed the {gains} gained"
+    else:
+        if net <= 0:
+            return no(f"silver fell {net} across the session" if net < 0
+                      else "no silver gained across the session")
+        silver, conf, reason = net, 1.0, None
+    return {"silver": silver, "first": use[0][2], "last": use[-1][2], "n": len(use),
+            "conf": conf, "why": reason}

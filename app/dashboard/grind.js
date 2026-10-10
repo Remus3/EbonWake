@@ -369,7 +369,19 @@
       const amt = el('span', 'ew-mprice', C.fmtSilver(silver));
       const pile = C.trashPileText(s);
       if (pile) amt.title = 'loot-valued: ' + pile;
+      // Plan 112: an auto session's silver may be typed over (typed beats derived).
+      if (!pile && s.auto === true) {
+        amt.style.cursor = 'pointer';
+        if (!amt.title) amt.title = 'click to type the silver earned';
+        amt.addEventListener('click', function () { editSilver(r, amt, s); });
+      }
       r.appendChild(amt);
+      const badge = C.silverSrcBadge(s);
+      if (badge) {
+        const b = el('span', 'ew-pill', badge.text);
+        b.title = badge.title;
+        r.appendChild(b);
+      }
       r.appendChild(el('span', 'ew-mprice ew-gnum', C.fmtSilver(C.silverPerHour(silver, s.minutes)) + '/h'));
       if (pile) r.appendChild(el('span', 'ew-muted', pile));
       const x = el('button', 'ew-tx', 'x');
@@ -383,6 +395,25 @@
       box.appendChild(r);
     });
     body.appendChild(box);
+  }
+
+  // Plan 112: swap the amount for a silver input; Enter saves {edit: {id, silver}}.
+  function editSilver(row, amt, s) {
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.size = 10;
+    inp.placeholder = '1.2b';
+    inp.value = typeof s.silver === 'number' && s.silver > 0 ? String(s.silver) : '';
+    inp.title = 'silver: 1.2b, 850m or 1,234,567; Enter saves, Esc cancels';
+    row.replaceChild(inp, amt);
+    inp.focus();
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { row.replaceChild(amt, inp); return; }
+      if (e.key !== 'Enter') return;
+      const r = C.parseGrindForm('stop', { silver: inp.value, trash: '', loot: [] });
+      if (r.error) { msg(r.error); return; }
+      send({ edit: { id: s.id, silver: r.body.stop.silver } }, 'silver saved');
+    });
   }
 
   // Plan 039: one row per loot item (count input, sell-vs-vendor hint, x for

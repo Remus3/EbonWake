@@ -733,6 +733,11 @@ class EWServer(ThreadingHTTPServer):
         return {"status": src["status"], "reason": reason, "updated": src["updated"]}
 
     def _ocr_auto_changed(self):
+        # Plan 112: a late OCR silver sample fills a still-0 auto grind session once.
+        try:
+            self.grind.refill_silver()
+        except Exception:  # noqa: BLE001 - a derived fill never breaks the notifier
+            pass
         self.bus.bump("ocr")
         self.bus.bump("grind")
         self.bus.bump("progress")  # plan 066: gs stats (leveling bumps its own seq)
@@ -1071,11 +1076,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def _post_grind(self, body):
         ops = {"start", "stop", "log", "delete", "add_spot", "buff", "clear_buff",
-               "drop_toggle", "drop_override", "loot_item", "loot_forget", "keep"}
+               "drop_toggle", "drop_override", "loot_item", "loot_forget", "keep", "edit"}
         if len(body) != 1 or not (ops & set(body)):
             raise ValueError("body must be one of {start|stop|log|delete|add_spot|buff|"
                              "clear_buff|drop_toggle|drop_override|loot_item|loot_forget|"
-                             "keep: ...}")
+                             "keep|edit: ...}")
         (op, arg), = body.items()
         out = getattr(self.server.grind, op)(arg)
         if op == "stop":  # plan 062: a manual Stop overrides the auto play session

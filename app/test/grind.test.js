@@ -289,3 +289,37 @@ test('overlay: GET-only grind widgets, opt-in from the query main passes', () =>
   assert.match(m, /const query = Object\.assign\(core\.widgetsQuery\(/);
   assert.match(m, /\{ query: query \}/);
 });
+
+// Plan 112: auto session silver from the OCR silver delta.
+test('silverSrcBadge: ocr_delta badge text, lowered conf marked, typed / manual none', () => {
+  const s = {
+    id: 's3', silver: 210000000, auto: true, silver_src: 'ocr_delta',
+    silver_from: { first_at: '2026-10-05T09:40:00+00:00', last_at: '2026-10-05T11:28:00+00:00', n: 3, conf: 1 }
+  };
+  const b = C.silverSrcBadge(s);
+  assert.strictEqual(b.text, 'OCR delta');
+  assert.match(b.title, /3 OCR silver reads 09:40-11:28/);
+  const dip = C.silverSrcBadge(Object.assign({}, s, { silver_from: Object.assign({}, s.silver_from, { conf: 0.6 }) }));
+  assert.strictEqual(dip.text, 'OCR delta ~');
+  assert.match(dip.title, /dropped mid-session/);
+  assert.strictEqual(C.silverSrcBadge(Object.assign({}, s, { silver_src: 'typed' })), null);
+  assert.strictEqual(C.silverSrcBadge({ id: 's1', silver: 5 }), null);
+  assert.strictEqual(C.silverSrcBadge(null), null);
+  assert.strictEqual(C.silverSrcBadge({ silver_src: 'ocr_delta' }).text, 'OCR delta');
+});
+
+test('validGrindBody: edit {id, silver} only', () => {
+  assert.strictEqual(C.validGrindBody({ edit: { id: 's12', silver: 0 } }), true);
+  assert.strictEqual(C.validGrindBody({ edit: { id: 's12', silver: 1e13 } }), true);
+  for (const bad of [{ edit: { id: 's12' } }, { edit: { id: 'x', silver: 1 } }, { edit: { id: 's1', silver: -1 } },
+    { edit: { id: 's1', silver: 1e13 + 1 } }, { edit: { id: 's1', silver: '1' } },
+    { edit: { id: 's1', silver: 1, trash: 0 } }, { edit: 's1' }]) {
+    assert.strictEqual(C.validGrindBody(bad), false, JSON.stringify(bad));
+  }
+});
+
+test('Grind tab badges ocr_delta rows and posts a typed edit', () => {
+  const g = read('dashboard/grind.js');
+  assert.match(g, /C\.silverSrcBadge\(s\)/);
+  assert.match(g, /send\(\{ edit: \{ id: s\.id, silver: /);
+});
