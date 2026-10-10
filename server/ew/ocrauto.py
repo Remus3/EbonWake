@@ -15,7 +15,11 @@ rest go to store domain `ocr_review` (MAX_REVIEW, oldest dropped) for accept /
 fix / discard. Plan 066 adds level / XP % samples (held for review when they
 break the history), AP / AAP / DP and a book-use suggestion (always reviewed)
 through `ocrinfer`; plan 088 adds Monster Zone Info reads (`zoneinfo`, queued
-for review below the gate). Nothing reaches the game: the input is image files the operator
+for review below the gate). Plan 111: a book-use suggestion at or over
+AUTO_APPLY_MIN is applied instead of queued, a shot near a world boss spawn
+whose text names that boss ticks its loot (`bosses`, by: auto), and every such
+auto-apply (and every committed zone read) is listed in store domain
+`auto_applied` with an Undo. Nothing reaches the game: the input is image files the operator
 saved with the game's own screenshot key, read after they are written.
 """
 
@@ -25,7 +29,7 @@ import re
 import threading
 import time
 
-from . import ocr, ocrinfer, zoneinfo
+from . import autotick, ocr, ocrinfer, zoneinfo
 from .grind import MAX_BUFF_MINUTES, MAX_SILVER, SEED_BUFFS
 from .leveling import _ok_pct
 from .levels import LEVEL_RANGE
@@ -33,6 +37,13 @@ from .progress import GS_KEYS, GS_RANGE
 from .xpbooks import SIZES
 
 AUTO_COMMIT_MIN = 0.9
+# Plan 111: a book-use or boss-loot suggestion at or over this is applied (not
+# a setting - plan 080 purged tunables); below it the book queues as before and
+# a boss stays the plan 068 time-only suggestion.
+AUTO_APPLY_MIN = 0.95
+MAX_APPLIED = 200
+VIEW_APPLIED = 10
+BOSS_PROX_EARLY = 0.5    # x factor: a shot before the spawn (the boss was not up yet)
 DAILY_CAP = 120
 AFTER_LOGOUT_S = 60
 MAX_REVIEW = 50
@@ -190,6 +201,22 @@ def buff_fields(doc, names=SEED_BUFFS):
     return out
 
 
+def boss_name_conf(doc, boss):
+    """Plan 111: how well the OCR text names `boss` - 1.0 for the (normalised)
+    name on a line, else the best plan 040 1 - edit distance, else 0. The loot
+    window title reads "<boss>'s ..." so it matches by the same name."""
+    lines = ocr._lines(doc.get("lines") if isinstance(doc, dict) else None)
+    known = ocr._loot_names([boss])
+    best = 0.0
+    for ln in lines:
+        if ocr._find_names(ln["text"], [boss]):
+            return 1.0
+        _, d = ocr._best_name(ln["text"], known) if known else (None, None)
+        if d is not None:
+            best = max(best, round(1 - d, 3))
+    return best
+
+
 # -- helpers ---------------------------------------------------------------------
 
 def _iso(ts):
@@ -269,11 +296,13 @@ class AutoOcr:
     """Store domains: `ocr_auto` {day, count, seen: [key], commits: [{id, file,
     kind, name, value, at, shot_at, prev?, sample?, undone}], next}, `ocr_review`
     {items: [{id, file, kind, name, value, conf, why, at, shot_at}], next},
-    `silver` {samples: [{id, at, value, source}]} (oldest first)."""
+    `silver` {samples: [{id, at, value, source}]} (oldest first); plan 111
+    `auto_applied` {items: [{id, at, kind, value, conf, file, undo_id, undone}],
+    next} (newest first, MAX_APPLIED)."""
 
     def __init__(self, store, game, reader, grind, settings=None, clock=time.time,
                  on_change=None, leveling=None, progress=None, play=None, regions=None,
-                 loot_target=None, zones=None):
+                 loot_target=None, zones=None, bosses=None):
         self.store = store
         self.game = game
         self.reader = reader              # OcrService (plan 009): .doc(name) -> {text, lines}
@@ -287,6 +316,8 @@ class AutoOcr:
         self.loot_target = loot_target
         # Plan 088: ZoneXpService; without one zone panels are not read.
         self.zones = zones
+        # Plan 111: BossService; without one boss loot is never auto-ticked.
+        self.bosses = bosses
         self.zone_titles = zoneinfo.load_titles()
         self.regions = regions if regions is not None else ocrinfer.load_regions()
         self.settings = settings or (lambda: {})
@@ -456,17 +487,21 @@ class AutoOcr:
                     f = dict(f, why=f"{f['why']}; {hold}")
             if hold is None and f["conf"] >= mn:
                 try:
-                    self._commit(shot["name"], f["kind"], f["name"], f["value"], shot_at)
+                    uid = self._commit(shot["name"], f["kind"], f["name"], f["value"], shot_at)
                     if agree is not None:
                         self._drop_review(agree)
                     touched = True
+                    if f["kind"] == zoneinfo.KIND:
+                        self._log_applied(f["kind"], f["value"], f["conf"], shot["name"], uid)
                     if before is not None:
-                        self._suggest_book(shot["name"], f["value"], shot_at, *before)
+                        self._suggest_book(shot["name"], f["value"], shot_at, *before,
+                                           level_conf=f["conf"])
                     continue
                 except ValueError as e:
                     f = dict(f, why=f"{f['why']}; {e}")
             self._enqueue_review(shot["name"], f, shot_at)
             touched = True
+        touched = self._boss_read(shot["name"], doc, shot_at) or touched
         if touched:
             self._changed()
 
@@ -501,15 +536,47 @@ class AutoOcr:
             out += ocrinfer.gear_fields(doc, size=size, regions=self.regions)
         return out
 
-    def _suggest_book(self, file, value, shot_at, prev, rate):
-        """Queue a book-use suggestion (never auto-committed) for an XP jump."""
+    def _suggest_book(self, file, value, shot_at, prev, rate, level_conf=1.0):
+        """A book use for an XP jump: applied at AUTO_APPLY_MIN or over (plan
+        111, logged with an Undo), else queued for review."""
         books = getattr(self.leveling, "books", None)
         if books is None:
             return
         recent = books.recent(value["level"], shot_at - ocrinfer.BOOK_RECENT_S)
-        sug = ocrinfer.book_suggestion(prev, value["level"], value["pct"], shot_at, rate, recent)
-        if sug is not None:
-            self._enqueue_review(file, sug, shot_at)
+        sug = ocrinfer.book_suggestion(prev, value["level"], value["pct"], shot_at, rate, recent,
+                                       level_conf)
+        if sug is None:
+            return
+        if sug["conf"] >= AUTO_APPLY_MIN:
+            try:
+                uid = self._commit(file, sug["kind"], sug["name"], sug["value"], shot_at)
+                self._log_applied(sug["kind"], sug["value"], sug["conf"], file, uid)
+                return
+            except ValueError as e:
+                sug = dict(sug, why=f"{sug['why']}; {e}")
+        self._enqueue_review(file, sug, shot_at)
+
+    def _boss_read(self, file, doc, shot_at):
+        """Plan 111: a shot within BOSS_WINDOW_MIN of a spawn whose text names
+        that boss ticks its loot (by: auto) when name match x window proximity
+        reaches AUTO_APPLY_MIN; a weaker or time-only match stays the plan 068
+        suggestion. Only logged-in shots get here. True on a tick."""
+        if self.bosses is None:
+            return False
+        ticked = False
+        for day, boss, spawn in autotick.boss_spawns(shot_at, self.bosses.table):
+            prox = 1.0 if shot_at >= spawn else BOSS_PROX_EARLY
+            conf = round(boss_name_conf(doc, boss) * prox, 3)
+            if conf < AUTO_APPLY_MIN:
+                continue
+            try:
+                if not self.bosses.auto_tick(day, boss):
+                    continue  # ticked already, unticked by the operator, or Garmoth cap
+            except ValueError:
+                continue  # an old shot outside the tick window
+            self._log_applied("boss", {"day": day, "boss": boss}, conf, file, f"{day}|{boss}")
+            ticked = True
+        return ticked
 
     def _changed(self):
         if self.on_change is not None:
@@ -806,6 +873,56 @@ class AutoOcr:
                 self.grind.restore_buff(c.get("name"), prev.get("ends"), prev.get("armed"))
             c["undone"] = True
             self._save_auto(d)
+            self._mark_undone(uid)
+        self._changed()
+        return self.view()
+
+    # -- plan 111: auto-applied log ------------------------------------------------
+
+    def _applied(self):
+        doc = self.store.get("auto_applied")
+        items = [i for i in doc.get("items", []) if isinstance(i, dict)] \
+            if isinstance(doc.get("items"), list) else []
+        nxt = doc.get("next") if _ok_int(doc.get("next"), 1, 10 ** 9) else 1
+        return {"items": items, "next": nxt}
+
+    def _log_applied(self, kind, value, conf, file, undo_id):
+        with self._lock:
+            a = self._applied()
+            row = {"id": f"a{a['next']}", "at": _iso(self.clock()), "kind": kind,
+                   "value": value, "conf": conf, "file": _str(file, 255),
+                   "undo_id": undo_id, "undone": False}
+            a["items"] = ([row] + a["items"])[:MAX_APPLIED]
+            a["next"] += 1
+            self.store.put("auto_applied", a)
+
+    def _mark_undone(self, undo_id):
+        with self._lock:
+            a = self._applied()
+            hit = False
+            for row in a["items"]:
+                if row.get("undo_id") == undo_id and not row.get("undone"):
+                    row["undone"] = hit = True
+            if hit:
+                self.store.put("auto_applied", a)
+
+    def undo_applied(self, aid):
+        """Undo one auto-applied row: a book use / zone read through `undo`, a
+        boss loot tick through BossService.untick (which also blocks a later
+        auto tick of that boss on that day)."""
+        if not isinstance(aid, str) or not re.fullmatch(r"a[0-9]{1,9}", aid):
+            raise ValueError("undo must be an id like a3")
+        with self._lock:
+            row = next((r for r in self._applied()["items"] if r.get("id") == aid), None)
+            if row is None:
+                raise ValueError(f"unknown auto-applied row: {aid}")
+            if row.get("undone"):
+                raise ValueError(f"already undone: {aid}")
+            if row.get("kind") != "boss":
+                return self.undo(row.get("undo_id"))
+            v = row.get("value") if isinstance(row.get("value"), dict) else {}
+            self._need(self.bosses).untick({"boss": v.get("boss"), "day": v.get("day")})
+            self._mark_undone(row.get("undo_id"))
         self._changed()
         return self.view()
 
@@ -862,6 +979,7 @@ class AutoOcr:
         with self._lock:
             d = self._auto()
             items = self._review()["items"]
+            applied = self._applied()["items"][:VIEW_APPLIED]
             pending = len(self._queue)
         commits = [{k: c.get(k) for k in ("id", "file", "kind", "name", "value", "at", "via")}
                    for c in reversed(d["commits"]) if not c.get("undone")][:VIEW_COMMITS]
@@ -869,6 +987,8 @@ class AutoOcr:
                                          "shot_at")} for i in reversed(items)]
         return {"enabled": enabled, "commit_min": mn, "daily_cap": cap, "today": d["count"],
                 "pending": pending, "review": review, "commits": commits,
+                "applied": [{k: a.get(k) for k in ("id", "at", "kind", "value", "conf", "file",
+                                                   "undone")} for a in applied],
                 "silver": self._last_silver(), "silver_h": self._silver_h()}
 
     def health(self):

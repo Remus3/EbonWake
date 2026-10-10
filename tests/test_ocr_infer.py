@@ -400,21 +400,22 @@ def test_gear_from_an_older_shot_never_overwrites_a_newer_read(env):
 
 
 def test_book_use_suggested_after_a_book_was_just_added(env):
+    # 7.95 % against a 7.5 % book: under plan 111's AUTO_APPLY_MIN, so reviewed
     env.clock.t = T0 - 600
     env.books.add({"size": "large", "n": 1})
     _run(env, [("a.jpg", T0, _doc("Lv 61 10.000%")),
-               ("b.jpg", T0 + 300, _doc("Lv 61 17.600%"))])
-    assert [s["pct"] for s in _ocr_samples(env)] == [10, 17.6]
+               ("b.jpg", T0 + 300, _doc("Lv 61 17.950%"))])
+    assert [s["pct"] for s in _ocr_samples(env)] == [10, 17.95]
     item = next(r for r in env.auto.view()["review"] if r["kind"] == "book_use")
-    assert item["value"] == {"size": "large", "pct_before": 10, "pct_after": 17.6}
+    assert item["value"] == {"size": "large", "pct_before": 10, "pct_after": 17.95}
     env.auto.review({"id": item["id"], "action": "accept"})
-    used = env.books.view(61, 17.6, None)["used"]
-    assert used[0]["size"] == "large" and used[0]["pct_after"] == 17.6
-    assert env.books.view(61, 17.6, None)["owned"]["large"] == 0
+    used = env.books.view(61, 17.95, None)["used"]
+    assert used[0]["size"] == "large" and used[0]["pct_after"] == 17.95
+    assert env.books.view(61, 17.95, None)["owned"]["large"] == 0
     uid = next(c["id"] for c in env.auto.view()["commits"] if c["kind"] == "book_use")
     env.auto.undo(uid)
-    assert env.books.view(61, 17.6, None)["used"] == []
-    assert env.books.view(61, 17.6, None)["owned"]["large"] == 1
+    assert env.books.view(61, 17.95, None)["used"] == []
+    assert env.books.view(61, 17.95, None)["owned"]["large"] == 1
 
 
 def test_no_book_suggestion_without_a_recent_book(env):

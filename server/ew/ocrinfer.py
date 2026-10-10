@@ -455,12 +455,14 @@ def prev_sample(samples, shot_ts):
     return None
 
 
-def book_suggestion(prev, level, pct, shot_ts, rate, books):
+def book_suggestion(prev, level, pct, shot_ts, rate, books, level_conf=1.0):
     """A {kind: book_use, name: size, value: {size, pct_before, pct_after},
     conf, why} review field when the XP jump since `prev` (same level, at most
     BOOK_WINDOW_S earlier) minus the grind gain at `rate` %/h matches one book
     of a size in `books` ({size: pct of one book}, sizes just added and owned),
-    else None."""
+    else None. Plan 111: conf = (1 - relative miss) x `level_conf` (the level
+    read's own confidence), 0 when two sizes fit within BOOK_TOL. A jump across
+    a level-up is never suggested (same level only)."""
     if prev is None or not books or prev.get("level") != level:
         return None
     t0 = _parse(prev.get("ts"))
@@ -468,20 +470,26 @@ def book_suggestion(prev, level, pct, shot_ts, rate, books):
         return None
     jump = pct - prev["pct"]
     residual = jump - (rate or 0) * (shot_ts - t0) / 3600
-    best = None
+    best, fits = None, 0
     for size, per in books.items():
         if not isinstance(per, (int, float)) or per <= 0:
             continue
         off = abs(residual - per) / per
-        if off <= BOOK_TOL and (best is None or off < best[1]):
-            best = (size, off, per)
+        if off <= BOOK_TOL:
+            fits += 1
+            if best is None or off < best[1]:
+                best = (size, off, per)
     if best is None:
         return None
     size, off, per = best
+    lc = level_conf if isinstance(level_conf, (int, float)) and not isinstance(level_conf, bool) \
+        and 0 <= level_conf <= 1 else 0
+    why = f"XP +{round(jump, 3)}% in {int(shot_ts - t0)} s; one {size} book is ~{per}%"
+    if fits > 1:
+        why += "; another book size fits too"
     return {"kind": "book_use", "name": size,
             "value": {"size": size, "pct_before": prev["pct"], "pct_after": pct},
-            "conf": round(1 - off, 3),
-            "why": f"XP +{round(jump, 3)}% in {int(shot_ts - t0)} s; one {size} book is ~{per}%"}
+            "conf": 0.0 if fits > 1 else round((1 - off) * lc, 3), "why": why}
 
 
 # -- silver/h (plan 062 session) ---------------------------------------------------
