@@ -271,3 +271,56 @@ test('dashboard: settings tab mounted, script loaded, min text 12px', () => {
   const css = read('shared/ew.css');
   for (const m of css.matchAll(/font-size:\s*(\d+)px/g)) assert.ok(Number(m[1]) >= 12, m[0]);
 });
+
+// Plan 109: the Value Pack state is read from the buff timer; the checkbox is
+// a fallback override behind the disclosure (same derivedField as plan 108).
+const NOON = (d) => Date.parse(d + 'T12:00:00Z'); // the local date is the same in any +-11 h zone
+const isoUtc = (ms) => new Date(ms).toISOString().replace('.000Z', '+00:00');
+
+test('plan 109: Value Pack read-only line from the derived row', () => {
+  const f = C.SETTINGS_FIELDS['market.vp'];
+  assert.strictEqual(f.derived, 'Value Pack');
+  assert.strictEqual(f.type, 'bool');
+  assert.deepStrictEqual(C.derivedSettingLine('market.vp',
+    { value: true, source: 'timer', ends: isoUtc(NOON('2026-11-02')) }),
+  { text: 'Value Pack: active until 11-02 (buff timer)', stale: false, override: false });
+  assert.strictEqual(C.derivedSettingLine('market.vp',
+    { value: false, source: 'expired', ends: isoUtc(NOON('2026-10-05')) }).text,
+  'Value Pack: off (expired 10-05)');
+  assert.strictEqual(C.derivedSettingLine('market.vp', { value: false, source: 'default' }).text,
+    'Value Pack: unknown - no VP assumed');
+  const t = C.derivedSettingLine('market.vp', { value: true, source: 'typed', ends: null });
+  assert.deepStrictEqual(t, { text: 'Value Pack: active (typed)', stale: false, override: true });
+  assert.strictEqual(C.derivedSettingLine('market.vp', { value: true, source: 'config' }).text,
+    'Value Pack: active (config/local.json)');
+  assert.strictEqual(C.derivedSettingLine('market.vp', null).text, 'Value Pack: -');
+  // The override still posts a bool and clears like any ledger key.
+  assert.ok(C.validSettingsBody({ set: { 'market.vp': true } }));
+  assert.ok(C.validSettingsBody({ clear: 'market.vp' }));
+  assert.match(read('dashboard/settings.js'), /f\.derived \? derivedField\(f\) : field\(f\)/);
+});
+
+test('plan 109: Timers row "Value Pack ends MM-DD HH:MM" and the T-24 h digest row', () => {
+  const T = NOON('2026-10-20');
+  const ends = T + 13 * 86400000;
+  const snap = { at: {}, today: { items: [] }, grind: { buffs: [{ id: 'vp', name: 'Value Pack', ends: isoUtc(ends) }] } };
+  const timers = (t) => C.composeNow(snap, t).cards.filter((c) => c.id === 'timers')[0];
+  const card = timers(T);
+  const row = card.rows[card.rows.length - 1];
+  const d = new Date(ends);
+  const p2 = (n) => String(n).padStart(2, '0');
+  assert.strictEqual(row.label, 'Value Pack ends ' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + ' ' +
+    p2(d.getHours()) + ':' + p2(d.getMinutes()));
+  assert.strictEqual(row.source, 'vp');
+  assert.strictEqual(row.cls, '');
+  // inside the last day: a warn row; ran out: no row
+  assert.strictEqual(timers(ends - 3600000).rows.filter((r) => r.source === 'vp')[0].cls, 'warn');
+  assert.ok(!timers(ends + 1).rows.some((r) => r.source === 'vp'));
+  // plan 074 digest: the server's value_pack row, informational (no ack)
+  const view = { show: true, maint: { start_utc: isoUtc(ends + 3600000), end_utc: isoUtc(ends + 5 * 3600000) },
+    warnings: [], ending: [], acked: [], value_pack: { ends: isoUtc(ends), in_s: 7200 } };
+  const md = C.nowMaintDigest(view, ends - 7200000);
+  assert.deepStrictEqual(md.rows.map((r) => [r.label, r.value, r.ack || null]),
+    [['Value Pack', C.fmtDuration(7200000), null]]);
+  assert.match(md.rows[0].note, /^ends \d\d-\d\d \d\d:\d\d$/);
+});

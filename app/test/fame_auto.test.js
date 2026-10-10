@@ -22,7 +22,7 @@ test('fame row: derived value, source and age', () => {
   assert.strictEqual(C.derivedSettingLine('market.fame_pct', { value: 0, source: 'default' }).text,
     'Family fame bonus: 0 % (no screenshot read yet)');
   assert.strictEqual(C.derivedSettingLine('market.fame_pct', null).text, 'Family fame bonus: -');
-  assert.strictEqual(C.derivedSettingLine('market.vp', { value: true, source: 'ocr' }), null);
+  assert.strictEqual(C.derivedSettingLine('ui.theme', { value: 'dark', source: 'ocr' }), null);
 });
 
 test('fame row: the input sits behind the override disclosure, clear returns to derived', () => {
