@@ -10,6 +10,11 @@ sections to the roadmap itself).
 
 ## Ranking rationale
 
+Deep dive 2026-10-11 (research 0022): no new plan. Only service notes
+since the 10-08 patch; the Dream Horse weekly-trace event (10675) is a
+data row for 086 / 075; an arsha.io events WebSocket adds nothing at EW's
+poll scale.
+
 Deep dive 2026-10-10 (research 0020): no new plan. Nothing posted after the
 10-08 patch; a Black Spirit's Scheduler mirror is a duplicate of 003 / 025 /
 069; Altar of Blood and Event Horizon rows are data items (033, 012).
