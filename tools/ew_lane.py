@@ -86,19 +86,22 @@ def progress_task(index):
 
 def run_lane(lane, prompt, writes_code=False, timeout=3600, dry_run=False, root=ROOT,
              spawn=None, lane_ctx=None, progress=None, record=eta.record,
-             clock=time.time, model=None, effort=None):
+             clock=time.time, model=None, effort=None, eta_kind=None):
     """One headless run on one lane. Returns the kit usage line plus "worktree".
     Progress goes to the MAIN checkout's progress/lane-<i>.json once the lane
     index is claimed; a dry run or a refused claim has no index and writes none.
     model / effort (plan 099 routing) reach the kit spawn only when given; a
-    by-hand run without them keeps the kit default (pick_model / pick_effort)."""
+    by-hand run without them keeps the kit default (pick_model / pick_effort).
+    eta_kind (the loop item kind, e.g. item-plan) sets the progress ETA and is
+    recorded beside the lane kind, so mixed item sizes on one lane stop skewing
+    each other's estimate."""
     check_lane(lane)
     route = {k: v for k, v in (("model", model), ("effort", effort)) if v is not None}
     run_id = f"lane-{lane}"
     if progress is None:
         progress = kit().write_progress
     kind = f"lane-{lane}-{'code' if writes_code else 'read'}"
-    eta_s = eta.estimate(kind)
+    eta_s = eta.estimate(eta_kind, default=eta.estimate(kind)) if eta_kind         else eta.estimate(kind)
     if dry_run:
         return {"lane": lane, "dry_run": True, "eta": eta.fmt(eta_s)}
     if lane_ctx is None:
@@ -125,7 +128,10 @@ def run_lane(lane, prompt, writes_code=False, timeout=3600, dry_run=False, root=
         ok = line.get("rc") == 0 and not line.get("error")
         return line
     finally:
-        record(kind, clock() - t0, ok=ok)
+        spent = clock() - t0
+        record(kind, spent, ok=ok)
+        if eta_kind:
+            record(eta_kind, spent, ok=ok)
         if task is not None:
             progress(main, task, 100, f"{lane}: {'finished' if ok else 'failed'}", 0,
                      "done" if ok else "failed")

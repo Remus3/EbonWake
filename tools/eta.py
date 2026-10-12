@@ -7,7 +7,8 @@
 
 Log: ops/loop/control/timings.jsonl, one JSON object per line
 {"kind", "seconds", "ok", "ts"}. Estimate = median of the last 5 OK runs of that
-kind; with none, the default (60 s). Format follows FLEET item 3: s under 120 s,
+kind; with none, that kind's measured default (DEFAULTS) or 60 s. The short lane
+names build / data / review alias the lane run kind lane-<lane>-code. Format follows FLEET item 3: s under 120 s,
 m under 120 m, h beyond.
 """
 
@@ -23,6 +24,21 @@ ROOT = Path(__file__).resolve().parent.parent
 LOG = ROOT / "ops" / "loop" / "control" / "timings.jsonl"
 WINDOW = 5
 DEFAULT_S = 60.0
+# Session 29 measured medians (seconds) of OK runs: lane-<lane>-code from this
+# log (tools/ew_lane records every finished lane run), item-<kind> from loop
+# item dispatched -> finished (runs over the 3600 s lane timeout excluded).
+DEFAULTS = {
+    "lane-build-code": 416.0,
+    "lane-data-code": 491.0,
+    "lane-review-code": 763.0,
+    "item-plan": 877.0,
+    "item-deep-dive": 388.0,
+    "item-order": 301.0,
+    "item-resolve": 254.0,
+    "item-handoff": 225.0,
+    "loop-review": 87.0,
+}
+ALIASES = {lane: f"lane-{lane}-code" for lane in ("build", "data", "review")}
 
 
 def fmt(seconds):
@@ -46,10 +62,10 @@ def record(kind, seconds, ok=True, log=LOG, clock=time.time):
     return row
 
 
-def history(kind, log=LOG):
+def history(kind, log=None):
     rows = []
     try:
-        lines = Path(log).read_text(encoding="utf-8").splitlines()
+        lines = Path(log or LOG).read_text(encoding="utf-8").splitlines()
     except FileNotFoundError:
         return rows
     for line in lines:
@@ -62,9 +78,16 @@ def history(kind, log=LOG):
     return rows
 
 
-def estimate(kind, default=DEFAULT_S, log=LOG):
+def canonical(kind):
+    return ALIASES.get(kind, kind)
+
+
+def estimate(kind, default=None, log=None):
+    kind = canonical(kind)
     rows = history(kind, log)[-WINDOW:]
-    return statistics.median(rows) if rows else float(default)
+    if rows:
+        return statistics.median(rows)
+    return float(DEFAULTS.get(kind, DEFAULT_S) if default is None else default)
 
 
 def resolve_cmd(cmd):
@@ -80,7 +103,7 @@ def main(argv=None):
         record(a[1], float(a[2]), ok=ok)
         return 0
     if len(a) >= 2 and a[0] == "estimate":
-        default = float(a[a.index("--default") + 1]) if "--default" in a else DEFAULT_S
+        default = float(a[a.index("--default") + 1]) if "--default" in a else None
         print(fmt(estimate(a[1], default)))
         return 0
     if len(a) >= 4 and a[0] == "run" and a[2] == "--":

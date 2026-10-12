@@ -125,3 +125,12 @@ def test_code_lane_runs_accept_edits_read_lane_does_not(tmp_path):
     assert extra[:2] == ("--permission-mode", "acceptEdits")
     assert "Bash(python -m pytest:*)" in extra[3] and "git" not in extra[3]
     assert seen["spawn"][1][1]["extra"] == ()
+
+
+def test_item_kind_records_its_own_eta_row(tmp_path):
+    # session 29: one lane mixes plan (~15 m) and resolve (~4 m) items, so the
+    # loop worker passes the item kind; the run records under both kinds.
+    seen, _, f = _fakes(tmp_path)
+    ew_lane.run_lane("build", "x", writes_code=True, root=tmp_path,
+                     eta_kind="item-plan", **f)
+    assert seen["record"] == [("lane-build-code", True), ("item-plan", True)]

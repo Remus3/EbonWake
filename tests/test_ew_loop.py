@@ -85,7 +85,7 @@ def deps(root, **over):
         launch=lambda iid: seen["launch"].append(iid) or 4242,
         gates=lambda cwd: (True, "green"),
         leak_pre_push=lambda cwd, line: True,
-        estimate=lambda kind: 2700.0,
+        estimate=lambda kind, default=None: 2700.0,
         record=lambda kind, s, ok=True: seen["record"].append(kind),
         clock=lambda: 1_790_000_000.0,
         roster_path=None,  # plan 093: never the machine roster from FLEET_ROSTER
@@ -1013,13 +1013,40 @@ def test_handoff_password_oauth_per_host_items_are_operator_only():
 def test_checklist_eta_is_lane_median_less_elapsed(tmp_path):
     root = make_root(tmp_path, roadmap="", handoff="")
     kinds = []
-    d = deps(root, estimate=lambda kind: kinds.append(kind) or 2700.0)
+    d = deps(root, estimate=lambda kind, default=None: kinds.append(kind) or 2700.0)
     ew_loop.Items(root).put({"id": "012", "kind": "plan", "state": "dispatched",
                              "lane": "data", "pid": 1, "title": "t", "label": "l",
                              "dispatched": ew_loop.iso(d.clock() - 600)})
     doc = ew_loop.tick(deps=d, no_push=True)
     assert next(r for r in doc["checklist"] if r["id"] == "012")["eta_s"] == 2100
     assert "lane-data-code" in kinds and "loop-review" not in kinds
+
+
+def test_checklist_eta_prefers_item_kind(tmp_path):
+    root = make_root(tmp_path, roadmap="", handoff="")
+    d = deps(root, estimate=lambda kind, default=None: 900.0 if kind == "item-resolve"
+             else 2700.0)
+    ew_loop.Items(root).put({"id": "012", "kind": "resolve", "state": "dispatched",
+                             "lane": "data", "pid": 1, "title": "t", "label": "l",
+                             "dispatched": ew_loop.iso(d.clock() - 600)})
+    doc = ew_loop.tick(deps=d, no_push=True)
+    assert next(r for r in doc["checklist"] if r["id"] == "012")["eta_s"] == 300
+
+
+def test_lane_worker_passes_item_eta_kind(tmp_path):
+    root = make_root(tmp_path, roadmap="", handoff="")
+    seen = {}
+
+    def run_lane(lane, prompt, **kw):
+        seen.update(kw)
+        return {"rc": 0, "error": None, "worktree": str(tmp_path)}
+
+    d = deps(root)
+    ew_loop.Items(root).put({"id": "012", "kind": "plan", "state": "dispatched",
+                             "lane": "build", "pid": 1, "title": "t", "label": "l",
+                             "prompt": "p", "dispatched": ew_loop.iso(d.clock())})
+    ew_loop.lane_worker("012", deps=d, run_lane=run_lane)
+    assert seen.get("eta_kind") == "item-plan"
 
 
 @pytest.mark.slow

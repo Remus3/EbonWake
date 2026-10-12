@@ -1133,9 +1133,12 @@ class Tick(InboxMixin, MergeMixin):
         out, listed = [], set()
 
         def est(rec):
-            """Lane-run median (tools/ew_lane records lane-<lane>-code) less the
-            time already spent since dispatch; open items assume lane build."""
+            """Item-kind median (item-<kind>), else the lane-run median
+            (tools/ew_lane records both), less the time already spent since
+            dispatch; open items assume lane build."""
             e = self.d.estimate(f"lane-{rec.get('lane') or 'build'}-code")
+            if rec.get("kind"):
+                e = self.d.estimate(f"item-{rec['kind']}", default=e)
             if rec.get("state") in ("dispatched", "ran", "committed"):
                 with contextlib.suppress(TypeError, ValueError):
                     e -= now - _dt.datetime.fromisoformat(rec.get("dispatched")).timestamp()
@@ -1322,7 +1325,8 @@ def lane_worker(iid, deps=None, run_lane=None):
 
     try:
         line = run_lane(rec["lane"], rec["prompt"], writes_code=True, timeout=timeout,
-                        root=d.root, spawn=spawn, **route)
+                        root=d.root, spawn=spawn, eta_kind=f"item-{rec.get('kind') or 'plan'}",
+                        **route)
     except Exception as exc:  # noqa: BLE001 - LaneRefused, Refused, OSError: all retryable
         text = f"{type(exc).__name__}: {exc}"
         if is_limit(text):

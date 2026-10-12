@@ -38,3 +38,33 @@ def test_resolve_cmd_uses_which_for_shims(monkeypatch):
 def test_resolve_cmd_leaves_unknown_alone(monkeypatch):
     monkeypatch.setattr(eta.shutil, "which", lambda name: None)
     assert eta.resolve_cmd(["nope", "-x"]) == ["nope", "-x"]
+
+
+def test_lane_aliases_read_the_lane_run_kind(tmp_path):
+    # hand-off session 28: `eta.py estimate build` read the 60 s default while
+    # the lanes record lane-<lane>-code; the short lane name is an alias.
+    log = tmp_path / "t.jsonl"
+    for s in (400, 500, 600):
+        eta.record("lane-review-code", s, log=log)
+    assert eta.canonical("review") == "lane-review-code"
+    assert eta.estimate("review", log=log) == 500
+    assert eta.canonical("pytest") == "pytest"
+
+
+def test_measured_defaults_replace_flat_sixty(tmp_path):
+    # measured medians (session 29) of real lane runs and loop items; a kind
+    # with no history starts from its own measured default, never 60 s.
+    log = tmp_path / "empty.jsonl"
+    for kind in ("build", "data", "review", "lane-build-code", "item-plan"):
+        assert eta.estimate(kind, log=log) >= 200
+    assert eta.estimate("item-plan", log=log) > eta.estimate("item-resolve", log=log)
+    assert eta.estimate("unknown-kind", log=log) == eta.DEFAULT_S
+    assert eta.estimate("item-plan", default=7, log=log) == 7
+
+
+def test_cli_estimate_uses_alias(tmp_path, monkeypatch, capsys):
+    log = tmp_path / "t.jsonl"
+    monkeypatch.setattr(eta, "LOG", log)
+    eta.record("lane-data-code", 900, log=log)
+    assert eta.main(["estimate", "data"]) == 0
+    assert capsys.readouterr().out.strip() == "[~15m]"
