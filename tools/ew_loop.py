@@ -112,7 +112,8 @@ from loop_roadmap import (  # noqa: E402
     resolve_roadmap, title_tokens,  # noqa: F401
 )
 from loop_inbox import (  # noqa: E402
-    InboxMixin, order_prompt, session_done, session_orders, session_paths,
+    InboxMixin, order_prompt, order_settled, session_done, session_orders, session_paths,
+    settled_notes,
     FLOORS_IN_HOOKS, SESSION_TARGETS, inbox_prompt, order_id, queued_orders,  # noqa: F401
     triage_spawn_kwargs,  # noqa: F401
 )
@@ -939,12 +940,16 @@ class Tick(InboxMixin, MergeMixin):
                     and rec.get("state") in ("refused", "lost", "paused")))]
         resolving = {w["id"] for w in work}
         skipped = []
+        settled = settled_notes(self.root)
         for o in self.orders():
             if o["id"] in resolving:
                 continue
+            rec = self.items.get(o["id"])
+            if order_settled(o, rec, settled) and not rec:
+                continue  # answered by hand: never re-run, never listed
             hits = session_paths(o["note"], o.get("text", ""))
             if hits:  # plan 091: never a lane item; the session carries it out
-                if not (self.items.get(o["id"]) or {}).get("session_done"):
+                if not order_settled(o, rec, settled):
                     skipped.append({"id": o["id"], "text": o["title"], "skip": "session",
                                     "reason": "session: needs " + ", ".join(hits)})
                 continue

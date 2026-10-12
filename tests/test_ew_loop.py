@@ -2268,6 +2268,41 @@ def test_session_order_waits_past_adjudicate_then_answers_after_session_done(tmp
     assert len([c for c in sp.calls if c.get("note") == KIT_ORDER]) == 1
 
 
+def _settle_by_hand(d, root, name, verdict="ANSWER"):
+    """A session answered the note itself: the kit seen ledger records it, but
+    no `session-done` item record was written (2026-10-12: N9138b6 / N97fbd7)."""
+    dec = d.inbox.classify(name, "EW", "# From MAIN - ORDER\n")
+    d.inbox.mark_seen(root, name, dec, verdict=verdict)
+
+
+def test_session_order_settled_in_seen_ledger_leaves_checklist(tmp_path):
+    root, outbox, sp, d = _session_order(tmp_path)
+    ew_loop.tick(deps=d, no_push=True)
+    oid = ew_loop.order_id(KIT_ORDER)
+    assert [o["id"] for o in ew_loop.session_orders(root)] == [oid]
+    _settle_by_hand(d, root, KIT_ORDER)
+    _, work, skipped = ew_loop.Tick(d).work_list()
+    assert oid not in [w["id"] for w in work] + [h["id"] for h in skipped]
+    assert ew_loop.session_orders(root) == []
+    doc = ew_loop.tick(deps=d, no_push=True)
+    assert oid not in [r["id"] for r in doc["checklist"]]
+    assert not [c for c in sp.calls if c.get("note") == KIT_ORDER]  # never re-answered
+
+
+def test_lane_order_settled_in_seen_ledger_is_not_dispatched(tmp_path):
+    # sibling: a queued (non-session) order answered by hand, no item record,
+    # must not be re-run as a lane item
+    root, inbox, outbox = _inbox_root(tmp_path, roadmap=ROADMAP)
+    d = deps(root)
+    name = "o-from-MAIN-ORDER-to-EW-x.md"
+    ew_loop.Tick(d).queue_order(ew_loop.order_id(name), name, "# From MAIN - ORDER\nwork\n")
+    oid = ew_loop.order_id(name)
+    assert oid in [w["id"] for w in ew_loop.Tick(d).work_list()[1]]
+    _settle_by_hand(d, root, name)
+    _, work, skipped = ew_loop.Tick(d).work_list()
+    assert oid not in [w["id"] for w in work] + [h["id"] for h in skipped]
+
+
 def test_session_cli_lists_and_refuses_unknown_id(tmp_path, monkeypatch, capsys):
     root, outbox, sp, d = _session_order(tmp_path)
     ew_loop.tick(deps=d, no_push=True)

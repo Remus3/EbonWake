@@ -65,14 +65,31 @@ def queued_orders(root):
     return [o for o in doc.get("orders", []) if isinstance(o, dict) and o.get("id")]
 
 
+# The kit fleet_inbox seen ledger (fleet_inbox.SEEN_REL). A note named there
+# is settled: answered, ruled no-reply or acked.
+SEEN_REL = Path("ops/loop/control/inbox_seen.jsonl")
+
+
+def settled_notes(root):
+    return {d["note"] for d in read_jsonl(Path(root) / SEEN_REL) if d.get("note")}
+
+
+def order_settled(order, rec, settled):
+    """2026-10-12 fix: a queued order is closed by its session_done mark OR by
+    a seen-ledger line for its note (a session that answered the note by hand
+    and never ran `session-done` left N9138b6 / N97fbd7 open forever)."""
+    return bool((rec or {}).get("session_done")) or order.get("note") in settled
+
+
 def session_orders(root):
     """Plan 091: queued orders routed to the session and not yet marked done,
     each with its "needs" targets."""
     items = Items(root)
+    settled = settled_notes(root)
     out = []
     for o in queued_orders(root):
         hits = session_paths(o.get("note", ""), o.get("text", ""))
-        if hits and not (items.get(o["id"]) or {}).get("session_done"):
+        if hits and not order_settled(o, items.get(o["id"]), settled):
             out.append(dict(o, needs=hits))
     return out
 
