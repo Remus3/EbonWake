@@ -75,7 +75,14 @@ function serverStartCommand(env, repo) {
   };
 }
 
+// Order N1af105: the logon task passes --hidden (via tools/launch.py) so the
+// app starts to the tray; tray click, hotkey and second-instance still show it.
+function startHidden(argv) {
+  return Array.isArray(argv) && argv.indexOf('--hidden') !== -1;
+}
+
 module.exports = {
   menuTemplate: menuTemplate, iconBitmap: iconBitmap, isEwVersion: isEwVersion,
-  killablePid: killablePid, serverStartCommand: serverStartCommand, EMBER: EMBER
+  killablePid: killablePid, serverStartCommand: serverStartCommand, startHidden: startHidden,
+  EMBER: EMBER
 };

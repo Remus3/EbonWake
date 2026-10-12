@@ -134,7 +134,7 @@ def status(run=subprocess.run) -> dict:
 
 def install(run=subprocess.run, env=None, root=ROOT, exe=None, tmp_dir=None) -> dict:
     root = Path(root)
-    xml = task_xml(command=pythonw(exe), arguments=f'"{root / "tools" / "launch.py"}"',
+    xml = task_xml(command=pythonw(exe), arguments=f'"{root / "tools" / "launch.py"}" --hidden',
                    workdir=str(root), user=current_user(env))
     tmp_dir = Path(tmp_dir) if tmp_dir else root / "ops" / "runtime"
     tmp_dir.mkdir(parents=True, exist_ok=True)

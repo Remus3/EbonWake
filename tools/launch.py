@@ -1,6 +1,7 @@
 """Start the EW server (if not already healthy) and the Electron app.
 
-Used by the "Ebonwake" Desktop shortcut (pythonw tools/launch.py). Idempotent:
+Used by the "Ebonwake" Desktop shortcut (pythonw tools/launch.py) and the logon
+task (with --hidden: Electron starts to the tray, no dashboard window). Idempotent:
 a healthy server is reused; Electron's single-instance lock focuses an already
 running dashboard. No console windows (CREATE_NO_WINDOW / DETACHED_PROCESS).
 """
@@ -44,6 +45,11 @@ def electron_exe() -> Path:
     return mod / "dist" / rel
 
 
+def electron_args(argv: list[str]) -> list[str]:
+    """Electron's arguments after the exe; --hidden (the logon task) starts to tray."""
+    return [".", "--hidden"] if "--hidden" in argv else ["."]
+
+
 def main(argv: list[str]) -> int:
     if not healthy():
         subprocess.Popen([pythonw(), "-m", "server.ew"], cwd=str(ROOT), creationflags=FLAGS,
@@ -56,7 +62,7 @@ def main(argv: list[str]) -> int:
         return 0 if healthy() else 1
     # The tray's "Restart server" re-runs this file with the same pythonw.
     env = dict(os.environ, EW_PYTHONW=pythonw())
-    subprocess.Popen([str(electron_exe()), "."], cwd=str(ROOT / "app"), creationflags=FLAGS,
+    subprocess.Popen([str(electron_exe()), *electron_args(argv)], cwd=str(ROOT / "app"), creationflags=FLAGS,
                      close_fds=True, env=env)
     return 0
 
