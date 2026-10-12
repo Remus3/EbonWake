@@ -1,16 +1,14 @@
 EW NEXT SESSION
 ---------------
-SESSION: 29
+SESSION: 30
 
-Next action: SF - on/after 2026-10-11 (date-gated; before it, skip): if
-the interactive sessions since 2026-10-08 still show 0 undispatchable
-would-deny rows in ops/loop/control/subagent_first.jsonl (session 19: 19
-would-deny, all dispatchable, research 0019; session 20: 0 / 271), write
-`deny` into ops/loop/control/subagent_first.mode, read it back, and say so
-in the next batched note to MAIN. Then confirm the loop merged 114 / 115 /
-116 (In flight below); any item left in adjudicate / merge-conflict /
-gave-up / failed-dirty is fixed by a session agent (merge-stuck recipe in
-Context).
+Next action: if the loop is armed and ROADMAP rows 127 / 129 are being
+worked by it, monitor them (ops/loop/control/loop_items/127.json,
+129.json; progress/lane-0.json, lane-1.json); any item left in
+adjudicate / merge-conflict / gave-up / failed-dirty is fixed by a
+session agent (merge-stuck recipe in Context). Answer any MAIN reply to
+the 2026-10-12 notes (kit v17 ANSWER, SF-deny + commit-msg temp-path
+INFORMATION). Otherwise pick the top ROADMAP open row.
 
 Carried forward (not acted on yet):
 - OPERATOR (one batched ask, nothing blocks on it): QA plans 009-073 in
@@ -28,21 +26,20 @@ Carried forward (not acted on yet):
 - EW sent two v8 ANSWERs to MAIN (04:00 loop note said "blocked on v6";
   04:11 supersedes it). If MAIN flags the duplicate, point to 04:11.
 - MAIN sets FLEET_SIDECAR_ROOT (kit v14 ORDER 3.4: MAIN sets it after all
-  six ANSWERs; adjudicated 2026-10-09, row 106). Each session: read HKCU
-  Environment FLEET_SIDECAR_ROOT; when non-empty (or a MAIN note says set),
-  HALT the loop, wait for 3 FREE lanes, `git worktree move` each idle
-  ../ew-worktrees/lane-<i> to <sidecar>/EW/Worktree/lane-<i>, set any held
-  loop_items record's worktree to the new path, read back `git worktree
-  list` and fleet_lanes.worktree_path(i) for i=0..2, remove HALT, flip ROADMAP
-  row 106 to [x]. Reverses if MAIN orders trees to set it themselves.
+  six ANSWERs; adjudicated 2026-10-09, row 106; SIDECAR Hdc7859). Each
+  session: read HKCU Environment FLEET_SIDECAR_ROOT; when non-empty (or a
+  MAIN note says set), HALT the loop, wait for 3 FREE lanes, `git worktree
+  move` each idle ../ew-worktrees/lane-<i> to <sidecar>/EW/Worktree/lane-<i>,
+  set any held loop_items record's worktree to the new path, read back `git
+  worktree list` and fleet_lanes.worktree_path(i) for i=0..2, remove HALT,
+  flip ROADMAP row 106 to [x]. Reverses if MAIN orders trees to set it
+  themselves.
 - MAIN to record EW's port block 8940-8959 in the machine-wide registry and
-  add EW to the roster / lane widget (roster INFO 0230 says EW is a member).
-- MAIN (next batched note, do not send alone): defect report - in session
-  28 a planner agent's first commit picked up ANOTHER repo's commit
-  message from a shared temp file (commit-msg temp path shared across
-  trees); the message was rewritten before push. Likely a kit gitlock or
-  harness temp-path collision; ask MAIN to make the commit-message temp
-  path per-tree / per-owner. Send with the SF line above.
+  add EW to the roster / lane widget (roster INFO 0230 says EW is a member;
+  Hbd1ed4).
+- NOTE: subagent_first.mode = deny is LIVE (session 29): the main thread is
+  hook-blocked from direct Bash / Read / Edit / Write / Grep / Glob calls;
+  dispatch every tool call to a sub-agent.
 - NOTE: loop item Hf9ac4b (old CHECK bullet) was dispatched 20:04
   2026-10-09 AFTER it was done by hand; lane-2 finished 20:07. If it
   leaves a branch or keep ref, discard it (main already has the seen
@@ -59,16 +56,9 @@ Carried forward (not acted on yet):
   stays in ops/loop/control/claims/ (kit treats it non-live; left alone).
 - NOTE (operator order session 28, 2026-10-10): "remove operator manual
   input as much as possible in everything". Keep pushing zero-touch:
-  wave 1 = plans 108-116; wave 2 = ROADMAP rows 117 (Imperial CP +
-  mastery OCR), 118 (Deadeye FS / crons / Agris from enhance-window OCR),
-  119 (self-hosted BDO-REST-API for family / gear - adjudicate the
-  install first), 120 (remaining typed-fields survey: pets, mounts,
-  inventory LT, crafting -> automation plans). The loop builds them.
-- NOTE: ETA tuning (session 28): loop lane runs overran their ETA - build
-  and review ~3x (607 s vs ~200 s estimate), data 114 1.7x. eta.py
-  estimate build/review/data all read ~60 s default; record real lane
-  durations (or raise the lane defaults) so 1.5x / 3x overrun checks stop
-  misfiring.
+  wave 1 = plans 108-116 and wave 2 = rows 117-120 all merged by the loop;
+  follow-on plans (127 scheduler OCR, ...) come from the 120 survey and
+  the deep-dives. The loop builds them.
 - NOTE: closed records live in docs/handoff-ledger.txt (row 104); move a
   bullet there once it is only history.
 - NOTE: run the node suite through the gate as
@@ -144,8 +134,7 @@ Carried forward (not acted on yet):
   host dead (research 0007). Plan 061 removed the default and gates any
   configured host on robots; profile features (004/041/042) are quiet until
   a self-hosted instance (docker man90/bdo-rest-api, port 8001) is set in
-  config/local.json. Self-hosting = an install, adjudicator call (ROADMAP
-  row 119 now carries it).
+  config/local.json (row 119 merged by the loop 2026-10-10).
 - NOTE: research 0003 dates (Olvia Class 3 enrol 2026-11-05, quests
   2026-11-11) are BDFoundry-sourced, unverified vs the official notice;
   NA world boss times after the 2026-11-01 DST change unconfirmed (plan 031
@@ -164,56 +153,52 @@ Carried forward (not acted on yet):
   pre-push leak sweep refuses; merge origin/main with an explicit -m.
 
 Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew (Ready, last result
-0, fire 456+), HALT absent, inbox no unhandled notes, headless 39/120
-(read 2026-10-10 14:49 session 28). FLEET_SIDECAR_ROOT empty in HKCU
-Environment (read 2026-10-10 session 28; row 106 stays MAIN-gated).
-ROADMAP open: 114 / 115 / 116 (loop in flight), 117-120 (new, open).
-State: ops/loop/control/loop_items/*.json, progress/loop.json,
-progress/lane-<i>.json, inbox_status.json. Merge-stuck items are fixed by
-a session agent (merge refs/ew/keep/<id> onto main, keep both sides, mark
-item merged, delete keep ref, push). Restart: stop the server pid from
-/api/version, then `python tools/launch.py --server-only`. Proxy probe:
-netstat for :3456 LISTENING. Memory is tight on the box; run suites
-sequentially. Repo-review style whole-checkout work runs by hand in a
-session, not as a loop lane (lanes cannot read gitignored main-checkout
-dirs, the gitlock or the progress file).
+0, last run 2026-10-12 09:34), HALT absent, inbox_status running, headless
+10/120 (read 2026-10-12 09:40 session 29). FLEET_SIDECAR_ROOT empty in
+HKCU Environment (read 2026-10-12 session 29; row 106 stays MAIN-gated).
+ROADMAP open: 127 (scheduler OCR), 129 (loop round-3 verifier pass) -
+both loop-dispatched. State: ops/loop/control/loop_items/*.json,
+progress/loop.json, progress/lane-<i>.json, inbox_status.json.
+Merge-stuck items are fixed by a session agent (merge
+refs/ew/keep/<id> onto main, keep both sides, mark item merged, delete
+keep ref, push). Restart: stop the server pid from /api/version, then
+`python tools/launch.py --server-only`. Proxy probe: netstat for :3456
+LISTENING. Memory is tight on the box; run suites sequentially.
+Repo-review style whole-checkout work runs by hand in a session, not as a
+loop lane (lanes cannot read gitignored main-checkout dirs, the gitlock or
+the progress file).
 
-Acceptance: SF mode decided per the date gate (mode file read back);
-114 / 115 / 116 merged and ROADMAP rows flipped by the loop; nothing in
-adjudicate / merge-conflict / gave-up / failed-dirty; 117-120 dispatched
-by the loop.
+Acceptance: 127 and 129 merged and ROADMAP rows flipped by the loop;
+nothing in adjudicate / merge-conflict / gave-up / failed-dirty; any MAIN
+reply to the 2026-10-12 notes answered (or acked by ledger line).
 
-Do NOT redo: session 28 (2026-10-10): operator zero-touch order; plans
-108-116 filed (04184da); loop merged 110 (3d8962c), 108 (b9083f1), 112
-(ed265ee), 109 (10fc902), 111 (603f21b), 113 (84c17dc), all refute 0/3
-PASS, ci + codeql green on 84c17dc (38080311281 / 38080311254). ROADMAP
-rows 117-120 added (this /done). SF date gate not reached.
-session 27 (2026-10-10): status check only; no code changes.
-session 26 (2026-10-10): status check only; no code changes.
-session 25 (2026-10-10): hang recovery only (NOTE above).
-session 24 (2026-10-10): V101 DONE - row 101 merge 633fa46 verified;
-Nc0305f ANSWER sent (delivery 1/1); deep-dive DD-20261010 merged 08de0c3
-(research 0020, no new plans).
+Do NOT redo: session 29 (2026-10-12): SF - subagent_first.mode = deny
+(read back; 0 would-deny in 1024 rows since 2026-10-08T20:20); DD-20261012
+merged as 4ef541a (adjudicated after refute 3/3: merged minus a stray
+ROADMAP "Plan 128 dropped" line; added ROADMAP row 129 + docs/plans/
+129-loop-round3-verifier-pass.md), item JSON state merged; kit v17 ANSWER
+delivered to MAIN 1/1 (had never reached); v16/v17 FIX notes marked seen
+in inbox_seen.jsonl (v16 superseded); batched INFORMATION note to MAIN (SF
+deny + commit-msg temp-path defect H429c7c) delivered 1/1, outbound 2/6 for
+2026-10-12; ETA fix e6b1fed (eta.py maps build/data/review to
+lane-<lane>-code, measured-median defaults per kind, ew_lane records
+item-<kind>, ew_loop passes item kind; timings.jsonl backfilled 142 rows).
+Loop merged 114-120 (2026-10-10) and DD-20261011 / N1af105.
+session 28 (2026-10-10): operator zero-touch order; plans 108-116 filed;
+loop merged 108-113.
 Older sessions: docs/handoff-ledger.txt and git log.
 
 In flight (loop-owned; do not merge by hand while the loop holds them):
-- 114 (Today auto rules): lane data, worktree lane-2, keep ref
-  refs/ew/keep/114 (3046e0a, verdict PASS), state merge-conflict at
-  14:35 - the loop dispatches a resolve run; progress
-  progress/p114-*.json + progress/lane-<i>.json, ETA ~1-2 ticks.
-- 115 (event currency OCR): lane build, worktree lane-0, resolve run 1/2
-  ran (keep ref refs/ew/keep/115, 6467244), review worker launched 14:49;
-  ETA next tick (~15 min).
-- 116 (leveling auto samples): lane review, worktree lane-1, build ran
-  (finished 14:44), review worker launched 14:49; ETA ~1-2 ticks.
+- 127 (scheduler window OCR): lane build, lane-0, dispatched 09:34
+  2026-10-12; progress progress/lane-0.json, ETA ~11 min per run.
+- 129 (loop round-3 verifier pass): lane data, lane-1, dispatched 09:34
+  2026-10-12; progress progress/lane-1.json, ETA ~11 min per run.
+No session agents in flight.
 
-Status: 84c17dc == origin/main at /done start; /done pushes
-b72d524 (ROADMAP 117-120) + the hand-off commit (range 84c17dc..HEAD).
-CI 38080311281 + codeql 38080311254 success on 84c17dc; the /done push
-is docs-only. /done gates (session 28): gated pytest 3749 passed 0
-failed (94 s / 81 s) with 1 fleet_test_guard teardown error each run
-from the armed loop writing its runtime mid-suite (b72d524 body), gated
-node 747 pass 0 fail (npm.cmd), leak sweep ARMED (19). Loop task Ready,
-last result 0, inbox_status running. Session jsonl < 10 MB.
+Status: /done pushed a7ea665..e6b1fed (4ef541a + e6b1fed) plus the
+hand-off commit. /done gates (session 29): gated pytest 3927 passed 0
+failed (103 s), gated node 764 pass 0 fail (npm.cmd), leak sweep ARMED
+(19). CI ci 38264472933 + codeql 38264473022 on e6b1fed: both success.
+Loop task Ready, last result 0. Session jsonl < 10 MB.
 
 Start with: read this file, then CLAUDE.md, docs/plans/ROADMAP.md, git log -10.
