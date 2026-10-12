@@ -737,9 +737,100 @@ def test_refute_rounds_cap_at_three_then_adjudicate_unmerged(tmp_path):
     assert rec["verdict"] == "adjudicate"
     fixes = [c for c in sp.calls if c["writes_code"]]
     assert len(fixes) == 3 and all("1. nit" in c["prompt"] for c in fixes)
-    assert len([c for c in sp.calls if not c["writes_code"]]) == 3  # no round 4 verify
+    verifies = [c for c in sp.calls if not c["writes_code"]]
+    # plan 129: one review-only verifier pass after fix round 3, never a round 4
+    assert len(verifies) == 4 and "refute round 3/3" in verifies[-1]["prompt"]
+    assert not sp.calls[-1]["writes_code"]  # no producer answer follows the pass
     assert not (root / "feature.txt").exists()  # never merged into main
     assert "refute-rounds: 3/3" in git(root, "log", "-1", "--format=%B", rec["commit"])
+    log = rec["round_log"]
+    assert [(e["round"], e["source"]) for e in log] == [
+        (1, "verifier"), (2, "verifier"), (3, "verifier"), (3, "verifier")]
+    assert all("1. nit" in e["findings"][0] for e in log)
+
+
+def round3_world(tmp_path, kind="plan"):
+    """Plan 129: an item that already spent its 3 fix rounds, now gated."""
+    root, wt = git_world(tmp_path, kind=kind)
+    items = ew_loop.Items(root)
+    rec = items.get("012")
+    rec.update(rounds=3, round_log=[{"round": 3, "source": "verifier",
+                                     "findings": ["VERDICT: FAIL\n1. nit"]}])
+    items.put(rec)
+    return root, wt
+
+
+def review_deps(root, sp, **kw):
+    return deps(root, spawn=sp, git=real_git,
+                lane_state=lambda: [{"index": i, "state": "RUNNING", "lane": n}
+                                    for i, n in enumerate(("build", "data", "review"))],
+                **kw)
+
+
+def test_round3_clean_gets_one_verifier_pass_and_pass_merges(tmp_path):
+    root, wt = round3_world(tmp_path)
+    sp = FakeSpawn([{"rc": 0, "error": None, "result": "fine\nVERDICT: PASS"}])
+    ew_loop.tick(deps=review_deps(root, sp), no_push=True)
+    rec = ew_loop.Items(root).get("012")
+    assert len(sp.calls) == 1 and sp.calls[0]["writes_code"] is False
+    assert "refute round 3/3" in sp.calls[0]["prompt"]
+    assert rec["state"] == "merged" and rec["verdict"] == "PASS" and rec["rounds"] == 3
+    assert (root / "feature.txt").exists()
+    assert "refute-rounds: 3/3" in git(root, "log", "-1", "--format=%B", rec["commit"])
+    assert rec["round_log"][-1] == {"round": 3, "source": "verifier", "findings": [],
+                                    "final": True}
+
+
+def test_round3_clean_non_pass_is_adjudicated_without_round_4(tmp_path):
+    root, wt = round3_world(tmp_path)
+    sp = FakeSpawn([{"rc": 0, "error": None, "result": "VERDICT: FAIL\n1. still off"}])
+    ew_loop.tick(deps=review_deps(root, sp), no_push=True)
+    rec = ew_loop.Items(root).get("012")
+    assert len(sp.calls) == 1 and sp.calls[0]["writes_code"] is False
+    assert rec["state"] == "adjudicate" and rec["verdict"] == "adjudicate"
+    assert rec["rounds"] == 3 and not (root / "feature.txt").exists()
+    last = rec["round_log"][-1]
+    assert last["source"] == "verifier" and last["final"] is True
+    assert "1. still off" in last["findings"][0]
+    ew_loop.tick(deps=review_deps(root, sp), no_push=True)
+    assert len(sp.calls) == 1  # parked: nothing more runs
+
+
+def test_round3_with_findings_is_adjudicated_without_a_spawn(tmp_path):
+    root, wt = round3_world(tmp_path, kind="deep-dive")
+    items = ew_loop.Items(root)
+    rec = items.get("012")
+    rec["date"] = "20261012"  # no research doc in the worktree: an extra_checks finding
+    items.put(rec)
+    sp = FakeSpawn()
+    ew_loop.tick(deps=review_deps(root, sp), no_push=True)
+    rec = ew_loop.Items(root).get("012")
+    assert sp.calls == [] and rec["state"] == "adjudicate" and rec["rounds"] == 3
+    last = rec["round_log"][-1]
+    assert last["round"] == 3 and last["source"] == "extra_checks"
+    assert "missing docs/research/" in last["findings"][0]
+
+
+def test_round_log_records_gates_and_caps_findings(tmp_path):
+    root, wt = git_world(tmp_path)
+    def fix(kw):  # a real fix changes the tree (the gate cache keys on it)
+        (Path(kw["cwd"]) / "fixed.txt").write_text("fix\n")
+        return {"rc": 0}
+
+    sp = FakeSpawn([fix, {"rc": 0, "error": None,
+                          "result": "x" * 9000 + chr(0x2014) + "\nVERDICT: FAIL"}])
+    calls = {"n": 0}
+
+    def gates(cwd):
+        calls["n"] += 1
+        return (False, "1 failed") if calls["n"] == 1 else (True, "")
+
+    ew_loop.tick(deps=review_deps(root, sp, gates=gates), no_push=True)
+    log = ew_loop.Items(root).get("012")["round_log"]
+    assert log[0] == {"round": 1, "source": "gates", "findings": ["gates failed: 1 failed"]}
+    assert log[1]["round"] == 2 and log[1]["source"] == "verifier"
+    text = log[1]["findings"][0]
+    assert len(text) <= ew_loop.ROUND_LOG_CAP and text.isascii()
 
 
 @pytest.mark.slow

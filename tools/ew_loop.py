@@ -124,6 +124,8 @@ from loop_merge import GateCache, MergeMixin  # noqa: E402
 # Kit v12 race guards (FLEET-COMMON 16): every commit / push takes the tree's
 # git lock; every whole pytest suite holds a machine-wide suite-gate slot.
 LOOP_OWNER = "ew-loop.main"
+ROUND_LOG_CAP = 2000  # plan 129: chars kept per finding in a round_log entry
+ROUND_LOG_MAX_FINDINGS = 10
 SUITE_GATE_REL = Path("ops/fleet_kit/fleet_suite_gate.py")
 
 
@@ -627,14 +629,21 @@ class Tick(InboxMixin, MergeMixin):
             return
         rounds = rec.get("rounds", 0)
         while True:
+            # plan 129: after fix round 3 the review is still labelled round 3
+            rnd = min(rounds + 1, MAX_ROUNDS)
             ok, detail = self.gate(wt)
             findings = [] if ok else ["gates failed: " + detail]
-            findings += self.extra_checks(rec, wt)
-            if not findings and rounds < MAX_ROUNDS:  # never a round 4 (rule 7)
+            self.log_round(rec, rnd, "gates", findings)
+            extra = self.extra_checks(rec, wt)
+            self.log_round(rec, rnd, "extra_checks", extra)
+            findings += extra
+            if not findings:
+                # plan 129: a clean tree after fix round 3 still gets one
+                # review-only verifier pass; no producer answer follows it
                 if self.blocked():
                     return  # retry next tick
                 note = f"lane-review-{rec['id']}"
-                line = self.spawn(verify_prompt(rec, rounds + 1, self.last_tree),
+                line = self.spawn(verify_prompt(rec, rnd, self.last_tree),
                                   note=note, **self.route("verify", note),
                                   writes_code=False, cwd=wt, extra=VERIFY_EXTRA, kind="build",
                                   governor="queued", governor_timeout=GATE_TIMEOUT_S,
@@ -647,6 +656,7 @@ class Tick(InboxMixin, MergeMixin):
                     rec["verify_errors"] = rec.get("verify_errors", 0) + 1
                     rec["error"] = ascii_text(f"verifier rc={line.get('rc')} "
                                               f"{line.get('error') or ''}", 300)
+                    self.log_round(rec, rnd, "verifier", [rec["error"]], always=True)
                     self.items.put(rec)
                     self.step(f"{rec['id']}: verifier failed "
                               f"{rec['verify_errors']}/{MAX_ROUNDS}")
@@ -657,8 +667,10 @@ class Tick(InboxMixin, MergeMixin):
                 m = VERDICT_RX.findall(line.get("result") or "")
                 if m and m[-1].upper() == "PASS":
                     rec["verdict"] = "PASS"
+                    self.log_round(rec, rnd, "verifier", [], always=True)
                     break
                 findings = [(line.get("result") or "no verdict line")[-6000:]]
+                self.log_round(rec, rnd, "verifier", findings)
             if rounds >= MAX_ROUNDS:
                 # after round 3 the adjudicator rules (CLAUDE.md rule 7): the
                 # loop never self-accepts; the item waits unmerged for a session
@@ -678,6 +690,20 @@ class Tick(InboxMixin, MergeMixin):
                 return
         rec["rounds"] = rounds
         self.commit(rec, wt, ok)
+
+    @staticmethod
+    def log_round(rec, rnd, source, findings, always=False):
+        """Plan 129: keep what each refute round found on the loop item, so an
+        adjudicator reads it instead of reconstructing it. ASCII, each finding
+        capped (its tail: a verifier's verdict and findings end its reply)."""
+        if not findings and not always:
+            return
+        entry = {"round": rnd, "source": source,
+                 "findings": [ascii_text(f)[-ROUND_LOG_CAP:]
+                              for f in findings[:ROUND_LOG_MAX_FINDINGS]]}
+        if rec.get("rounds", 0) >= MAX_ROUNDS:
+            entry["final"] = True  # the review-only pass after fix round 3
+        rec.setdefault("round_log", []).append(entry)
 
     def blocked_marker(self, rec, wt):
         """Plan 019 4a: True when this run's lane left a fresh `"status":
