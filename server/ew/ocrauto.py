@@ -23,7 +23,9 @@ auto-apply (and every committed zone read) is listed in store domain
 the exchange window / a tooltip sets that event's balance in eventcurrency
 (held when below the logged projection). Plan 118: an enhancement window
 shot sets the current failstack, crons owned and Agris pity in deadeye
-(`ocrinfer.enhance_fields`). Nothing reaches the game: the input is image files the operator
+(`ocrinfer.enhance_fields`). Plan 127: a Black Spirit's Scheduler shot ticks
+its done Today rows (AutoTick.scheduler, logged with an Undo) and queues each
+unmatched line once. Nothing reaches the game: the input is image files the operator
 saved with the game's own screenshot key, read after they are written.
 """
 
@@ -75,6 +77,10 @@ KINDS = ("silver", "buff", "level", "gear", "book_use") + PLANNER_KINDS + (
 # a book suggestion and a zone read are accept / discard only; a loot fix is a count
 FIX_KINDS = ("silver", "buff", "level", "gear") + PLANNER_KINDS + (
     "loot", CURRENCY_KIND) + ENH_KINDS
+# Plan 127: an unmatched Black Spirit's Scheduler line (accept adds a Today
+# row, discard drops it; no fix) and the auto_applied kind of a Scheduler tick.
+SCHED_KIND = "scheduler_row"
+SCHED_APPLIED = "today"
 LOOT_KEYS = {"name", "count", "id", "source", "spot", "started"}
 LOOT_SOURCES = ("table", "catalog")
 
@@ -356,7 +362,7 @@ class AutoOcr:
     def __init__(self, store, game, reader, grind, settings=None, clock=time.time,
                  on_change=None, leveling=None, progress=None, play=None, regions=None,
                  loot_target=None, zones=None, bosses=None, catalog=None, currency=None,
-                 deadeye=None, on_doc=None):
+                 deadeye=None, on_doc=None, today_auto=None):
         self.store = store
         self.game = game
         self.reader = reader              # OcrService (plan 009): .doc(name) -> {text, lines}
@@ -383,6 +389,9 @@ class AutoOcr:
         # Plan 114: fn(file, doc, shot_at) given every doc this worker read
         # (AutoTick.on_doc: Today `shot:<cue>` rows); no second OCR.
         self.on_doc = on_doc
+        # Plan 127: AutoTick; a Black Spirit's Scheduler shot ticks Today rows
+        # (logged here with an Undo), unknown lines queue as SCHED_KIND.
+        self.today_auto = today_auto
         self.zone_titles = zoneinfo.load_titles()
         self.regions = regions if regions is not None else ocrinfer.load_regions()
         self.settings = settings or (lambda: {})
@@ -600,6 +609,7 @@ class AutoOcr:
             self._enqueue_review(shot["name"], f, shot_at)
             touched = True
         touched = self._boss_read(shot["name"], doc, shot_at) or touched
+        touched = self._scheduler_read(shot["name"], doc, shot_at) or touched
         if self.on_doc is not None:
             try:
                 self.on_doc(shot["name"], doc, shot_at)
@@ -730,6 +740,31 @@ class AutoOcr:
             self._log_applied("boss", {"day": day, "boss": boss}, conf, file, f"{day}|{boss}")
             ticked = True
         return ticked
+
+    def _scheduler_read(self, file, doc, shot_at):
+        """Plan 127: a Scheduler window shot ticks its done Today rows at
+        AUTO_APPLY_MIN (AutoTick.scheduler), each logged in `auto_applied` with
+        an Undo; each never-seen unmatched line is queued once as SCHED_KIND
+        ("unknown scheduler row"). True when something changed."""
+        if self.today_auto is None:
+            return False
+        try:
+            res = self.today_auto.scheduler(doc, shot_at, AUTO_APPLY_MIN)
+        except Exception:  # noqa: BLE001 - a Today hook never breaks the worker
+            return False
+        if not res:
+            return False
+        for t in res["ticked"]:
+            self._log_applied(SCHED_APPLIED, {"row": t["row"], "title": _str(t["title"], 80)},
+                              t["conf"], file, f"today|{t['row']}|{_iso(shot_at)}")
+        for u in res["unknown"]:
+            self._enqueue_review(file, {
+                "kind": SCHED_KIND, "name": _str(u["name"], 80), "conf": None,
+                "value": {"cadence": u["cadence"], "state": u["state"],
+                          "remaining_s": u["remaining_s"]},
+                "why": f"unknown scheduler row: accept adds a {u['cadence']} Today row"},
+                shot_at)
+        return bool(res["ticked"] or res["unknown"])
 
     def _changed(self):
         if self.on_change is not None:
@@ -1181,7 +1216,8 @@ class AutoOcr:
     def undo_applied(self, aid):
         """Undo one auto-applied row: a book use / zone read through `undo`, a
         boss loot tick through BossService.untick (which also blocks a later
-        auto tick of that boss on that day)."""
+        auto tick of that boss on that day); plan 127: a Scheduler Today tick
+        through the Today untick (blocks the row until its next reset)."""
         if not isinstance(aid, str) or not re.fullmatch(r"a[0-9]{1,9}", aid):
             raise ValueError("undo must be an id like a3")
         with self._lock:
@@ -1190,10 +1226,13 @@ class AutoOcr:
                 raise ValueError(f"unknown auto-applied row: {aid}")
             if row.get("undone"):
                 raise ValueError(f"already undone: {aid}")
-            if row.get("kind") != "boss":
+            if row.get("kind") not in ("boss", SCHED_APPLIED):
                 return self.undo(row.get("undo_id"))
             v = row.get("value") if isinstance(row.get("value"), dict) else {}
-            self._need(self.bosses).untick({"boss": v.get("boss"), "day": v.get("day")})
+            if row["kind"] == SCHED_APPLIED:
+                self._need(self.today_auto).undo_row(v.get("row"))
+            else:
+                self._need(self.bosses).untick({"boss": v.get("boss"), "day": v.get("day")})
             self._mark_undone(row.get("undo_id"))
         self._changed()
         return self.view()
@@ -1232,11 +1271,15 @@ class AutoOcr:
         with self._lock:
             r = self._review()
             item = next((i for i in r["items"] if i.get("id") == arg["id"]), None)
-            if item is None or item.get("kind") not in KINDS:
+            if item is None or item.get("kind") not in KINDS + (SCHED_KIND,):
                 raise ValueError(f"unknown review item: {arg['id']}")
             if action == "fix" and item["kind"] not in FIX_KINDS:
                 raise ValueError(f"a {item['kind']} suggestion is accepted or discarded")
-            if action != "discard":
+            if action == "accept" and item["kind"] == SCHED_KIND:
+                self._need(self.today_auto).map_unknown(
+                    item.get("name"), item.get("value"),
+                    _ts(item.get("shot_at")) or self.clock())
+            elif action != "discard":
                 value = arg["value"] if action == "fix" else item.get("value")
                 if action == "fix" and item["kind"] == "loot":
                     # Plan 113: a loot fix is the corrected count.

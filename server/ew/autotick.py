@@ -10,6 +10,8 @@ logged in within BOSS_WINDOW_MIN of a plan 031 spawn suggests that boss as
 worker ticks it when the shot's text also names the boss, `ocrauto`).
 Plan 114: `shot:<cue>` rows tick from the OCR worker's doc of a logged-in shot
 (`on_doc`), `bosses:N` rows once the period's boss loot ticks reach N.
+Plan 127: a Black Spirit's Scheduler shot ticks every listed done row
+(`scheduler`, called by the OCR worker, which logs and queues the result).
 
 Inputs are the session-log state, screenshot file times, the OCR text of shots
 the operator saved, EW's own boss ticks and the clock: nothing is read from or
@@ -21,6 +23,7 @@ import threading
 import time
 
 from . import bosses as _bosses
+from . import ocrinfer
 from . import today as _today
 
 LOGGED_IN = "logged_in"
@@ -28,6 +31,8 @@ BOSS_WINDOW_MIN = 20
 EVAL_S = 30          # a poll re-evaluates the rules at most this often
 MAX_WINDOWS = 64     # logged_in spans kept in memory
 MAX_SEEN = 500       # screenshot keys remembered (the watcher lists at most 50)
+SCHED_DOMAIN = "autotick_sched"  # plan 127: {unknown: [slug], seeded: [row id]}
+MAX_SCHED_UNKNOWN = 200
 _UTC = _dt.timezone.utc
 _DAY = _dt.timedelta(days=1)
 
@@ -72,7 +77,7 @@ class AutoTick:
     session spanning a reset, new screenshots)."""
 
     def __init__(self, store, today, dice, game, table=None, settings=None,
-                 clock=time.time, on_change=None, bosses=None, cues=None):
+                 clock=time.time, on_change=None, bosses=None, cues=None, sched=None):
         self.store = store
         self.today = today
         self.dice = dice
@@ -87,6 +92,13 @@ class AutoTick:
             except ValueError:
                 cues = {}
         self.cues = cues
+        # Plan 127: the Scheduler window data (a malformed entry = no Scheduler reads).
+        if sched is None:
+            try:
+                sched = _today.load_scheduler()
+            except ValueError:
+                sched = None
+        self.sched = sched
         self.settings = settings or (lambda: {})
         self.clock = clock
         self.on_change = on_change
@@ -191,6 +203,8 @@ class AutoTick:
             text = "\n".join(ln.get("text") for ln in (lines if isinstance(lines, list) else [])
                              if isinstance(ln, dict) and isinstance(ln.get("text"), str))
         text = " ".join(text.split())
+        if self.sched is not None and ocrinfer.is_scheduler(doc, self.sched):
+            return False  # plan 127: a Scheduler shot is read per line (`scheduler`)
         ticked = False
         for iid, rule, _ in self.today.auto_rows():
             kind, cue = _today.parse_auto(rule)
@@ -199,6 +213,76 @@ class AutoTick:
         if ticked:
             self._changed()
         return ticked
+
+    # -- plan 127: Black Spirit's Scheduler shot ------------------------------------
+
+    def _sched_state(self):
+        doc = self.store.get(SCHED_DOMAIN)
+        return {k: [x for x in doc.get(k) if isinstance(x, str)]
+                if isinstance(doc.get(k), list) else [] for k in ("unknown", "seeded")}
+
+    def scheduler(self, doc, shot_at, min_conf=0.0):
+        """Plan 127: the OCR doc of a Scheduler window shot taken at epoch
+        `shot_at` inside a logged_in span -> {ticked: [{row, title, conf}],
+        unknown: [{name, cadence, state, remaining_s}]}, or None (auto off, not
+        logged in, not a Scheduler shot). Each done line of a Today row with a
+        ticking rule ticks it (by: auto, the period in force at the shot, an
+        operator untick blocks); open lines never untick; a plan 127 seed row is
+        added the first time it is listed; an unmatched line is returned once
+        ever (store domain `autotick_sched`)."""
+        if (self.sched is None or not self._enabled() or not self._in_window(shot_at)
+                or not ocrinfer.is_scheduler(doc, self.sched)):
+            return None
+        with self._lock:
+            st = self._sched_state()
+            listed = {r["row"] for r in ocrinfer.scheduler_rows(doc, self.sched)}
+            changed = False
+            for iid, (title, kind) in _today.SCHED_SEED.items():
+                if iid in listed and iid not in st["seeded"]:
+                    try:
+                        self.today.ensure_row(iid, title, kind, _today.SCHED_RULE)
+                    except ValueError:
+                        continue  # a full list: tried again on the next shot
+                    st["seeded"].append(iid)
+                    changed = True
+            titles = self.today.titles()
+            rows = ocrinfer.scheduler_rows(doc, self.sched, titles)
+            unknown = []
+            for r in rows:
+                key = _today.slug(r["name"])
+                if r["row"] is None and key not in st["unknown"]:
+                    st["unknown"] = (st["unknown"] + [key])[-MAX_SCHED_UNKNOWN:]
+                    changed = True
+                    unknown.append({"name": r["name"], "cadence": r["cadence"],
+                                    "state": r["state"], "remaining_s": r.get("remaining_s")})
+            if changed:
+                self.store.put(SCHED_DOMAIN, st)
+        ticked = [{"row": r["row"], "title": titles.get(r["row"], r["row"]), "conf": r["conf"]}
+                  for r in rows if r["row"] is not None and r["state"] == "done"
+                  and r["conf"] >= min_conf and self.today.auto_tick(r["row"], shot_at)]
+        if ticked:
+            self._changed()
+        return {"ticked": ticked, "unknown": unknown}
+
+    def map_unknown(self, name, value, shot_at):
+        """Plan 127 review accept: an unknown Scheduler line becomes a Today row
+        of its cadence (plan 021 kind default reset) bound to `shot:scheduler`;
+        a line read as done ticks it at the shot. Returns the new row id."""
+        cadence = value.get("cadence") if isinstance(value, dict) else None
+        if cadence not in ("daily", "weekly"):
+            raise ValueError("a scheduler row is daily or weekly")
+        before = set(self.today.titles())
+        self.today.add({"title": name, "kind": cadence, "auto": _today.SCHED_RULE})
+        iid = next(iter(set(self.today.titles()) - before))
+        if value.get("state") == "done" and self.today.auto_tick(iid, shot_at):
+            self._changed()
+        return iid
+
+    def undo_row(self, iid):
+        """Plan 127 Undo of a Scheduler tick: the operator untick (blocks auto
+        ticks of the row until its next reset)."""
+        self.today.untick(iid)
+        self._changed()
 
     def decorate(self, view, now=None):
         """GET /api/today: `ready` on every `ready_minutes:N` row."""

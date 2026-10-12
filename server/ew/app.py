@@ -417,6 +417,8 @@ class EWServer(ThreadingHTTPServer):
         # Plan 114: the OCR worker hands each logged-in shot's doc to the Today
         # `shot:<cue>` rows (no second OCR).
         self.ocr_auto.on_doc = self.autotick.on_doc
+        # Plan 127: a Black Spirit's Scheduler shot ticks every listed done row.
+        self.ocr_auto.today_auto = self.autotick
         if isinstance(listeners, list):
             listeners.append(self.autotick.on_game)
         if isinstance(pollers, list):
