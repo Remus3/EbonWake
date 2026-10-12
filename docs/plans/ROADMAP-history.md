@@ -10,6 +10,12 @@ sections to the roadmap itself).
 
 ## Ranking rationale
 
+Deep dive 2026-10-12 (research 0023): one plan. 127 - a Scheduler window
+shot is one cue for many Today rows (the mirror stays ruled out by 0020;
+only the read is new). Dropped: Treasure Codex ledger (was 128; duplicates
+the Progress tab, refute 1/3), Divine Coin exchange calculator (typed
+counts, low value); arsha WebSocket (0022).
+
 Deep dive 2026-10-11 (research 0022): no new plan. Only service notes
 since the 10-08 patch; the Dream Horse weekly-trace event (10675) is a
 data row for 086 / 075; an arsha.io events WebSocket adds nothing at EW's

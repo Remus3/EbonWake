@@ -124,6 +124,9 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 118 | Deadeye enhance state from OCR: enhancement window shot reads failstack, cron count and Agris pity into the FS bank / Agris tracker (036) / EV calc (035); typed entry optional (plan doc docs/plans/118-enhance-window-ocr.md, write it first; depends on 111) | [x] done 2026-10-10 (loop; refute 0/3 PASS) |
 | 119 | Self-hosted BDO-REST-API for family / gear: adjudicate the install (docker man90/bdo-rest-api, port 8001, robots-clean) first, record the ruling, then wire config/local.json base and verify 004/041/042 profile features light up (plan doc docs/plans/119-self-hosted-profile-api.md, write it first) | [x] done 2026-10-10 (loop; refute 0/3 PASS) |
 | 120 | Remaining typed-fields survey: list every operator-typed field left (pets, mounts, inventory LT, crafting, others) with a candidate live source; write deduped automation plans + ROADMAP rows for the viable ones (research doc docs/research/NNNN-typed-fields-survey.md) | [x] done 2026-10-10 (loop; refute 0/3 PASS) |
+| 127 | Scheduler window OCR: one Black Spirit's Scheduler shot ticks every pinned daily / weekly (plan doc docs/plans/127-scheduler-window-ocr.md; depends on 114, 111, 021) | [ ] open |
+
+Plan 128 (Treasure Codex OCR) dropped 2026-10-12: duplicates the Progress tab (refute 1/3).
 
 Ranking rationale per deep dive / audit and the closed channel-order
 sections: `docs/plans/ROADMAP-history.md` (moved verbatim 2026-10-09, plan
