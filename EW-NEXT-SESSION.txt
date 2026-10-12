@@ -1,14 +1,14 @@
 EW NEXT SESSION
 ---------------
-SESSION: 30
+SESSION: 31
 
-Next action: if the loop is armed and ROADMAP rows 127 / 129 are being
-worked by it, monitor them (ops/loop/control/loop_items/127.json,
-129.json; progress/lane-0.json, lane-1.json); any item left in
-adjudicate / merge-conflict / gave-up / failed-dirty is fixed by a
-session agent (merge-stuck recipe in Context). Answer any MAIN reply to
-the 2026-10-12 notes (kit v17 ANSWER, SF-deny + commit-msg temp-path
-INFORMATION). Otherwise pick the top ROADMAP open row.
+Next action: monitor the loop (\EbonwakeOps\LaneLoop, progress/loop.json,
+loop_items/*.json); any item left in adjudicate / merge-conflict / gave-up
+/ failed-dirty is fixed by a session agent (merge-stuck recipe in
+Context). Answer any MAIN reply to the 2026-10-12 notes (kit v17 ANSWER,
+SF-deny + commit-msg temp-path INFORMATION) - none had arrived by end of
+session 30. Otherwise work the top ROADMAP open row, or let the idle
+deep-dive seed new rows (no ROADMAP row open at end of session 30).
 
 Carried forward (not acted on yet):
 - OPERATOR (one batched ask, nothing blocks on it): QA plans 009-073 in
@@ -151,14 +151,17 @@ Carried forward (not acted on yet):
   lane work, and rewording a bullet re-dispatches it (new hash).
 - NOTE: a plain `git pull` merge message carries the repo URL, which the
   pre-push leak sweep refuses; merge origin/main with an explicit -m.
+- NOTE: an order answered by hand closes in the loop checklist on a
+  session_done mark OR a kit seen-ledger line (order_settled() in
+  tools/loop_inbox.py, d08b64d, session 30); lane-order sibling too.
 
 Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew (Ready, last result
-0, last run 2026-10-12 09:34), HALT absent, inbox_status running, headless
-10/120 (read 2026-10-12 09:40 session 29). FLEET_SIDECAR_ROOT empty in
-HKCU Environment (read 2026-10-12 session 29; row 106 stays MAIN-gated).
-ROADMAP open: 127 (scheduler OCR), 129 (loop round-3 verifier pass) -
-both loop-dispatched. State: ops/loop/control/loop_items/*.json,
-progress/loop.json, progress/lane-<i>.json, inbox_status.json.
+0, last run 2026-10-12 10:19, fire 631), HALT absent, inbox_status idle,
+headless 12/120 (read 2026-10-12 session 30). FLEET_SIDECAR_ROOT empty in
+HKCU Environment (read 2026-10-12 session 30; row 106 stays MAIN-gated).
+ROADMAP open: none (127, 129 [x]); deep-dive already ran 2026-10-12, so
+the next one seeds rows 2026-10-13. State: ops/loop/control/loop_items/
+*.json, progress/loop.json, progress/lane-<i>.json, inbox_status.json.
 Merge-stuck items are fixed by a session agent (merge
 refs/ew/keep/<id> onto main, keep both sides, mark item merged, delete
 keep ref, push). Restart: stop the server pid from /api/version, then
@@ -168,37 +171,31 @@ Repo-review style whole-checkout work runs by hand in a session, not as a
 loop lane (lanes cannot read gitignored main-checkout dirs, the gitlock or
 the progress file).
 
-Acceptance: 127 and 129 merged and ROADMAP rows flipped by the loop;
-nothing in adjudicate / merge-conflict / gave-up / failed-dirty; any MAIN
-reply to the 2026-10-12 notes answered (or acked by ledger line).
+Acceptance: loop idle or merging cleanly; nothing in adjudicate /
+merge-conflict / gave-up / failed-dirty; any MAIN reply to the 2026-10-12
+notes answered (or acked by ledger line); new deep-dive rows built by the
+loop.
 
-Do NOT redo: session 29 (2026-10-12): SF - subagent_first.mode = deny
-(read back; 0 would-deny in 1024 rows since 2026-10-08T20:20); DD-20261012
-merged as 4ef541a (adjudicated after refute 3/3: merged minus a stray
-ROADMAP "Plan 128 dropped" line; added ROADMAP row 129 + docs/plans/
-129-loop-round3-verifier-pass.md), item JSON state merged; kit v17 ANSWER
-delivered to MAIN 1/1 (had never reached); v16/v17 FIX notes marked seen
-in inbox_seen.jsonl (v16 superseded); batched INFORMATION note to MAIN (SF
-deny + commit-msg temp-path defect H429c7c) delivered 1/1, outbound 2/6 for
-2026-10-12; ETA fix e6b1fed (eta.py maps build/data/review to
-lane-<lane>-code, measured-median defaults per kind, ew_lane records
-item-<kind>, ew_loop passes item kind; timings.jsonl backfilled 142 rows).
-Loop merged 114-120 (2026-10-10) and DD-20261011 / N1af105.
-session 28 (2026-10-10): operator zero-touch order; plans 108-116 filed;
-loop merged 108-113.
+Do NOT redo: session 30 (2026-10-12): plans 127 (62753d9) and 129
+(55569e5) merged by the loop and pushed, loop items read merged, ROADMAP
+rows [x], plan docs marked done in place. C1 stale checklist rows fixed in
+d08b64d (pushed): root cause = orders answered by hand never got a
+session_done mark; new order_settled() closes an order on session_done OR
+a seen-ledger line, lane-order sibling fixed; N9138b6 (kit v16) and
+N97fbd7 (kit v17) backfilled via session-done with a7ea665; read back at
+tick 631: both rows gone; refute-rounds 0/3.
+session 29 (2026-10-12): SF deny live; DD-20261012 merged as 4ef541a;
+kit v17 ANSWER + SF-deny/commit-msg INFORMATION delivered to MAIN 1/1;
+ETA fix e6b1fed.
 Older sessions: docs/handoff-ledger.txt and git log.
 
-In flight (loop-owned; do not merge by hand while the loop holds them):
-- 127 (scheduler window OCR): lane build, lane-0, dispatched 09:34
-  2026-10-12; progress progress/lane-0.json, ETA ~11 min per run.
-- 129 (loop round-3 verifier pass): lane data, lane-1, dispatched 09:34
-  2026-10-12; progress progress/lane-1.json, ETA ~11 min per run.
-No session agents in flight.
+In flight: none. Loop armed, no lane running, no session agents.
 
-Status: /done pushed a7ea665..e6b1fed (4ef541a + e6b1fed) plus the
-hand-off commit. /done gates (session 29): gated pytest 3927 passed 0
-failed (103 s), gated node 764 pass 0 fail (npm.cmd), leak sweep ARMED
-(19). CI ci 38264472933 + codeql 38264473022 on e6b1fed: both success.
-Loop task Ready, last result 0. Session jsonl < 10 MB.
+Status: session 30 pushed 55569e5, 62753d9, d08b64d before /done; /done
+commits the plan-doc status flips + this hand-off. /done gates (session
+30): gated pytest 3958 passed 0 failed (92 s), gated node 766 pass 0 fail
+(npm.cmd), leak sweep ARMED (19). CI ci 38268692145 + codeql 38268692122
+on d08b64d: both success. Loop task Ready, last result 0. Session jsonl
+< 10 MB.
 
 Start with: read this file, then CLAUDE.md, docs/plans/ROADMAP.md, git log -10.

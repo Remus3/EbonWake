@@ -1,6 +1,6 @@
 # Plan 127 - Scheduler window OCR: one shot ticks every pinned daily / weekly
 
-Status: open. Proposed by deep dive 0023 (section 1). Lane hint: `build`.
+Status: done 2026-10-12 (loop merge 62753d9; refute 0/3 PASS). Proposed by deep dive 0023 (section 1). Lane hint: `build`.
 
 Goal: the Black Spirit's Scheduler (Menu F8, Family-wide, patch 2026-09-10)
 shows every pinned daily / weekly recurring quest with its state and

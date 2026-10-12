@@ -1,6 +1,6 @@
 # Plan 129 - Loop round-3 verifier pass and per-round findings
 
-Status: open. Source: adjudicator ruling on DD-20261012 (2026-10-12). Lane
+Status: done 2026-10-12 (loop merge 55569e5; refute 0/3 PASS). Source: adjudicator ruling on DD-20261012 (2026-10-12). Lane
 hint: `build`.
 
 Problem: in `tools/ew_loop.py` (review loop, ~630-680) a deep-dive item whose
