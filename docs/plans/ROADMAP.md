@@ -135,3 +135,18 @@ and one push; ETA log updated by every run.
 ## Order Nfa7953 - blocked items
 
 - Section 4 Scorecard before/after: BLOCKED - needs the scorecard v5.5.0 Linux binary downloaded into WSL (operator-approved download).
+
+## Order N1af105 - blocked items
+
+Done in repo: tools/launch.py `--hidden` passthrough (`electron_args`), app/main.js
+`show: !tray.startHidden(process.argv)` (helper in app/shared/tray.js; tray click,
+show-dashboard hotkey, second-instance and overlay hotkeys unchanged), tools/logon_task.py
+arguments `"...launch.py" --hidden`; tests/test_launch.py, tests/test_logon_task.py,
+app/test/tray.test.js. As-built deviation: the argv check is the pure helper
+`tray.startHidden` instead of an inline `process.argv.includes` (alternative: inline;
+why: node-testable without Electron; reverses if: the helper is unused elsewhere and a
+reviewer prefers inline).
+
+- Step 4 `tools/logon_task.py install` + read-back: BLOCKED - must run from the MAIN checkout after merge (install writes the lane worktree path into the live task otherwise); the loop/session runs it and reads back arguments ending in `--hidden`.
+- Step 5 next-logon read-back (no dashboard window, tray icon present, hotkey opens it): BLOCKED - needs a physical logon by the operator.
+- Progress file ops/loop/control/progress/N1af105.json: BLOCKED - write to the main checkout was denied by this run's permissions.

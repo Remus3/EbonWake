@@ -94,7 +94,8 @@ def test_install_then_status_reads_back(tmp_path):
     st = logon_task.install(**c)
     assert st["exists"] is True and st["enabled"] is True and st["delay"] == "PT60S"
     assert st["command"].endswith("pythonw.exe")
-    assert st["arguments"] == '"' + str(c["root"] / "tools" / "launch.py") + '"'
+    # Order N1af105: the logon task starts the app to the tray (no dashboard window).
+    assert st["arguments"] == '"' + str(c["root"] / "tools" / "launch.py") + '" --hidden'
     assert st["workdir"] == str(c["root"])
     create = [a for a, _ in fake.calls if a[1] == "/Create"][0]
     assert create[:4] == ["schtasks.exe", "/Create", "/TN", "Ebonwake"] and "/F" in create

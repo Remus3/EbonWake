@@ -96,3 +96,15 @@ test('launch.py hands its pythonw to Electron for Restart server', () => {
   const src = fs.readFileSync(path.join(APP, '..', 'tools', 'launch.py'), 'utf8');
   assert.match(src, /EW_PYTHONW/);
 });
+
+test('order N1af105: --hidden starts to tray; tray, hotkey and second-instance still show it', () => {
+  assert.strictEqual(T.startHidden(['electron.exe', '.', '--hidden']), true);
+  assert.strictEqual(T.startHidden(['electron.exe', '.']), false);
+  assert.strictEqual(T.startHidden(undefined), false);
+  const m = read('main.js');
+  assert.match(m, /show:\s*!tray\.startHidden\(process\.argv\)/);
+  assert.doesNotMatch(m, /show:\s*true/);
+  assert.match(m, /trayIcon\.on\('click',\s*showDashboard\)/);
+  assert.match(m, /globalShortcut\.register\(keys\.showDashboard,\s*showDashboard\)/);
+  assert.match(m, /globalShortcut\.register\(keys\.toggleOverlay,\s*toggleOverlay\)/);
+});

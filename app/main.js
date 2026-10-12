@@ -46,7 +46,7 @@ function createDashboard() {
   NOTIFY_SILENT = core.notifySilent(cfg);
   dashboard = new BrowserWindow({
     width: 1280, height: 800, minWidth: 960, minHeight: 600,
-    title: 'Ebonwake', backgroundColor: '#0f1216', show: true,
+    title: 'Ebonwake', backgroundColor: '#0f1216', show: !tray.startHidden(process.argv),
     webPreferences: {
       contextIsolation: true, nodeIntegration: false, sandbox: true,
       preload: path.join(__dirname, 'preload.js'),
