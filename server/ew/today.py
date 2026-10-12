@@ -71,6 +71,14 @@ CUES_FILE = Path(__file__).resolve().parent / "data" / "today_cues.json"
 CUE_ID_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 CUE_FIELDS = ("patterns", "source", "verified")
 MAX_CUE_PATTERNS = 20
+# Plan 127: the cue file's `scheduler` entry is the Black Spirit's Scheduler
+# window (Menu F8): {window, row_patterns: {row id: [re]}, done, open, source,
+# verified}. A row bound to `shot:scheduler` ticks only from a Scheduler line.
+SCHED_CUE = "scheduler"
+SCHED_FIELDS = ("window", "row_patterns", "done", "open", "source", "verified")
+SCHED_RULE = "shot:" + SCHED_CUE
+# Seeded into an existing store the first time a Scheduler shot lists it (once).
+SCHED_SEED = {"lyngbakr-ecology-survey": ("Lyngbakr Ecology Survey", "weekly")}
 
 
 # -- reset clocks (same rule as app/shared/ewcore.js) --------------------------
@@ -287,6 +295,8 @@ def load_cues(path=None):
         raise ValueError("today cues must be a non-empty object")
     out = {}
     for cue, row in doc.items():
+        if cue == SCHED_CUE:
+            continue  # plan 127: its own shape (load_scheduler)
         if not CUE_ID_RE.match(cue) or not isinstance(row, dict) \
                 or not set(CUE_FIELDS) <= set(row) or set(row) - set(CUE_FIELDS) - {"all"}:
             raise ValueError(f"cue rows must be [a-z0-9_] ids with {', '.join(CUE_FIELDS)}"
@@ -307,6 +317,43 @@ def load_cues(path=None):
                 raise ValueError(f"cue {cue} has a bad regex") from e
         out[cue] = dict(compiled, source=row["source"], verified=row["verified"])
     return out
+
+
+def _regexes(pats, what):
+    if (not isinstance(pats, list) or not 0 < len(pats) <= MAX_CUE_PATTERNS
+            or any(not isinstance(p, str) or not p for p in pats)):
+        raise ValueError(f"scheduler {what} must be a list of regex strings")
+    try:
+        return [re.compile(p, re.IGNORECASE) for p in pats]
+    except re.error as e:
+        raise ValueError(f"scheduler {what} has a bad regex") from e
+
+
+def load_scheduler(path=None):
+    """Plan 127: the cue file's `scheduler` entry -> {window: [re], row_patterns:
+    {row id: [re]}, done: [re], open: [re], source, verified}. Raises ValueError
+    on a missing or malformed entry."""
+    try:
+        doc = json.loads(Path(path or CUES_FILE).read_text(encoding="ascii"))
+    except (OSError, ValueError) as e:
+        raise ValueError(f"today cues unreadable: {type(e).__name__}") from e
+    row = doc.get(SCHED_CUE) if isinstance(doc, dict) else None
+    if not isinstance(row, dict) or set(row) != set(SCHED_FIELDS):
+        raise ValueError(f"scheduler must have exactly {', '.join(SCHED_FIELDS)}")
+    if not (isinstance(row["source"], str) and 0 < len(row["source"].strip()) <= MAX_SOURCE
+            and isinstance(row["verified"], bool)):
+        raise ValueError("scheduler source must be text and verified a bool")
+    rows = row["row_patterns"]
+    if not isinstance(rows, dict) or not rows or len(rows) > MAX_ITEMS:
+        raise ValueError("scheduler row_patterns must be a non-empty object")
+    out = {"row_patterns": {}}
+    for iid, pats in rows.items():
+        if not isinstance(iid, str) or not ID_RE.match(iid):
+            raise ValueError("scheduler row ids must match ^[a-z0-9-]{1,40}$")
+        out["row_patterns"][iid] = _regexes(pats, f"row {iid}")
+    for key in ("window", "done", "open"):
+        out[key] = _regexes(row[key], key)
+    return dict(out, source=row["source"], verified=row["verified"])
 
 
 def cue_matches(cue, text):
@@ -554,6 +601,26 @@ class TodayService:
         """Plan 068: [(id, rule, reset rule)] for every row with an auto rule."""
         items, _, _ = self._load()
         return [(it["id"], it["auto"], _rule(it)) for it in items if "auto" in it]
+
+    def titles(self):
+        """Plan 127: {id: title} for every daily / weekly row."""
+        items, _, _ = self._load()
+        return {it["id"]: it["title"] for it in items if it["kind"] != "event"}
+
+    def ensure_row(self, iid, title, kind, auto=None):
+        """Plan 127: add row `iid` unless it exists. True when it was added."""
+        e = validate_new({"title": title, "kind": kind, "auto": auto} if auto
+                         else {"title": title, "kind": kind})
+        _check_id(iid)
+        with self._lock:
+            items, ticks, aux = self._load()
+            if any(i["id"] == iid for i in items):
+                return False
+            if len(items) >= MAX_ITEMS:
+                raise ValueError(f"at most {MAX_ITEMS} items")
+            items.append(dict(e, id=iid, order=len(items)))
+            self._save(items, ticks, aux)
+        return True
 
     def add(self, entry):
         e = validate_new(entry)

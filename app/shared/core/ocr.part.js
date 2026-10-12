@@ -129,7 +129,8 @@
   const OCR_UNDO_RE = /^u[0-9]{1,9}$/;
   // Plan 111: auto-applied rows (book use, zone read, boss loot tick), Undo by id.
   const OCR_APPLIED_RE = /^a[0-9]{1,9}$/;
-  const OCR_APPLIED_KINDS = ['book_use', 'zone_xp', 'boss'];
+  // Plan 127: + today {row, title} (a Black Spirit's Scheduler shot ticked a Today row).
+  const OCR_APPLIED_KINDS = ['book_use', 'zone_xp', 'boss', 'today'];
   const OCR_APPLIED_VIEW = 10;
   // Plan 066: + level {level, pct}, gear (ap / aap / dp int) and book_use
   // {size, pct_before, pct_after} (accept / discard only).
@@ -139,8 +140,10 @@
   // (a fix is the stacks count).
   // Plan 117: + cp (total CP int) and mastery (name = cooking|alchemy, value =
   // imperial bonus pct, at most 2 decimals; a fix is the corrected pct).
+  // Plan 127: + scheduler_row (name = the unknown Scheduler line, value =
+  // {cadence: daily|weekly, state: done|open, remaining_s}; accept adds a Today row).
   const OCR_AUTO_KINDS = ['silver', 'buff', 'level', 'gear', 'book_use', 'loot',
-    'currency_balance', 'enh_fs', 'enh_crons', 'enh_agris', 'cp', 'mastery'];
+    'currency_balance', 'enh_fs', 'enh_crons', 'enh_agris', 'cp', 'mastery', 'scheduler_row'];
   const OCR_ENH_FS_MAX = 999;        // server ocrinfer.ENH_FS_MAX
   const OCR_ENH_CRONS_MAX = 1e9;     // server ocrinfer.ENH_CRONS_MAX
   const OCR_ENH_AGRIS_MAX = 1000;    // server ocrinfer.ENH_AGRIS_MAX
@@ -185,6 +188,12 @@
       return { family: v.family, step: v.step, stacks: v.stacks };
     }
     if (kind === 'mastery') return ocrMasteryPct(v) ? v : null;
+    if (kind === 'scheduler_row') {
+      if (!plainObject(v) || (v.cadence !== 'daily' && v.cadence !== 'weekly') ||
+          (v.state !== 'done' && v.state !== 'open')) return null;
+      return { cadence: v.cadence, state: v.state,
+        remaining_s: Number.isInteger(v.remaining_s) && v.remaining_s >= 0 ? v.remaining_s : null };
+    }
     return Number.isInteger(v) && v >= 0 ? v : null;
   }
 
@@ -247,6 +256,9 @@
     } else if (r.kind === 'boss') {
       value = plainObject(v) && typeof v.boss === 'string' && v.boss && typeof v.day === 'string'
         ? { boss: v.boss.slice(0, 60), day: v.day.slice(0, 10) } : null;
+    } else if (r.kind === 'today') {
+      value = plainObject(v) && typeof v.row === 'string' && v.row && typeof v.title === 'string' &&
+        v.title ? { row: v.row.slice(0, 40), title: v.title.slice(0, 80) } : null;
     } else if (plainObject(v) && typeof v.zone_name === 'string') {
       value = { zone_name: v.zone_name.slice(0, 60),
         recommended_level: Number.isInteger(v.recommended_level) ? v.recommended_level : null,
@@ -262,12 +274,14 @@
   }
 
   // "large book used 10% -> 17.5% (97%)" / "Kzarka loot ticked 2026-09-21" /
-  // "zone Polly's Forest Lv 56, 3 monsters"; + " - undone" once undone.
+  // "zone Polly's Forest Lv 56, 3 monsters" / "Guild mission ticked (Scheduler)";
+  // + " - undone" once undone.
   function ocrAppliedLabel(r) {
     const v = r.value;
     let t;
     if (r.kind === 'book_use') t = v.size + ' book used ' + v.pct_before + '% -> ' + v.pct_after + '%';
     else if (r.kind === 'boss') t = v.boss + ' loot ticked ' + v.day;
+    else if (r.kind === 'today') t = v.title + ' ticked (Scheduler)';
     else {
       t = 'zone ' + v.zone_name + (v.recommended_level === null ? '' : ' Lv ' + v.recommended_level) +
         ', ' + v.monsters + ' monster' + (v.monsters === 1 ? '' : 's');
@@ -326,6 +340,10 @@
       return r.value.size + ' book used? ' + r.value.pct_before + '% -> ' + r.value.pct_after + '%';
     }
     if (r.kind === 'loot') return 'loot ' + r.value.name + ' x' + r.value.count + ' (' + r.value.source + ')';
+    if (r.kind === 'scheduler_row') {
+      return 'unknown scheduler row ' + r.name + ' (' + r.value.cadence + ', ' + r.value.state +
+        ') - accept adds it to Today';
+    }
     return r.name + ' ' + r.value + 'm';
   }
 

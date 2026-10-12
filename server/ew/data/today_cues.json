@@ -28,5 +28,18 @@
     "all": ["\\bfree\\b", "(purchase\\s+limit\\W*0\\s*/\\s*1|\\bpurchased\\b)"],
     "source": "plan 114: Pearl Shop weekly free item purchase limit 0/1 or Purchased; community UI wording, not yet checked against an operator screenshot",
     "verified": false
+  },
+  "scheduler": {
+    "window": ["\\bscheduler\\b"],
+    "row_patterns": {
+      "daily-challenges-y": ["\\bdaily\\s+challenges?\\b"],
+      "guild-mission": ["\\bguild\\s+missions?\\b"],
+      "black-spirit-weekly-quests": ["\\bblack\\s+spirit'?s?\\s+weekly\\b", "\\bweekly\\b.*\\bblack\\s+spirit\\b.*\\bquests?\\b"],
+      "lyngbakr-ecology-survey": ["\\blyngbakr\\b.*\\becology\\b", "\\becology\\s+survey\\b"]
+    },
+    "done": ["\\bcompleted?\\b", "\\bclaimed\\b", "\\bdone\\b", "\\bcleared\\b"],
+    "open": ["\\bin\\s+progress\\b", "\\bnot\\s+started\\b", "\\bincomplete\\b", "\\bavailable\\b", "\\bongoing\\b"],
+    "source": "plan 127: Black Spirit's Scheduler (Menu F8, patch 2026-09-10) pinned daily / weekly rows; community UI wording, not yet checked against an operator screenshot",
+    "verified": false
   }
 }

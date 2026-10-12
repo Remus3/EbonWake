@@ -127,6 +127,7 @@ def test_event_rows_take_no_shot_rule(tmp_path):
 
 def test_cue_file_schema():
     raw = json.loads(today.CUES_FILE.read_text(encoding="ascii"))
+    raw.pop(today.SCHED_CUE)  # plan 127: its own shape (test_scheduler_ocr)
     assert set(raw) == {"challenges_daily", "barter", "guild_mission", "bs_weekly",
                         "pearl_free"}
     for cue, row in raw.items():

@@ -15,7 +15,7 @@ import re
 import struct
 from pathlib import Path
 
-from . import ocr
+from . import ocr, today
 from .leveling import _level_now, _norm_pct
 from .levels import LEVEL_RANGE
 from .progress import GS_KEYS, GS_RANGE
@@ -968,3 +968,107 @@ def enhance_fields(doc, keys, fallback=None):
                      "value": {"family": key[0], "step": key[1], "stacks": stacks},
                      "conf": c, "why": w})
     return out + [_enh_pick(rows)]
+
+
+# -- plan 127: Black Spirit's Scheduler window -------------------------------------
+
+CONF_SCHED = 0.96          # a row pattern / row title and a state on one line
+SCHED_MIN_NAME = 3         # letters an unmatched quest name needs to be listed
+SCHED_MAX_NAME = 80        # today.MAX_TITLE
+_SCHED_DH = re.compile(r"(?<![\d:])(\d{1,2})\s*d(?:ays?)?\b(?:\s*(\d{1,2})\s*h(?:ours?|rs?)?\b)?",
+                       re.IGNORECASE)
+_SCHED_HM = re.compile(r"(?<![\d:])(\d{1,2})\s*h(?:ours?|rs?)?\s*(?:(\d{1,2})\s*m(?:in(?:utes?)?)?)?\b",
+                       re.IGNORECASE)
+_SCHED_CLOCK = re.compile(r"(?<![\d:])(\d{1,3}):([0-5]\d)(?::([0-5]\d))?(?![\d:])")
+_SCHED_WEEKLY = re.compile(r"\bweekly\b", re.IGNORECASE)
+_SCHED_NAME_DROP = re.compile(r"\[[^\]]{0,20}\]|[^A-Za-z0-9' :()-]")
+
+
+def _sched_fold(s):
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", s.lower().replace("'", "")).split())
+
+
+def _sched_remaining(text):
+    """(seconds left, (start, end) of the match) for "Nd Nh" / "Nh Nm" / "HH:MM"."""
+    m = _SCHED_DH.search(text)
+    if m:
+        return int(m.group(1)) * 86400 + int(m.group(2) or 0) * 3600, m.span()
+    m = _SCHED_HM.search(text)
+    if m:
+        return int(m.group(1)) * 3600 + int(m.group(2) or 0) * 60, m.span()
+    m = _SCHED_CLOCK.search(text)
+    if m:
+        if m.group(3) is not None:
+            return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3)), m.span()
+        return int(m.group(1)) * 3600 + int(m.group(2)) * 60, m.span()
+    return None, None
+
+
+def _sched_name(text, spans):
+    for a, b in sorted(spans, reverse=True):
+        text = text[:a] + " " + text[b:]
+    name = " ".join(_SCHED_NAME_DROP.sub(" ", text).split()).strip(" :-")
+    return name[:SCHED_MAX_NAME].strip()
+
+
+def is_scheduler(doc, sched=None):
+    """Plan 127: the doc's text names the Scheduler window."""
+    sched = sched if sched is not None else _sched_default()
+    if sched is None or not isinstance(doc, dict):
+        return False
+    text = " ".join(ln["text"] for ln in _lines_of(doc))
+    if not text.strip() and isinstance(doc.get("text"), str):
+        text = doc["text"]
+    return any(p.search(text) for p in sched["window"])
+
+
+def _sched_default():
+    try:
+        return today.load_scheduler()
+    except ValueError:
+        return None
+
+
+def scheduler_rows(doc, sched=None, titles=None):
+    """Plan 127: one Scheduler window shot -> [{row, name, state: done|open,
+    conf, remaining_s?}], one per quest line, first line per row wins. A line is
+    a quest line when it names a Today row (data `row_patterns`, else a row title
+    from `titles` {id: title}) or carries a state word / remaining time; `row`
+    is None for an unmatched quest (`name` is its cleaned text). A done word
+    (and no open word) on the line = done. [] when the doc is no Scheduler shot."""
+    sched = sched if sched is not None else _sched_default()
+    if not is_scheduler(doc, sched):
+        return []
+    folded = [(iid, _sched_fold(t)) for iid, t in (titles or {}).items()
+              if isinstance(t, str) and len(_sched_fold(t)) >= SCHED_MIN_NAME + 1]
+    out, seen = [], set()
+    for ln in _lines_of(doc):  # a quest name and its state on one OCR line
+        text = ln["text"]
+        if any(p.search(text) for p in sched["window"]):
+            continue  # the window title
+        done = [m.span() for p in sched["done"] for m in p.finditer(text)]
+        opened = [m.span() for p in sched["open"] for m in p.finditer(text)]
+        left, span = _sched_remaining(text)
+        row = next((iid for iid, pats in sched["row_patterns"].items()
+                    if any(p.search(text) for p in pats)), None)
+        if row is None:
+            fold = f" {_sched_fold(text)} "
+            row = next((iid for iid, t in folded if f" {t} " in fold), None)
+        if row is None and not (done or opened or left is not None):
+            continue  # a tab label / header, not a quest line
+        name = _sched_name(text, done + opened + ([span] if span else []))
+        if row is None and sum(ch.isalpha() for ch in name) < SCHED_MIN_NAME:
+            continue
+        key = row or _sched_fold(name)
+        if key in seen:
+            continue
+        seen.add(key)
+        r = {"row": row, "name": name, "state": "done" if done and not opened else "open",
+             "conf": CONF_SCHED}
+        if left is not None:
+            r["remaining_s"] = left
+        if row is None:  # weekly when the line says so or more than a day is left
+            r["cadence"] = ("weekly" if _SCHED_WEEKLY.search(text) or (left or 0) > 86400
+                            else "daily")
+        out.append(r)
+    return out
