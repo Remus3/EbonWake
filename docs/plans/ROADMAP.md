@@ -149,6 +149,6 @@ app/test/tray.test.js. As-built deviation: the argv check is the pure helper
 why: node-testable without Electron; reverses if: the helper is unused elsewhere and a
 reviewer prefers inline).
 
-- Step 4 `tools/logon_task.py install` + read-back: BLOCKED - must run from the MAIN checkout after merge (install writes the lane worktree path into the live task otherwise); the loop/session runs it and reads back arguments ending in `--hidden`.
+- Step 4 `tools/logon_task.py install` + read-back: DONE session 31 (2026-10-12) from the MAIN checkout; `logon_task.py status` read back arguments `"<root>/tools/launch.py" --hidden`, delay PT1M, enabled.
 - Step 5 next-logon read-back (no dashboard window, tray icon present, hotkey opens it): BLOCKED - needs a physical logon by the operator.
 - Progress file ops/loop/control/progress/N1af105.json: BLOCKED - write to the main checkout was denied by this run's permissions.
