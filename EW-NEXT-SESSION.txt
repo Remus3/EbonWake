@@ -1,16 +1,22 @@
 EW NEXT SESSION
 ---------------
-SESSION: 31
+SESSION: 32
 
 Next action: monitor the loop (\EbonwakeOps\LaneLoop, progress/loop.json,
 loop_items/*.json); any item left in adjudicate / merge-conflict / gave-up
 / failed-dirty is fixed by a session agent (merge-stuck recipe in
-Context). Answer any MAIN reply to the 2026-10-12 notes (kit v17 ANSWER,
-SF-deny + commit-msg temp-path INFORMATION) - none had arrived by end of
-session 30. Otherwise work the top ROADMAP open row, or let the idle
-deep-dive seed new rows (no ROADMAP row open at end of session 30).
+Context). After the operator's next logon, read back MAIN ORDER N1af105
+step 5 (OPERATOR bullet below) and record it. Answer any MAIN reply to the
+2026-10-12 notes (kit v17 ANSWER, SF-deny + commit-msg temp-path
+INFORMATION) - none had arrived by end of session 31. Otherwise work the
+top ROADMAP open row, or let the idle deep-dive seed new rows (none open
+at end of session 31; next deep-dive seeds rows 2026-10-13).
 
 Carried forward (not acted on yet):
+- OPERATOR: MAIN ORDER N1af105 step 5 read-back - at the next operator
+  logon, confirm no dashboard window shows, the tray icon is present and
+  the hotkey opens the dashboard. Steps 1-4 done (step 4 = logon task
+  reinstalled with --hidden in session 31, 82f9146).
 - OPERATOR (one batched ask, nothing blocks on it): QA plans 009-073 in
   the dashboard / overlay (per-plan detail in docs/handoff-ledger.txt;
   plan 009 needs ~10 screenshots with the game UI SHOWN, via a rebound BDO
@@ -156,11 +162,13 @@ Carried forward (not acted on yet):
   tools/loop_inbox.py, d08b64d, session 30); lane-order sibling too.
 
 Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew (Ready, last result
-0, last run 2026-10-12 10:19, fire 631), HALT absent, inbox_status idle,
-headless 12/120 (read 2026-10-12 session 30). FLEET_SIDECAR_ROOT empty in
-HKCU Environment (read 2026-10-12 session 30; row 106 stays MAIN-gated).
-ROADMAP open: none (127, 129 [x]); deep-dive already ran 2026-10-12, so
-the next one seeds rows 2026-10-13. State: ops/loop/control/loop_items/
+0, fire 667 rc 0, idle), HALT absent, inbox_status idle, headless 12/120,
+server ok (read 2026-10-12 session 31). Logon task \Ebonwake args end in
+--hidden, delay PT1M, enabled (read back session 31). FLEET_SIDECAR_ROOT
+absent in HKCU Environment (read 2026-10-12 session 31; row 106 stays
+MAIN-gated).
+ROADMAP open: none; deep-dive already ran 2026-10-12, so the next one
+seeds rows 2026-10-13. State: ops/loop/control/loop_items/
 *.json, progress/loop.json, progress/lane-<i>.json, inbox_status.json.
 Merge-stuck items are fixed by a session agent (merge
 refs/ew/keep/<id> onto main, keep both sides, mark item merged, delete
@@ -176,26 +184,20 @@ merge-conflict / gave-up / failed-dirty; any MAIN reply to the 2026-10-12
 notes answered (or acked by ledger line); new deep-dive rows built by the
 loop.
 
-Do NOT redo: session 30 (2026-10-12): plans 127 (62753d9) and 129
-(55569e5) merged by the loop and pushed, loop items read merged, ROADMAP
-rows [x], plan docs marked done in place. C1 stale checklist rows fixed in
-d08b64d (pushed): root cause = orders answered by hand never got a
-session_done mark; new order_settled() closes an order on session_done OR
-a seen-ledger line, lane-order sibling fixed; N9138b6 (kit v16) and
-N97fbd7 (kit v17) backfilled via session-done with a7ea665; read back at
-tick 631: both rows gone; refute-rounds 0/3.
-session 29 (2026-10-12): SF deny live; DD-20261012 merged as 4ef541a;
-kit v17 ANSWER + SF-deny/commit-msg INFORMATION delivered to MAIN 1/1;
-ETA fix e6b1fed.
+Do NOT redo: session 31 (2026-10-12): MAIN ORDER N1af105 step 4 - logon
+task reinstalled via `tools/logon_task.py install`; read back: args end in
+--hidden, delay PT1M, enabled (82f9146, pushed). Session 30: plans 127
+(62753d9) and 129 (55569e5) merged and pushed, plan docs marked done; C1
+stale checklist rows fixed in d08b64d (order_settled()); refute-rounds 0/3.
 Older sessions: docs/handoff-ledger.txt and git log.
 
 In flight: none. Loop armed, no lane running, no session agents.
 
-Status: session 30 pushed 55569e5, 62753d9, d08b64d before /done; /done
-commits the plan-doc status flips + this hand-off. /done gates (session
-30): gated pytest 3958 passed 0 failed (92 s), gated node 766 pass 0 fail
-(npm.cmd), leak sweep ARMED (19). CI ci 38268692145 + codeql 38268692122
-on d08b64d: both success. Loop task Ready, last result 0. Session jsonl
-< 10 MB.
+Status: session 31 pushed 82f9146 (range dc7a38a..82f9146) before /done;
+/done commits only this hand-off. /done gates (session 31): gated pytest
+green rc 0 (2106 s incl. ~33 min machine gate queue behind another tree),
+gated node 766 pass 0 fail (npm.cmd), leak sweep ARMED (19). Last ci +
+codeql on main (d08b64d): success; 82f9146 / dc7a38a fired no ci run
+(docs-only). Loop task Ready, last result 0. Session jsonl < 10 MB.
 
 Start with: read this file, then CLAUDE.md, docs/plans/ROADMAP.md, git log -10.
