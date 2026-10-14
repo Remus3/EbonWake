@@ -1,6 +1,6 @@
 EW NEXT SESSION
 ---------------
-SESSION: 32
+SESSION: 33
 
 Next action: monitor the loop (\EbonwakeOps\LaneLoop, progress/loop.json,
 loop_items/*.json); any item left in adjudicate / merge-conflict / gave-up
@@ -8,9 +8,10 @@ loop_items/*.json); any item left in adjudicate / merge-conflict / gave-up
 Context). After the operator's next logon, read back MAIN ORDER N1af105
 step 5 (OPERATOR bullet below) and record it. Answer any MAIN reply to the
 2026-10-12 notes (kit v17 ANSWER, SF-deny + commit-msg temp-path
-INFORMATION) - none had arrived by end of session 31. Otherwise work the
-top ROADMAP open row, or let the idle deep-dive seed new rows (none open
-at end of session 31; next deep-dive seeds rows 2026-10-13).
+INFORMATION) - none had arrived by end of session 32 (newest MAIN note is
+the 2026-10-11 22:26 ORDER, already answered). Otherwise work the top
+ROADMAP open row, or let the idle deep-dive seed new rows (none open at
+end of session 32).
 
 Carried forward (not acted on yet):
 - OPERATOR: MAIN ORDER N1af105 step 5 read-back - at the next operator
@@ -40,6 +41,7 @@ Carried forward (not acted on yet):
   worktree list` and fleet_lanes.worktree_path(i) for i=0..2, remove HALT,
   flip ROADMAP row 106 to [x]. Reverses if MAIN orders trees to set it
   themselves.
+  Read 2026-10-14 session 32: UNSET.
 - MAIN to record EW's port block 8940-8959 in the machine-wide registry and
   add EW to the roster / lane widget (roster INFO 0230 says EW is a member;
   Hbd1ed4).
@@ -58,8 +60,13 @@ Carried forward (not acted on yet):
 - NOTE: session 25 (2026-10-10): a system hang interrupted no work. A
   stale 0-byte .git/index.lock (08:21 loop tick, no git process) was
   cleared via kit fleet_gitlock.clear_index_lock and read back gone
-  (gitlock.jsonl index-lock-removed). A stale claim file of dead pid 19796
-  stays in ops/loop/control/claims/ (kit treats it non-live; left alone).
+  (gitlock.jsonl index-lock-removed).
+- NOTE: session 32 (2026-10-14): two leftover claim files in
+  ops/loop/control/claims/ (*.main.json of headless lane sessions, pids
+  20120 / 24516, lane-0 plan 127 / 130 paths) read `dead` by
+  `fleet_claims.py list` (pids not running); released with the kit's
+  `fleet_claims.py release --owner <id>`; read back: claims dir empty.
+  Dead claim files are ephemeral (the kit's reap() deletes them too).
 - NOTE (operator order session 28, 2026-10-10): "remove operator manual
   input as much as possible in everything". Keep pushing zero-touch:
   wave 1 = plans 108-116 and wave 2 = rows 117-120 all merged by the loop;
@@ -161,14 +168,14 @@ Carried forward (not acted on yet):
   session_done mark OR a kit seen-ledger line (order_settled() in
   tools/loop_inbox.py, d08b64d, session 30); lane-order sibling too.
 
-Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew (Ready, last result
-0, fire 667 rc 0, idle), HALT absent, inbox_status idle, headless 12/120,
-server ok (read 2026-10-12 session 31). Logon task \Ebonwake args end in
---hidden, delay PT1M, enabled (read back session 31). FLEET_SIDECAR_ROOT
-absent in HKCU Environment (read 2026-10-12 session 31; row 106 stays
-MAIN-gated).
-ROADMAP open: none; deep-dive already ran 2026-10-12, so the next one
-seeds rows 2026-10-13. State: ops/loop/control/loop_items/
+Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew (Ready, enabled,
+last run 07:34 2026-10-14 result 0), HALT absent, no lane locks, all
+progress files done (read 2026-10-14 session 32). Logon task \Ebonwake
+args end in --hidden, delay PT1M, enabled (read back session 31).
+FLEET_SIDECAR_ROOT absent in HKCU Environment (read 2026-10-14 session
+32; row 106 stays MAIN-gated).
+ROADMAP open: none (row 106 [>] MAIN-gated); deep-dives ran through
+2026-10-14 (plan 130 merged c755155). State: ops/loop/control/loop_items/
 *.json, progress/loop.json, progress/lane-<i>.json, inbox_status.json.
 Merge-stuck items are fixed by a session agent (merge
 refs/ew/keep/<id> onto main, keep both sides, mark item merged, delete
@@ -184,20 +191,19 @@ merge-conflict / gave-up / failed-dirty; any MAIN reply to the 2026-10-12
 notes answered (or acked by ledger line); new deep-dive rows built by the
 loop.
 
-Do NOT redo: session 31 (2026-10-12): MAIN ORDER N1af105 step 4 - logon
-task reinstalled via `tools/logon_task.py install`; read back: args end in
---hidden, delay PT1M, enabled (82f9146, pushed). Session 30: plans 127
-(62753d9) and 129 (55569e5) merged and pushed, plan docs marked done; C1
-stale checklist rows fixed in d08b64d (order_settled()); refute-rounds 0/3.
-Older sessions: docs/handoff-ledger.txt and git log.
+Do NOT redo: session 32 (2026-10-14): read-only session - loop, inbox,
+ROADMAP, sidecar checks (results in Context); two dead claim files
+released (NOTE above). Session 31: MAIN ORDER N1af105 step 4 - logon task
+reinstalled via `tools/logon_task.py install`; read back: args end in
+--hidden, delay PT1M, enabled (82f9146, pushed). Older sessions:
+docs/handoff-ledger.txt and git log.
 
 In flight: none. Loop armed, no lane running, no session agents.
 
-Status: session 31 pushed 82f9146 (range dc7a38a..82f9146) before /done;
-/done commits only this hand-off. /done gates (session 31): gated pytest
-green rc 0 (2106 s incl. ~33 min machine gate queue behind another tree),
-gated node 766 pass 0 fail (npm.cmd), leak sweep ARMED (19). Last ci +
-codeql on main (d08b64d): success; 82f9146 / dc7a38a fired no ci run
-(docs-only). Loop task Ready, last result 0. Session jsonl < 10 MB.
+Status: session 32 changed no code; /done commits only this hand-off on
+top of c755155 (main level with origin before it). /done gates (session
+32): gated pytest green rc 0 (93 s), gated node 772 pass 0 fail
+(npm.cmd), leak sweep ARMED (19). Last ci + codeql on main (c755155):
+success. Loop task Ready, last result 0. Session jsonl < 10 MB.
 
 Start with: read this file, then CLAUDE.md, docs/plans/ROADMAP.md, git log -10.
