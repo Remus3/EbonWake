@@ -115,6 +115,10 @@ auto level sample replaced by 066; 025 Home hosts 069. Rejected: input-idle
 AFK detection (needs an input hook), live window capture, clipboard reads,
 roster OCR, auto-tick of redeemed coupons.
 
+Deep dive 2026-10-14 (research 0025): one plan. Ranking: 130 known-issues
+advisories - small data-only change that keeps the level ETA honest during the
+post-revamp EXP defects; ranks below 116.
+
 Deep dive 2026-10-06 (research 0006): two plans. Ranking: 059 first - pays
 off every week from today, removes the biggest manual-typing chore on the
 Events tab and reuses plan 014's proven robots-gated fetcher; 060 second -
