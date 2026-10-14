@@ -5,6 +5,8 @@
    collapsed by default (the tab must fit 1280x800 with no page scroll).
    Plan 024: one line + pill per level-gated deadline (Olvia Academy).
    Plan 060: Combat Secret Books line, a "with books" ETA and the book ledger.
+   Plan 130: official known-issue chips (GET /api/known-issues?area=leveling);
+   a sample taken inside a known-issue window is greyed and marked suspect.
    Reads GET /api/leveling every 60 s and on each SSE `leveling` event; writes
    go through the dashboard preload (window.ewApi). Operator-typed data only;
    nothing is read from or sent to the game. Every node is built with DOM APIs -
@@ -61,6 +63,22 @@
     // Plan 110: the Zones table (plan 088 in-game zone reads); a failure keeps the last rows.
     getJSON('/api/zones/xp').then(function (d) { S.zones = d; },
       function () { /* keep the last rows */ }).then(drawZones);
+    // Plan 130: official known-issue chips; a failure keeps the last chips.
+    getJSON('/api/known-issues?area=leveling').then(function (d) { S.issues = d; },
+      function () { /* keep the last chips */ }).then(drawIssues);
+  }
+
+  function drawIssues() {
+    const ui = S.ui;
+    if (!ui || !ui.issues || !ui.card.isConnected) return;
+    const v = C.knownIssueChips(S.issues, 'leveling');
+    ui.issues.textContent = '';
+    v.chips.forEach(function (c) {
+      const p = el('span', c.cls, c.text);
+      p.title = c.title;
+      ui.issues.appendChild(p);
+    });
+    ui.issues.hidden = !v.chips.length;
   }
 
   function drawZones() {
@@ -251,7 +269,8 @@
     drawBooks(d.books);
     d.samples.forEach(function (s) {
       if (typeof s.ts !== 'string') return;
-      const r = el('div', 'ew-lrow' + (s.pre_patch === true ? ' ew-stale' : ''));
+      const sus = typeof s.suspect === 'string' && s.suspect; // plan 130: kept out of the rate
+      const r = el('div', 'ew-lrow' + (s.pre_patch === true || sus ? ' ew-stale' : ''));
       r.appendChild(localSpan('ew-muted ew-gnum', s.ts, 5));
       r.appendChild(el('span', 'ew-mprice ew-gnum', 'Lv ' + s.level));
       // Plan 041: a server-written profile marker has no XP percent.
@@ -262,6 +281,11 @@
       bs.title = b.title;
       r.appendChild(bs);
       if (s.pre_patch === true) r.appendChild(el('span', 'ew-muted', 'pre-patch'));
+      if (sus) {
+        const k = el('span', 'ew-muted', 'suspect');
+        k.title = 'taken during known issue ' + s.suspect + ' - not counted in the rate';
+        r.appendChild(k);
+      }
       const x = el('button', 'ew-tx', 'x');
       x.type = 'button';
       x.title = 'delete sample';
@@ -366,6 +390,7 @@
     drawDeadlines();
     drawEditor();
     drawZones();
+    drawIssues();
   }
 
   // ---- mount ----
@@ -580,6 +605,9 @@
     ui.bkKey = ui.bkEta.previousSibling;
     ui.bkKey.hidden = ui.bkEta.hidden = true;
     body.appendChild(kv);
+    ui.issues = el('div', 'ew-kissues'); // plan 130 chips
+    ui.issues.hidden = true;
+    body.appendChild(ui.issues);
     ui.deadlines = el('div', 'ew-list');
     ui.deadlines.hidden = true;
     body.appendChild(ui.deadlines);

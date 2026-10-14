@@ -898,7 +898,7 @@ def test_profile_marker_written_by_server_only(svc, clock):
     assert v["level"] == 61 and v["level_source"] == "profile"
     assert v["samples"][0] == {"ts": (T0 + dt.timedelta(seconds=60)).isoformat(),
                                "level": 61, "pct": None, "source": "profile",
-                               "pre_patch": False}
+                               "pre_patch": False, "suspect": None}
     clock.advance(60)
     assert svc.profile_marker(61) is False  # already known
     for bad in (0, 76, "61", None, True):
@@ -911,7 +911,8 @@ def test_profile_marker_never_replaces_typed_same_second(svc, clock):
     svc.sample({"level": 60, "pct": 50})
     assert svc.profile_marker(61) is False
     v = svc.view()
-    assert v["samples"] == [{"ts": T0.isoformat(), "level": 60, "pct": 50, "pre_patch": False}]
+    assert v["samples"] == [{"ts": T0.isoformat(), "level": 60, "pct": 50, "pre_patch": False,
+                             "suspect": None}]
 
 
 def test_sample_del_deletes_marker(svc, clock):

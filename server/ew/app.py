@@ -47,7 +47,7 @@ from urllib.parse import parse_qs
 from . import (__version__, autotick, autowatch, bossdrift, bosses, context, coupons, crafting,
                dataverdicts, deadeye, fameauto,
                derived, detect, enhance, eventcurrency, eventnotices, events, gamewatch, grind, imperial, inventory, itemnames,
-               leveling, logindays, maint, maintdigest, market, mounts, ocr, ocrauto, onboarding, overrides,
+               knownissues, leveling, logindays, maint, maintdigest, market, mounts, ocr, ocrauto, onboarding, overrides,
                pets,
                ports,
                playsession, portraits, progress, prompts, settings, shopping, signals, single,
@@ -1054,6 +1054,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/leveling":
             self.server.notices.view(refresh=False)  # plan 064: import cached Hot Time reads
             return self._send(200, self.server.leveling.view())
+        if path == "/api/known-issues":  # plan 130: ?area= leveling|trading|enhance|market|books
+            area = parse_qs(query).get("area", [None])[0]
+            lv = self.server.leveling
+            try:
+                rows = knownissues.active(lv._now(), area, lv.issues)
+            except ValueError as e:
+                return self._send(400, {"error": str(e)})
+            return self._send(200, {"area": area, "issues": rows, "error": lv.issue_error})
         if path == "/api/bosses":
             return self._send(200, self.server.bosses_view(refresh=True))
         if path == "/api/prompts":

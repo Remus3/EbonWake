@@ -27,7 +27,9 @@
     // Plan 037 shopping list: GET body (cached prices only) and its error.
     shop: null, shopErr: null,
     // Plan 083 Portraits card: GET /api/portraits?cls=Deadeye body and its error.
-    gallery: null, galleryErr: null, galleryBus: false
+    gallery: null, galleryErr: null, galleryBus: false,
+    // Plan 130: GET /api/known-issues?area=enhance body (chips on the plan card).
+    issues: null
   };
 
   function el(tag, cls, text) {
@@ -85,6 +87,9 @@
     S.timer = setTimeout(function () { if (!C.pollPaused(S.panel, document)) poll(true); }, POLL_MS);
     getJSON('/api/deadeye').then(accept, function (e) { S.err = e.message; }).then(draw);
     loadShop();
+    // Plan 130: official known-issue chips; a failure keeps the last chips.
+    getJSON('/api/known-issues?area=enhance').then(function (d) { S.issues = d; },
+      function () { /* keep the last chips */ }).then(drawIssues);
   }
 
   function loadShop() {
@@ -738,6 +743,7 @@
     drawPlan();
     drawStacks();
     drawShop();
+    drawIssues();
   }
 
   // ---- mount ----
@@ -797,6 +803,9 @@
 
   function planCard() {
     const c = card('Enhancement plan', 'ew-dplan');
+    const issues = el('div', 'ew-kissues'); // plan 130 chips, outside the redrawn body
+    issues.hidden = true;
+    c.card.appendChild(issues);
     const body = el('div', 'ew-cbody');
     c.card.appendChild(body);
     const f = {};
@@ -833,7 +842,20 @@
     form.appendChild(m);
     form.addEventListener('submit', function (ev) { ev.preventDefault(); addStep(); });
     c.card.appendChild(form);
-    return { card: c.card, body: body, pill: c.pill, form: f, msg: m };
+    return { card: c.card, body: body, pill: c.pill, form: f, msg: m, issues: issues };
+  }
+
+  function drawIssues() {
+    const box = S.ui && S.ui.planIssues;
+    if (!box) return;
+    const v = C.knownIssueChips(S.issues, 'enhance');
+    box.textContent = '';
+    v.chips.forEach(function (c) {
+      const p = el('span', c.cls, c.text);
+      p.title = c.title;
+      box.appendChild(p);
+    });
+    box.hidden = !v.chips.length;
   }
 
   // ---- calculators (plan 055) ----
@@ -1070,7 +1092,7 @@
     panel.appendChild(sh.card);
     panel.appendChild(ca.card);
     S.ui = Object.assign(n, {
-      planBody: p.body, planPill: p.pill, form: p.form, msg: p.msg,
+      planBody: p.body, planPill: p.pill, planIssues: p.issues, form: p.form, msg: p.msg,
       stBody: k.body, st: k.st, stMsg: k.msg,
       shopBody: sh.body, shopPill: sh.pill, shopForm: sh.form, calc: ca.form, gallery: gal
     });

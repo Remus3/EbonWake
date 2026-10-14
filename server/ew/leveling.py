@@ -14,7 +14,7 @@ import statistics
 import threading
 import time
 
-from . import levels
+from . import knownissues, levels
 from .levels import LEVEL_RANGE
 from .today import _iso, _parse_iso
 
@@ -485,10 +485,13 @@ class LevelingService:
     Plan 060: `books` is the Combat Secret Book ledger (xpbooks.XpBooksService,
     its own store domain); without one the view's `books` is None.
     Plan 116: a sample may carry `superseded: true` (kept, never counted);
-    "deadlines_notice" / "deadlines_suggested" hold notice-derived rows."""
+    "deadlines_notice" / "deadlines_suggested" hold notice-derived rows.
+    Plan 130: `issues` are the tracked `data/known_issues.json` rows (injected
+    for tests); a sample inside a live leveling defect window is `suspect` in
+    the view (tagged at read time, never stored) and kept out of the rate."""
 
     def __init__(self, store, clock=time.time, buffs=None, epochs=None, deadlines=None,
-                 books=None, maint_end=None):
+                 books=None, maint_end=None, issues=None):
         self.store = store
         self.clock = clock
         self.buffs = buffs
@@ -516,6 +519,13 @@ class LevelingService:
             except ValueError as e:
                 deadlines, self.deadline_error = [], str(e)
         self.tracked_deadlines = levels.sort_deadlines(deadlines)
+        self.issue_error = None
+        if issues is None:
+            try:
+                issues = knownissues.load()
+            except ValueError as e:
+                issues, self.issue_error = [], str(e)
+        self.issues = list(issues)
         self._lock = threading.Lock()  # read-modify-write; Store guards each file op
         with self._lock:
             if "milestones" not in store.get("leveling"):
@@ -645,9 +655,13 @@ class LevelingService:
         segment = segment_start(samples)
         if segment is not None and since is not None and since > segment:
             segment = None  # a newer XP epoch already cut the history
-        rate = rate_pct_h(samples, since if segment is None else segment)
+        # Plan 130: a sample inside a live known-issue window stays out of the fit.
+        suspect = [knownissues.suspect(self.issues, _parse_iso(s["ts"]), s["level"])
+                   for s in samples]
+        fit = [s for s, tag in zip(samples, suspect) if tag is None]
+        rate = rate_pct_h(fit, since if segment is None else segment)
         if rate is None and segment is not None:
-            rate = rate_pct_h([s for s in samples if _parse_iso(s["ts"]) < segment], since)
+            rate = rate_pct_h([s for s in fit if _parse_iso(s["ts"]) < segment], since)
         hot = hot_status(doc["hot_windows"], now, doc["hot_auto"])
         buffs = _live_xp_buffs(self.buffs() if self.buffs is not None else [])
         parts = ([{"name": a["label"], "pct": a["pct"]} for a in hot["active"]]
@@ -699,8 +713,8 @@ class LevelingService:
                     [e for e in epochs if "kill_xp_cap" in e], now), level),
                 "zone_cap": self._zone_here(),
                 "samples": [dict(s, pre_patch=since is not None
-                                 and _parse_iso(s["ts"]) < since)
-                            for s in reversed(samples[-VIEW_SAMPLES:])]}
+                                 and _parse_iso(s["ts"]) < since, suspect=tag)
+                            for s, tag in reversed(list(zip(samples, suspect))[-VIEW_SAMPLES:])]}
 
     def _zone_here(self):
         if self.zone_here is None:

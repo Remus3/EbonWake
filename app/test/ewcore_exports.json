@@ -454,6 +454,7 @@
     ["withCurrency","function"],
     ["ZONES_EMPTY","string"],
     ["zonesRows","function"],
-    ["verdictRows","function"]
+    ["verdictRows","function"],
+    ["knownIssueChips","function"]
   ]
 }
