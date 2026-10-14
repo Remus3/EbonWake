@@ -189,6 +189,35 @@
       error: typeof d.error === 'string' && d.error ? 'data hints unreadable: ' + d.error.slice(0, 200) : null };
   }
 
+  // Plan 130: GET /api/known-issues?area= -> one chip per live row. A defect
+  // reads "known issue: <title>"; a scheduled change reads "pending: <title>
+  // (<date>)" before its date and "applied: <title>" after. The hover title
+  // carries the note, the source and the window. Junk rows are dropped.
+  const ISSUE_CLS = { active: 'warn', pending: 'unknown', applied: 'ok' };
+  function knownIssueChips(d, area) {
+    if (!d || typeof d !== 'object' || Array.isArray(d) || !Array.isArray(d.issues)) {
+      return { chips: [], error: 'known issues unavailable' };
+    }
+    const day = function (s) { return typeof s === 'string' ? s.slice(0, 10) : ''; };
+    const chips = d.issues.filter(function (r) {
+      return r && typeof r === 'object' && typeof r.title === 'string' && r.title &&
+        ISSUE_CLS[r.state] !== undefined && Array.isArray(r.affects) &&
+        (!area || r.affects.indexOf(area) >= 0);
+    }).map(function (r) {
+      const t = r.title.slice(0, 120);
+      const text = r.state === 'active' ? 'known issue: ' + t
+        : (r.state === 'pending' ? 'pending: ' + t + ' (' + day(r.from) + ')' : 'applied: ' + t);
+      const src = typeof r.source === 'string' ? r.source.slice(0, 200) : 'official notice';
+      return { id: typeof r.id === 'string' ? r.id : '', text: text,
+        cls: 'ew-pill ' + ISSUE_CLS[r.state] + ' ew-kissue',
+        title: (typeof r.note === 'string' && r.note ? r.note.slice(0, 200) + '\n' : '') +
+          'source: ' + src + (r.verified === true ? '' : ' (unverified)') + '\nfrom ' + day(r.from) +
+          (typeof r.until === 'string' ? ' until ' + day(r.until) : ', no end date yet') };
+    });
+    return { chips: chips,
+      error: typeof d.error === 'string' && d.error ? 'known issues file unreadable: ' + d.error.slice(0, 200) : null };
+  }
+
   // Plan 079: override ledger. One /api/overrides item -> the card-header
   // badge {cls, text, title}; null for junk. The title says what is in force,
   // where it came from and when it lapses.
@@ -289,7 +318,7 @@
     signalPill: signalPill, VERDICT_ORDER: VERDICT_ORDER, verdictRows: verdictRows, fmtOverrideValue: fmtOverrideValue, overrideBadge: overrideBadge,
     overrideItems: overrideItems, overrideBadges: overrideBadges, overrideRows: overrideRows,
     overridePill: overridePill, serverRows: serverRows, DEFAULT_HOTKEYS: DEFAULT_HOTKEYS,
-    validAccelerator: validAccelerator, hotkeys: hotkeys });
+    validAccelerator: validAccelerator, hotkeys: hotkeys, knownIssueChips: knownIssueChips });
   return function link() {
     externalUrl = K.externalUrl;
     fmtAge = K.fmtAge;

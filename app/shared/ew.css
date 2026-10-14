@@ -133,6 +133,9 @@ html, body {
 .ew-pill.warn { color: var(--fk-status-warn); }
 .ew-pill.bad { color: var(--fk-status-bad); }
 .ew-pill.unknown { color: var(--fk-status-unknown); }
+/* Plan 130: official known-issue chips on Leveling / Enhancement plan / Watchlist. */
+.ew-kissues { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0; }
+.ew-kissues[hidden] { display: none; }
 
 .ew-main { flex: 1; min-height: 0; display: flex; }
 

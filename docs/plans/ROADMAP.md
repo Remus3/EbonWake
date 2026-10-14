@@ -126,7 +126,7 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 120 | Remaining typed-fields survey: list every operator-typed field left (pets, mounts, inventory LT, crafting, others) with a candidate live source; write deduped automation plans + ROADMAP rows for the viable ones (research doc docs/research/NNNN-typed-fields-survey.md) | [x] done 2026-10-10 (loop; refute 0/3 PASS) |
 | 127 | Scheduler window OCR: one Black Spirit's Scheduler shot ticks every pinned daily / weekly (plan doc docs/plans/127-scheduler-window-ocr.md; depends on 114, 111, 021) | [x] done 2026-10-12 (loop; refute 0/3 PASS) |
 | 129 | ew_loop round-3 verifier pass: when refute round 3 ends with clean gates + clean extra_checks, run one verifier pass before marking adjudicate; persist per-round findings in the loop item (plan doc docs/plans/129-loop-round3-verifier-pass.md; source: adjudicator DD-20261012 ruling) | [x] done 2026-10-12 (loop; refute 0/3 PASS) |
-| 130 | Known-issues advisories: curated official known-issue windows (Trading EXP shortfall, Lv59 stall, Agris Fever 10-15) exclude suspect XP samples and show a chip on Leveling / Enhance / Market (plan doc docs/plans/130-known-issues-advisories.md; depends on 064, 116, 060) | [ ] open |
+| 130 | Known-issues advisories: curated official known-issue windows (Trading EXP shortfall, Lv59 stall, Agris Fever 10-15) exclude suspect XP samples and show a chip on Leveling / Enhance / Market (plan doc docs/plans/130-known-issues-advisories.md; depends on 064, 116, 060) | [x] done 2026-10-14 (loop; refute 0/3 PASS) |
 
 Ranking rationale per deep dive / audit and the closed channel-order
 sections: `docs/plans/ROADMAP-history.md` (moved verbatim 2026-10-09, plan

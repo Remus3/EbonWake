@@ -1,7 +1,8 @@
 /* EW Market tab (plan 002 slice B): watchlist, item detail (sparkline + order
    book depth), add/edit, hot list. Plan 027: net-after-tax column, buy/sell
    pair calculator and a pre-order badge for capped / stock-0 queues. Plan 052:
-   p20/p50/p80 band strip + opt-in below-p20 alert. Reads only the local EW server; writes go
+   p20/p50/p80 band strip + opt-in below-p20 alert. Plan 130: official
+   known-issue chips on the Watchlist card. Reads only the local EW server; writes go
    through the dashboard preload (window.ewApi) because the server refuses
    renderer POSTs. Every node is built with DOM APIs - no HTML from data. */
 (function () {
@@ -12,7 +13,7 @@
   const SVGNS = 'http://www.w3.org/2000/svg';
   const S = {
     watch: null, watchErr: null, hot: null, hotErr: null,
-    item: null, itemErr: null, sel: null,
+    item: null, itemErr: null, sel: null, issues: null,
     last: null, lastHot: null, timer: null, ui: null
   };
 
@@ -103,6 +104,20 @@
       }).catch(function (e) { S.hotErr = e.message; }).then(draw);
     }
     if (S.sel) loadItem();
+    // Plan 130: official known-issue chips; a failure keeps the last chips.
+    getJSON('/api/known-issues?area=market').then(function (d) { S.issues = d; },
+      function () { /* keep the last chips */ }).then(draw);
+  }
+
+  function drawIssues(box) {
+    const v = C.knownIssueChips(S.issues, 'market');
+    box.textContent = '';
+    v.chips.forEach(function (c) {
+      const p = el('span', c.cls, c.text);
+      p.title = c.title;
+      box.appendChild(p);
+    });
+    box.hidden = !v.chips.length;
   }
 
   // Plan 049: an SSE `market` push (a watchlist write) re-reads now, or on the
@@ -366,6 +381,7 @@
     drawWatch(ui.watch);
     drawItem(ui.item);
     drawHot(ui.hot, ui.hotPill);
+    drawIssues(ui.issues);
     ui.calc(); // tax settings may have arrived with the watch poll
   }
 
@@ -524,9 +540,12 @@
     const fm = formCard();
     const hotPill = el('span', 'ew-hpill');
     const hot = card('Hot list', hotPill);
+    const issues = el('div', 'ew-kissues'); // plan 130 chips, outside the redrawn body
+    issues.hidden = true;
+    w.card.insertBefore(issues, w.body);
     [w, it, fm, hot].forEach(function (c) { panel.appendChild(c.card); });
     S.ui = { watch: w.body, item: it.body, hot: hot.body, hotPill: hotPill, form: fm.form,
-      calc: calc.update };
+      calc: calc.update, issues: issues };
     if (!S.timer) {
       if (window.EWBus) window.EWBus.on('market', onBus);
       poll(false);
