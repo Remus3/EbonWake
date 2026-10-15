@@ -94,7 +94,7 @@
     validPost, validProfileBase, validProgressBody, validResetRule, validSettingsBody,
     validTodayBody, validWatchBody, verdictRows, watchAlert, weeklyPlan, whatNowActions, whatNowLeft,
     whatNowLine, widgetsFromQuery, widgetsQuery, widgetsTurnedOn, withCurrency, withStep, withTick, xpPresets,
-    zeroPill, zoneCapText, zoneKillsText, zoneLevelText, zonesRows, knownIssueChips } = K;
+    zeroPill, zoneCapText, zoneKillsText, zoneLevelText, zonesRows, knownIssueChips, nightChip } = K;
 
   const api = {
     EXTERNAL_HOSTS: EXTERNAL_HOSTS,
@@ -551,7 +551,8 @@
     ZONES_EMPTY: ZONES_EMPTY,
     zonesRows: zonesRows,
     verdictRows: verdictRows,
-    knownIssueChips: knownIssueChips
+    knownIssueChips: knownIssueChips,
+    nightChip: nightChip
   };
   if (NODE) module.exports = api;
   else root.EWCore = api;

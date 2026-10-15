@@ -337,7 +337,9 @@
     const active = (Array.isArray(x.active) ? x.active : []).filter(plainObject).map(function (a) {
       const bits = [pctText(a.rate_pct), isNum(a.amount_pct) ? pctText(a.amount_pct) + ' amount' : '']
         .filter(function (s) { return s; });
-      return { id: a.id, name: String(a.name), text: bits.join(' '), via: a.via === 'timer' ? 'timer' : 'toggle' };
+      // plan 131: night may come from the game clock or a typed override of it
+      const via = ['timer', 'clock', 'override'].indexOf(a.via) >= 0 ? a.via : 'toggle';
+      return { id: a.id, name: String(a.name), text: bits.join(' '), via: via };
     });
     const toggles = (Array.isArray(x.buffs) ? x.buffs : []).filter(function (r) {
       return plainObject(r) && typeof r.id === 'string' && typeof r.name === 'string';
@@ -356,6 +358,26 @@
     });
     return { error: null, line: line, wasted: wasted, amount: n(x.amount_total) ? '+' + n(x.amount_total) + '% amount' : '',
       active: active, toggles: toggles, roi: agrisLine(d.agris_roi) };
+  }
+
+  // Plan 131: GET /api/daynight -> overlay chip {text, cls} or null. The
+  // calibrated clock at night: "night ends in 12m"; by day only inside
+  // NIGHT_SOON_S: "night in 9m"; a typed toggle: "night (typed)". Nothing
+  // while the clock is uncalibrated and no toggle is typed.
+  const NIGHT_SOON_S = 15 * 60;
+  function nightLeft(s) {
+    const m = Math.max(1, Math.ceil(s / 60));
+    return m >= 60 ? Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : m + 'm';
+  }
+  function nightChip(d, nowMs) {
+    if (!plainObject(d) || (d.via !== 'clock' && d.via !== 'override')) return null;
+    if (d.via === 'override') return d.night === true ? { text: 'night (typed)', cls: 'warn' } : null;
+    const next = typeof d.next_change_utc === 'string' ? Date.parse(d.next_change_utc) : NaN;
+    if (!isFinite(next)) return null;
+    const s = (next - nowMs) / 1000;
+    if (s <= 0) return null;  // stale: the next GET has the new window
+    if (d.night === true) return { text: 'night ends in ' + nightLeft(s), cls: 'ok' };
+    return s <= NIGHT_SOON_S ? { text: 'night in ' + nightLeft(s), cls: 'unknown' } : null;
   }
 
   // Blessing of Agris ROI line, or null (no data / removed).
@@ -585,6 +607,6 @@
     SPOT_GOALS: SPOT_GOALS, SPOT_STAT: SPOT_STAT, SPOT_LEVEL: SPOT_LEVEL, spotsPath: spotsPath,
     spotNeedText: spotNeedText, spotGapText: spotGapText, zoneKillsText: zoneKillsText,
     zoneLevelText: zoneLevelText, zoneCapText: zoneCapText, spotRecs: spotRecs,
-    matchSpot: matchSpot });
+    matchSpot: matchSpot, nightChip: nightChip });
   return function link() {};
 });

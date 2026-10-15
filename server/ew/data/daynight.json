@@ -1,0 +1,10 @@
+{
+ "_doc": "Plan 131: the BDO day / night cycle. period_min = real minutes per game day, night_min = real minutes of it that are night, night_from / night_to = game-clock HH:MM where night starts / ends (the game clock runs faster at night). titles = hints that mark a minimap game-time tooltip shot (case / punctuation-insensitive). Seed values are unverified community figures; one operator screenshot of the minimap game-time tooltip calibrates the clock and a second confirms it.",
+ "period_min": 240,
+ "night_min": 40,
+ "night_from": "22:00",
+ "night_to": "07:00",
+ "titles": ["game time", "in-game time", "drop chance"],
+ "source": "community figures (4 h real day, 40 min night, night 22:00-07:00 game time); deep dive 0026 (Global Lab notes 2026-10-08: drop chance rises at night)",
+ "verified": false
+}

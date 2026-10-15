@@ -130,7 +130,9 @@
   // Plan 111: auto-applied rows (book use, zone read, boss loot tick), Undo by id.
   const OCR_APPLIED_RE = /^a[0-9]{1,9}$/;
   // Plan 127: + today {row, title} (a Black Spirit's Scheduler shot ticked a Today row).
-  const OCR_APPLIED_KINDS = ['book_use', 'zone_xp', 'boss', 'today'];
+  // Plan 131: + gametime {game: "HH:MM"} (a minimap tooltip calibrated the night clock).
+  const OCR_APPLIED_KINDS = ['book_use', 'zone_xp', 'boss', 'today', 'gametime'];
+  const OCR_GAME_RE = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
   const OCR_APPLIED_VIEW = 10;
   // Plan 066: + level {level, pct}, gear (ap / aap / dp int) and book_use
   // {size, pct_before, pct_after} (accept / discard only).
@@ -143,7 +145,8 @@
   // Plan 127: + scheduler_row (name = the unknown Scheduler line, value =
   // {cadence: daily|weekly, state: done|open, remaining_s}; accept adds a Today row).
   const OCR_AUTO_KINDS = ['silver', 'buff', 'level', 'gear', 'book_use', 'loot',
-    'currency_balance', 'enh_fs', 'enh_crons', 'enh_agris', 'cp', 'mastery', 'scheduler_row'];
+    'currency_balance', 'enh_fs', 'enh_crons', 'enh_agris', 'cp', 'mastery', 'scheduler_row',
+    'gametime'];
   const OCR_ENH_FS_MAX = 999;        // server ocrinfer.ENH_FS_MAX
   const OCR_ENH_CRONS_MAX = 1e9;     // server ocrinfer.ENH_CRONS_MAX
   const OCR_ENH_AGRIS_MAX = 1000;    // server ocrinfer.ENH_AGRIS_MAX
@@ -188,6 +191,7 @@
       return { family: v.family, step: v.step, stacks: v.stacks };
     }
     if (kind === 'mastery') return ocrMasteryPct(v) ? v : null;
+    if (kind === 'gametime') return ocrGameValue(v);
     if (kind === 'scheduler_row') {
       if (!plainObject(v) || (v.cadence !== 'daily' && v.cadence !== 'weekly') ||
           (v.state !== 'done' && v.state !== 'open')) return null;
@@ -195,6 +199,12 @@
         remaining_s: Number.isInteger(v.remaining_s) && v.remaining_s >= 0 ? v.remaining_s : null };
     }
     return Number.isInteger(v) && v >= 0 ? v : null;
+  }
+
+  // Plan 131: a game-time read {game: "HH:MM"}, or null.
+  function ocrGameValue(v) {
+    return plainObject(v) && exact(v, ['game']) && typeof v.game === 'string' &&
+      OCR_GAME_RE.test(v.game) ? { game: v.game } : null;
   }
 
   // Plan 117: an imperial mastery bonus pct, 0..500 with at most 2 decimals.
@@ -259,6 +269,8 @@
     } else if (r.kind === 'today') {
       value = plainObject(v) && typeof v.row === 'string' && v.row && typeof v.title === 'string' &&
         v.title ? { row: v.row.slice(0, 40), title: v.title.slice(0, 80) } : null;
+    } else if (r.kind === 'gametime') {
+      value = ocrGameValue(v);
     } else if (plainObject(v) && typeof v.zone_name === 'string') {
       value = { zone_name: v.zone_name.slice(0, 60),
         recommended_level: Number.isInteger(v.recommended_level) ? v.recommended_level : null,
@@ -282,6 +294,7 @@
     if (r.kind === 'book_use') t = v.size + ' book used ' + v.pct_before + '% -> ' + v.pct_after + '%';
     else if (r.kind === 'boss') t = v.boss + ' loot ticked ' + v.day;
     else if (r.kind === 'today') t = v.title + ' ticked (Scheduler)';
+    else if (r.kind === 'gametime') t = 'night clock set from game time ' + v.game;
     else {
       t = 'zone ' + v.zone_name + (v.recommended_level === null ? '' : ' Lv ' + v.recommended_level) +
         ', ' + v.monsters + ' monster' + (v.monsters === 1 ? '' : 's');
@@ -335,6 +348,7 @@
       return 'Agris ' + r.value.family + ' ' + r.value.step + ': ' + r.value.stacks + ' stacks';
     }
     if (r.kind === 'cp') return 'CP ' + r.value;
+    if (r.kind === 'gametime') return 'game time ' + r.value.game + ' (night clock)';
     if (r.kind === 'mastery') return r.name + ' imperial mastery +' + r.value + '%';
     if (r.kind === 'book_use') {
       return r.value.size + ' book used? ' + r.value.pct_before + '% -> ' + r.value.pct_after + '%';
