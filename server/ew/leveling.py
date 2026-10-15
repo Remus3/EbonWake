@@ -27,6 +27,10 @@ MAX_LABEL = 40
 MAX_MILESTONES = 20
 RATE_DELTAS = 5
 RATE_MIN_SPAN_S = 120
+# Plan 132: absolute XP from a My Info (P) read; the per-level totals table
+# grows from those reads (each row sourced "operator shot").
+MAX_XP = 10 ** 13
+LEVEL_XP_SOURCE = "operator shot"
 # Plan 018 seed (Lv 75 patch quest ladder), verify against the patch notes. A
 # store still holding the plan 011 seed is moved to it; edited lists are kept.
 SEED_MILESTONES = [56, 60, 61, 70, 75]
@@ -91,18 +95,18 @@ def _points(samples):
         if (when is None or not _ok_int(s.get("level"), *LEVEL_RANGE)
                 or not _ok_pct(s.get("pct"))):
             continue
-        pts.append((when, s["level"] * 100 + s["pct"]))
+        # Plan 132: an absolute read gives the exact percent, not the rounded one.
+        pct = 100 * s["xp"] / (s["xp"] + s["to_next"]) if _has_xp(s) else s["pct"]
+        pts.append((when, s["level"] * 100 + pct))
     pts.sort(key=lambda p: p[0])
     return pts
 
 
-def rate_pct_h(samples, since=None):
-    """Level-percent per hour: median of the last RATE_DELTAS deltas, each
-    spanning >= RATE_MIN_SPAN_S (a sample closer than that to the newer end is
-    skipped, so bursts of entries merge). None with fewer than 2 usable samples
-    or a rate <= 0. `since` (plan 018 XP epoch start) drops older samples: a
-    rate measured before an XP rescale says nothing about after it."""
-    pts = [p for p in _points(samples) if since is None or p[0] >= since]
+def _walk(pts, gain):
+    """Median per-hour gain over the last RATE_DELTAS deltas of [(when, x)],
+    each spanning >= RATE_MIN_SPAN_S (a point closer than that to the newer
+    end is skipped, so bursts merge); a delta `gain` cannot size is skipped.
+    None without a delta or with a median <= 0."""
     deltas = []
     i = len(pts) - 1
     while i > 0 and len(deltas) < RATE_DELTAS:
@@ -112,13 +116,58 @@ def rate_pct_h(samples, since=None):
             j -= 1
         if j < 0:
             break
-        secs = (t1 - pts[j][0]).total_seconds()
-        deltas.append((v1 - pts[j][1]) * 3600 / secs)
+        g = gain(pts[j][1], v1)
+        if g is not None:
+            deltas.append(g * 3600 / (t1 - pts[j][0]).total_seconds())
         i = j
     if not deltas:
         return None
     rate = statistics.median(deltas)
     return rate if rate > 0 else None
+
+
+def rate_pct_h(samples, since=None):
+    """Level-percent per hour (see _walk). None with fewer than 2 usable
+    samples or a rate <= 0. `since` (plan 018 XP epoch start) drops older
+    samples: a rate measured before an XP rescale says nothing about after it."""
+    pts = [p for p in _points(samples) if since is None or p[0] >= since]
+    return _walk(pts, lambda a, b: b - a)
+
+
+def _has_xp(s):
+    """Plan 132: the sample carries an absolute My Info read."""
+    return _ok_int(s.get("xp"), 0, MAX_XP) and _ok_int(s.get("to_next"), 0, MAX_XP) \
+        and s["xp"] + s["to_next"] > 0
+
+
+def xp_gain(a, b, totals):
+    """Absolute XP from sample `a` to sample `b` (both with xp / to_next); a
+    level-up between them is summed: the rest of a's level, every whole level
+    between (from `totals` {level: total}) and b's xp. None when either lacks
+    an absolute read, b is at a lower level or a middle total is unknown."""
+    if not (_has_xp(a) and _has_xp(b)) or b["level"] < a["level"]:
+        return None
+    if a["level"] == b["level"]:
+        return b["xp"] - a["xp"]
+    middle = [totals.get(lv) for lv in range(a["level"] + 1, b["level"])]
+    if any(t is None for t in middle):
+        return None
+    return a["to_next"] + sum(middle) + b["xp"]
+
+
+def rate_xp_h(samples, totals, since=None):
+    """Plan 132: absolute XP per hour over the samples carrying a My Info
+    read (same delta walk as rate_pct_h), or None (the percent fit stands)."""
+    pts = []
+    for s in samples if isinstance(samples, list) else []:
+        when = _parse_iso(s.get("ts")) if isinstance(s, dict) else None
+        if when is None or s.get("superseded") is True or not _has_xp(s) \
+                or not _ok_int(s.get("level"), *LEVEL_RANGE):
+            continue
+        if since is None or when >= since:
+            pts.append((when, s))
+    pts.sort(key=lambda p: p[0])
+    return _walk(pts, lambda a, b: xp_gain(a, b, totals))
 
 
 def segment_start(samples):
@@ -338,8 +387,23 @@ def _clean_sample(s):
         out = {"ts": ts, "level": s["level"], "pct": _norm_pct(s["pct"])}
         if s.get("source") == OCR_SOURCE:
             out["source"] = OCR_SOURCE
+            if _has_xp(s):  # plan 132: a My Info (P) read
+                out["xp"], out["to_next"] = s["xp"], s["to_next"]
     if s.get("superseded") is True:
         out["superseded"] = True  # plan 116: kept for the record, never counted
+    return out
+
+
+def _clean_level_xp(raw):
+    """Plan 132 per-level totals {"<level>": {total, ts, source}} observed from
+    My Info reads; a bad row is dropped."""
+    out = {}
+    for k, r in (raw if isinstance(raw, dict) else {}).items():
+        lv = int(k) if isinstance(k, str) and k.isdigit() else None
+        if lv is None or not _ok_int(lv, *LEVEL_RANGE) or not isinstance(r, dict) \
+                or not _ok_int(r.get("total"), 1, 2 * MAX_XP) or _parse_iso(r.get("ts")) is None:
+            continue
+        out[str(lv)] = {"total": r["total"], "ts": r["ts"], "source": LEVEL_XP_SOURCE}
     return out
 
 
@@ -566,7 +630,8 @@ class LevelingService:
         nxt = doc.get("next_id")
         top = max((int(w["id"][1:]) for w in windows + auto + retired), default=0) + 1
         nxt = max(nxt, top) if _ok_int(nxt, 1, 10 ** 9 - 1) else top
-        return {"samples": samples, "hot_windows": windows, "hot_auto": auto,
+        return {"samples": samples, "level_xp": _clean_level_xp(doc.get("level_xp")),
+                "hot_windows": windows, "hot_auto": auto,
                 "hot_retired": retired,
                 "milestones": ms, "next_id": nxt,
                 "epochs_added": _clean_rows(doc.get("epochs_added"), _clean_epoch, MAX_EPOCHS),
@@ -662,6 +727,19 @@ class LevelingService:
         rate = rate_pct_h(fit, since if segment is None else segment)
         if rate is None and segment is not None:
             rate = rate_pct_h([s for s in fit if _parse_iso(s["ts"]) < segment], since)
+        # Plan 132: absolute deltas first; the percent fit is the fallback.
+        totals = {int(k): r["total"] for k, r in doc["level_xp"].items()}
+        rate_xp = rate_xp_h(fit, totals, since if segment is None else segment)
+        if rate_xp is None and segment is not None:
+            rate_xp = rate_xp_h([s for s in fit if _parse_iso(s["ts"]) < segment], totals,
+                                since)
+        newest = next((s for s in reversed(samples)
+                       if not _is_marker(s) and s.get("superseded") is not True), None)
+        exact = newest if newest is not None and _has_xp(newest) and newest["level"] == level \
+            and newest["pct"] == pct else None
+        eta = eta_next_s(pct, rate)
+        if exact is not None and rate_xp is not None:
+            eta = int(exact["to_next"] / rate_xp * 3600)
         hot = hot_status(doc["hot_windows"], now, doc["hot_auto"])
         buffs = _live_xp_buffs(self.buffs() if self.buffs is not None else [])
         parts = ([{"name": a["label"], "pct": a["pct"]} for a in hot["active"]]
@@ -679,7 +757,14 @@ class LevelingService:
         books = None if self.books is None else self.books.view(level, pct, rate, deadlines)
         return {"now": _iso(now), "level": level, "pct": pct, "level_source": level_source,
                 "rate_pct_h": None if rate is None else round(rate, 3),
-                "eta_next_s": eta_next_s(pct, rate),
+                "rate_xp_h": None if rate_xp is None else int(round(rate_xp)),
+                "rate_source": "xp" if rate_xp is not None else "pct" if rate is not None
+                else None,
+                "xp": None if exact is None else exact["xp"],
+                "to_next": None if exact is None else exact["to_next"],
+                "level_xp": [dict(r, level=int(k)) for k, r in sorted(
+                    doc["level_xp"].items(), key=lambda kv: int(kv[0]))],
+                "eta_next_s": eta,
                 "next_milestone": nxt_ms,
                 "next_milestone_label": MILESTONE_LABELS.get(nxt_ms),
                 "hot": hot, "xp_stack_pct": xp_stack(hot["active"], buffs), "xp_parts": parts,
@@ -796,26 +881,36 @@ class LevelingService:
         """Current level-percent per hour (epoch-aware), or None."""
         return self.view()["rate_pct_h"]
 
-    def ocr_sample(self, level, pct, shot_ts):
+    def ocr_sample(self, level, pct, shot_ts, xp=None, to_next=None):
         """Plan 066, server side only (never a POST op): {ts = the shot time,
         level, pct, source: "ocr"}. A typed sample in that second is never
-        replaced (manual entry wins); an OCR one is. Returns the ts."""
+        replaced (manual entry wins); an OCR one is. Returns the ts. Plan 132:
+        a My Info read adds absolute `xp` / `to_next` and records the level's
+        total in `level_xp` (source "operator shot")."""
         if not _ok_int(level, *LEVEL_RANGE) or not _ok_pct(pct):
             raise ValueError("ocr sample must be a level and a pct 0..100")
+        exact = xp is not None or to_next is not None
+        if exact and not _has_xp({"xp": xp, "to_next": to_next}):
+            raise ValueError(f"xp and to_next must be whole numbers 0..{MAX_XP}, total > 0")
         ts = _iso(_dt.datetime.fromtimestamp(int(shot_ts), _UTC))
         with self._lock:
             doc = self._load()
             if any(s["ts"] == ts and s.get("source") is None for s in doc["samples"]):
                 raise ValueError("a typed sample holds that second")
             doc["samples"] = [s for s in doc["samples"] if s["ts"] != ts]
-            doc["samples"].append({"ts": ts, "level": level, "pct": _norm_pct(pct),
-                                   "source": OCR_SOURCE})
+            row = {"ts": ts, "level": level, "pct": _norm_pct(pct), "source": OCR_SOURCE}
+            if exact:
+                row.update(xp=xp, to_next=to_next)
+                doc["level_xp"][str(level)] = {"total": xp + to_next, "ts": ts,
+                                               "source": LEVEL_XP_SOURCE}
+            doc["samples"].append(row)
             self._save(doc)
         return ts
 
     def ocr_sample_del(self, ts):
         """Undo of one plan 066 sample: removed only while it is still the OCR
-        sample at `ts` (a typed sample that replaced it is never touched)."""
+        sample at `ts` (a typed sample that replaced it is never touched).
+        Plan 132: the level total that read recorded goes with it."""
         with self._lock:
             doc = self._load()
             keep = [s for s in doc["samples"]
@@ -823,6 +918,7 @@ class LevelingService:
             if len(keep) == len(doc["samples"]):
                 raise ValueError("that OCR sample was replaced or deleted; edit it in Leveling")
             doc["samples"] = keep
+            doc["level_xp"] = {k: r for k, r in doc["level_xp"].items() if r["ts"] != ts}
             self._save(doc)
 
     def supersede(self, stamps, on=True):

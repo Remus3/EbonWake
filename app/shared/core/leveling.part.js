@@ -208,6 +208,14 @@
     return (r >= 1 ? r.toFixed(1) : r.toFixed(2)) + ' %/h';
   }
 
+  // Plan 132: absolute XP/h -> "512M XP/h" / "1.25B XP/h" / "40K XP/h".
+  function fmtXpRate(r) {
+    const u = [[1e9, 'B'], [1e6, 'M'], [1e3, 'K']].find(function (p) { return r >= p[0]; });
+    if (!u) return r + ' XP/h';
+    const v = r / u[0];
+    return (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2)) + u[1] + ' XP/h';
+  }
+
   // Seconds -> "15h12m" / "45m" / "5d05h" (100 h and up).
   function fmtEta(s) {
     if (!isNum(s)) return '-';
@@ -252,6 +260,8 @@
       pct: validXpPct(d.pct) ? d.pct : null,
       level_source: LEVEL_SOURCES.indexOf(d.level_source) >= 0 ? d.level_source : null,
       rate_pct_h: isNum(d.rate_pct_h) && d.rate_pct_h > 0 ? d.rate_pct_h : null,
+      // Plan 132: absolute XP/h from My Info (P) reads (null: the % fit stands).
+      rate_xp_h: Number.isInteger(d.rate_xp_h) && d.rate_xp_h > 0 ? d.rate_xp_h : null,
       eta_next_s: isNum(d.eta_next_s) ? d.eta_next_s : null,
       next_milestone: inRange(d.next_milestone, LEVEL) ? d.next_milestone : null,
       xp_stack_pct: isNum(d.xp_stack_pct) ? d.xp_stack_pct : 0,
@@ -511,6 +521,7 @@
     const el = sinceFetch(fetchedMs, now);
     const parts = [fmtLevelLine(d)];
     parts.push(d.rate_pct_h === null ? '- %/h' : fmtRate(d.rate_pct_h));
+    if (d.rate_xp_h !== null) parts.push(fmtXpRate(d.rate_xp_h));
     parts.push('ETA ' + (d.eta_next_s === null ? '-' : fmtEta(d.eta_next_s - el)));
     const h = hotLive(d.hot, d.xp_stack_pct, fetchedMs, now);
     if (h.active.length) {

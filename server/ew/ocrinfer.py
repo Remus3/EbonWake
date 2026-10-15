@@ -204,6 +204,124 @@ def level_field(doc, size=None, regions=None):
     return _best(cands)
 
 
+# Plan 132: My Info (P) prints current XP, XP to the next level and the
+# level's max XP. The sum current + to next = max is the digit-group guard
+# (plan 016): a dropped comma keeps it, a cut digit group breaks it.
+MYINFO_KIND = "myinfo_xp"
+MYINFO_MAX_XP = 10 ** 13    # leveling.MAX_XP
+MYINFO_PCT_TOL = 0.01       # shown pct vs xp / (xp + to_next), in percent points
+CONF_XP_GROUPED = 0.97      # 1,234,567,890 - the game's own format
+CONF_XP_SHORT = 0.97        # <= 3 digits: no grouping expected
+CONF_XP_DOTTED = 0.9        # 1.234.567.890 - commas read as dots
+CONF_XP_UNGROUPED = 0.9     # 1234567890 - the commas dropped
+CONF_XP_BROKEN = 0.6        # 1,234567,890 - groups of the wrong size
+CONF_XP_NEIGHBOUR = 0.95    # x factor: the number sat on the next line
+CONF_XP_SUM_OK = 0.97       # current + to next = max, whatever the separators
+CONF_XP_SUM_BAD = 0.5       # the three numbers disagree: a group was cut
+_XP_NUM = re.compile(r"\d[\d.,]*\d|\d")
+_XP_MAX = re.compile(r"max(?:imum)?\.?\s*(?:exp|xp|experience)\b", re.IGNORECASE)
+_XP_NEXT = re.compile(r"(?:exp|xp|experience)\s*(?:needed|required|to\s*(?:the\s*)?next"
+                      r"(?:\s*level)?)|(?:needed|required|remaining)\s*(?:exp|xp)"
+                      r"|to\s*next\s*level", re.IGNORECASE)
+_XP_CUR = re.compile(r"current\s*(?:exp|xp|experience)\b", re.IGNORECASE)
+
+
+def _xp_amount(tok):
+    """(value, conf, why) of one XP number token, digit grouping checked."""
+    tok = tok.rstrip(".,")
+    seps = [ch for ch in tok if ch in ",."]
+    groups = re.split(r"[,.]", tok)
+    v = int("".join(groups))
+    if not seps:
+        if len(tok) <= 3:
+            return v, CONF_XP_SHORT, "short number"
+        return v, CONF_XP_UNGROUPED, "commas dropped"
+    if len(set(seps)) == 1 and 1 <= len(groups[0]) <= 3 and all(len(g) == 3 for g in groups[1:]):
+        if seps[0] == ",":
+            return v, CONF_XP_GROUPED, "comma grouped"
+        return v, CONF_XP_DOTTED, "dot grouped"
+    return v, CONF_XP_BROKEN, "broken digit groups"
+
+
+def _xp_after(lines, i, label):
+    """(value, conf, why) of the first number after `label` on line i, else on
+    a neighbour line that carries no XP label; None when there is none."""
+    m = label.search(lines[i]["text"])
+    hit = _XP_NUM.search(lines[i]["text"], m.end())
+    if hit is not None:
+        return _xp_amount(hit.group(0))
+    for b in ocr._neighbours(lines, i):
+        if any(r.search(b["text"]) for r in (_XP_MAX, _XP_NEXT, _XP_CUR)):
+            continue
+        hit = _XP_NUM.search(b["text"])
+        if hit is not None:
+            v, conf, why = _xp_amount(hit.group(0))
+            return v, conf * CONF_XP_NEIGHBOUR, why + " (neighbour line)"
+        break
+    return None
+
+
+def myinfo_xp_field(doc):
+    """Plan 132: {kind: myinfo_xp, name, value: {level, xp, to_next, pct},
+    conf, why[, mismatch: True]} from a My Info (P) shot, or None. pct is
+    xp / (xp + to_next); a shown XP % that differs by more than MYINFO_PCT_TOL
+    marks the read `mismatch` (the worker holds it)."""
+    lines = ocr._lines(doc.get("lines") if isinstance(doc, dict) else None)
+    level, reads = None, {}
+    for i, ln in enumerate(lines):
+        labelled = False
+        for key, label in (("max", _XP_MAX), ("next", _XP_NEXT), ("cur", _XP_CUR)):
+            if label.search(ln["text"]):
+                labelled = True  # one label per line: "Max EXP" is not also current
+                got = _xp_after(lines, i, label) if key not in reads else None
+                if got is not None:
+                    reads[key] = got
+                break
+        if level is None and not labelled:  # "to Next Level 3,765" is no level
+            for m in LEVEL_RE.finditer(ln["text"]):
+                if LEVEL_RANGE[0] <= int(m.group(1)) <= LEVEL_RANGE[1]:
+                    level = int(m.group(1))
+                    break
+    cur, nxt, mx = reads.get("cur"), reads.get("next"), reads.get("max")
+    if level is None or cur is None or (nxt is None and mx is None):
+        return None
+    xp = cur[0]
+    whys = [f"current {cur[2]}"]
+    if nxt is not None and mx is not None:
+        to_next = nxt[0]
+        whys.append(f"to next {nxt[2]}")
+        if xp + to_next == mx[0]:
+            conf = CONF_XP_SUM_OK
+            whys.append("current + to next = max")
+        else:
+            conf = CONF_XP_SUM_BAD
+            whys.append(f"current + to next != max {mx[0]}")
+    elif nxt is not None:
+        to_next, conf = nxt[0], min(cur[1], nxt[1])
+        whys.append(f"to next {nxt[2]}")
+    else:
+        to_next, conf = mx[0] - xp, min(cur[1], mx[1])
+        whys.append(f"to next = max - current ({mx[2]})")
+    total = xp + to_next
+    if to_next < 0 or total <= 0 or total > MYINFO_MAX_XP:
+        return None
+    pct = _norm_pct(round(100 * xp / total, 3))
+    out = {"kind": MYINFO_KIND, "name": MYINFO_KIND,
+           "value": {"level": level, "xp": xp, "to_next": to_next, "pct": pct},
+           "conf": round(conf, 3), "why": "; ".join(whys)}
+    shown = None
+    for ln in lines:
+        pm = PCT_RE.search(ln["text"])
+        hit = _pct_conf(pm) if pm is not None else None
+        if hit is not None:
+            shown = hit[0]
+            break
+    if shown is not None and abs(shown - 100 * xp / total) > MYINFO_PCT_TOL:
+        out["mismatch"] = True
+        out["why"] += f"; pct mismatch: shown {shown}% vs {pct}% from XP"
+    return out
+
+
 def gear_fields(doc, size=None, regions=None):
     """[{kind: gear, name: ap|aap|dp, value, conf, why}] from the character
     window ("AP 296", "Awakening AP 300", "AAP: 300", "DP 380"); one per stat."""

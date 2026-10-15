@@ -73,8 +73,11 @@ CURRENCY_KIND = "currency_balance"
 # Plan 118: enhancement window reads (current failstack, crons owned, Agris
 # pity {family, step, stacks}) -> deadeye; an Agris fix is the stacks count.
 ENH_KINDS = ("enh_fs", "enh_crons", "enh_agris")
+# Plan 132: a My Info (P) read {level, xp, to_next, pct}, accept / discard only;
+# auto-applied at AUTO_APPLY_MIN (plan 111) with an audit row.
+MYINFO_KIND = ocrinfer.MYINFO_KIND
 KINDS = ("silver", "buff", "level", "gear", "book_use") + PLANNER_KINDS + (
-    zoneinfo.KIND, "loot", CURRENCY_KIND) + ENH_KINDS + (daynight.KIND,)
+    zoneinfo.KIND, "loot", CURRENCY_KIND) + ENH_KINDS + (daynight.KIND, MYINFO_KIND)
 # a book suggestion and a zone read are accept / discard only; a loot fix is a count
 FIX_KINDS = ("silver", "buff", "level", "gear") + PLANNER_KINDS + (
     "loot", CURRENCY_KIND) + ENH_KINDS
@@ -294,6 +297,14 @@ def _check_value(kind, v):
             return {"level": v["level"], "pct": v["pct"]}
         raise ValueError(f"level value must be {{level {LEVEL_RANGE[0]}..{LEVEL_RANGE[1]}, "
                          "pct 0..100 with at most 3 decimals}")
+    if kind == MYINFO_KIND:
+        if isinstance(v, dict) and set(v) == {"level", "xp", "to_next", "pct"} \
+                and _ok_int(v["level"], *LEVEL_RANGE) and _ok_pct(v["pct"]) \
+                and _ok_int(v["xp"], 0, ocrinfer.MYINFO_MAX_XP) \
+                and _ok_int(v["to_next"], 0, ocrinfer.MYINFO_MAX_XP) \
+                and v["xp"] + v["to_next"] > 0:
+            return {k: v[k] for k in ("level", "xp", "to_next", "pct")}
+        raise ValueError("myinfo_xp value must be {level, xp, to_next, pct}")
     if kind == "book_use":
         if isinstance(v, dict) and set(v) == {"size", "pct_before", "pct_after"} \
                 and v["size"] in SIZES and _ok_pct(v["pct_before"]) and _ok_pct(v["pct_after"]):
@@ -557,14 +568,18 @@ class AutoOcr:
                     max(0.0, self.clock() - shot_at) / 60) < 1:
                 continue  # ran out since the shot: nothing left to arm or review
             hold, before = None, None
-            if f["kind"] == "level":
+            if f["kind"] == MYINFO_KIND and f.get("mismatch"):
+                hold = "pct mismatch"  # plan 132: the shown % disagrees with the XP
+                f = dict(f, hold="mismatch")
+            elif f["kind"] in ("level", MYINFO_KIND):
                 samples = self.leveling.samples()
                 held = ocrinfer.level_hold(samples, f["value"]["level"], f["value"]["pct"],
                                            shot_at)
                 if held is not None:
                     hold = held[1]
                     f = dict(f, why=f"{f['why']}; {hold}", hold=held[0])  # S7: not committed
-                    if held[0] in ocrinfer.RESOLVABLE and f["conf"] >= mn \
+                    if f["kind"] == "level" and held[0] in ocrinfer.RESOLVABLE \
+                            and f["conf"] >= mn \
                             and self._level_agree(shot["name"], f, shot_at, samples, mn):
                         touched = True  # plan 116: a second read agreed; both committed
                         continue
@@ -606,13 +621,14 @@ class AutoOcr:
                 if act == "hold":
                     hold = why
                     f = dict(f, why=f"{f['why']}; {why}")
-            if hold is None and f["conf"] >= mn:
+            gate = max(mn, AUTO_APPLY_MIN) if f["kind"] == MYINFO_KIND else mn
+            if hold is None and f["conf"] >= gate:
                 try:
                     uid = self._commit(shot["name"], f["kind"], f["name"], f["value"], shot_at)
                     if agree is not None:
                         self._drop_review(agree)
                     touched = True
-                    if f["kind"] in (zoneinfo.KIND, daynight.KIND):
+                    if f["kind"] in (zoneinfo.KIND, daynight.KIND, MYINFO_KIND):
                         self._log_applied(f["kind"], f["value"], f["conf"], shot["name"], uid)
                     if before is not None:
                         self._suggest_book(shot["name"], f["value"], shot_at, *before,
@@ -665,7 +681,10 @@ class AutoOcr:
         # character level; level / XP % are not read from such a shot.
         if self.leveling is not None and not (self.zones is not None
                                               and zoneinfo.is_zone_info(doc, self.zone_titles)):
-            lv = ocrinfer.level_field(doc, size=size, regions=self.regions)
+            # Plan 132: a My Info read carries the level and the exact XP; the
+            # level / XP % read of the same shot would be a second sample.
+            lv = ocrinfer.myinfo_xp_field(doc) or ocrinfer.level_field(doc, size=size,
+                                                                       regions=self.regions)
             if lv is not None:
                 out.append(lv)
         if self.progress is not None:
@@ -1046,11 +1065,15 @@ class AutoOcr:
                 samples.append({"id": uid, "at": _iso(shot_at), "value": value,
                                 "source": f"ocr:{_str(file, 255)}"})
                 self.store.put("silver", {"samples": samples[-MAX_SAMPLES:]})
-            elif kind in ("level", "book_use"):
+            elif kind in ("level", "book_use", MYINFO_KIND):
                 if self.leveling is None:
                     raise ValueError("leveling is not available")
                 if kind == "level":
                     entry["ts"] = self.leveling.ocr_sample(value["level"], value["pct"], shot_at)
+                elif kind == MYINFO_KIND:
+                    entry["ts"] = self.leveling.ocr_sample(value["level"], value["pct"], shot_at,
+                                                           xp=value["xp"],
+                                                           to_next=value["to_next"])
                 else:
                     used = self.leveling.book_use(value)["books"]["used"][0]
                     entry["row"] = {k: used[k] for k in ("at", "size", "level", "pct_before",
@@ -1146,7 +1169,7 @@ class AutoOcr:
                 self.store.put("silver", {"samples": [s for s in samples
                                                       if not (isinstance(s, dict)
                                                               and s.get("id") == uid)]})
-            elif c.get("kind") == "level":
+            elif c.get("kind") in ("level", MYINFO_KIND):
                 self._need(self.leveling).ocr_sample_del(c.get("ts"))
                 stale = c.get("superseded")
                 if isinstance(stale, list) and stale:  # plan 116: they count again
@@ -1273,7 +1296,7 @@ class AutoOcr:
                     "kind": f["kind"], "name": f["name"], "value": f["value"],
                     "conf": f["conf"], "why": _str(f["why"]),
                     "at": _iso(self.clock()), "shot_at": _iso(shot_at)}
-            if f.get("hold") in ("older",) + ocrinfer.RESOLVABLE:
+            if f.get("hold") in ("older", "mismatch") + ocrinfer.RESOLVABLE:
                 item["hold"] = f["hold"]  # plan 116: why a level read is held
             r["items"].append(item)
             r["next"] += 1
