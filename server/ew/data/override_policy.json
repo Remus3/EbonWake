@@ -10,6 +10,8 @@
                               "cards": ["shell", "events", "home"]},
   "events.maintenance_start_utc": {"label": "Maintenance start (UTC)", "expiry": "until:maint_end",
                                    "cards": ["events", "home"]},
+  "grind.night": {"label": "Night drop buff (typed)", "expiry": "days:1", "cards": ["grind"],
+                  "note": "typed night toggle; ends at the next day / night change of the calibrated game clock"},
   "overlay.mode.*": {"label": "Overlay widget pin / block", "expiry": "days:7",
                      "cards": ["overlay"]},
   "bdo.install_dir": {"label": "BDO install folder", "expiry": "until:path_missing",

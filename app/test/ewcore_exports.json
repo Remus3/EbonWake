@@ -455,6 +455,7 @@
     ["ZONES_EMPTY","string"],
     ["zonesRows","function"],
     ["verdictRows","function"],
-    ["knownIssueChips","function"]
+    ["knownIssueChips","function"],
+    ["nightChip","function"]
   ]
 }

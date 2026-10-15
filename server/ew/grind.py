@@ -45,6 +45,7 @@ DROP_PCT_RANGE = (0, 1000)
 CAP_RANGE = (0, 10000)
 PER_WEEK_RANGE = (0, 1000)
 AGRIS_BUFF_ID = "agris-scroll"
+NIGHT_ID = "night"
 CAPS_ID = "caps"
 SCROLL_ID = "agris_scroll"
 DROP_ROW_FIELDS = ("id", "name", "bypass", "source", "verified")
@@ -545,6 +546,11 @@ class GrindService:
         self.cached_price = None
         # Plan 085: verdict(key) -> a tracked row's patch-notes verdict or None; set by the app.
         self.verdict = None
+        # Plan 131: night() -> DayNightService.effective() and night_set(on) (the
+        # typed toggle as a ledger override); set by the app. Without them the
+        # night row is a plain toggle like the other passive sources.
+        self.night = None
+        self.night_set = None
         # `epoch` returns the newest started XP epoch or None (plan 018): until
         # one has started the presets offer the pre-patch value and no hint shows.
         self.epoch = epoch
@@ -681,10 +687,17 @@ class GrindService:
         caps, scroll, rows = self._drop_effective(doc)
         armed = {b["name"].lower() for b in buffs if b["left_s"] is not None}
         on = set(doc["drop_on"])
+        night = self._night_state()
+        if night is not None:  # plan 131: the clock (or its typed override) sets night
+            on.discard(NIGHT_ID)
+            if night["night"]:
+                on.add(NIGHT_ID)
         active, out_rows = [], []
         for r in rows:
             names = {n.lower() for n in [r["name"]] + r.get("aliases", [])}
             via = "timer" if names & armed else ("toggle" if r["id"] in on else None)
+            if via == "toggle" and r["id"] == NIGHT_ID and night is not None:
+                via = night["via"]
             if via:
                 active.append(dict(r, via=via))
             # plan 085: an operator override changes the value, so no verdict applies
@@ -702,7 +715,7 @@ class GrindService:
                               "rate_pct": a.get("rate_pct"),
                               "amount_pct": a.get("amount_pct"), "bypass": a["bypass"]}
                              for a in active],
-                     buffs=out_rows)
+                     buffs=out_rows, night=night)
         agris = next((r for r in rows if r["id"] == AGRIS_BUFF_ID), None)
         if agris is None:
             return drops, None
@@ -718,6 +731,18 @@ class GrindService:
         roi["spot_name"] = spot["name"] if spot else None
         return drops, roi
 
+    def _night_state(self):
+        """Plan 131: {night, via: clock|override|null, until_utc, ...} from the
+        day / night clock, or None when not wired (the stored toggle applies)."""
+        if self.night is None or self.night_set is None:
+            return None
+        try:
+            st = self.night()
+        except Exception:  # noqa: BLE001 - a clock fault leaves night off, never breaks the view
+            return {"night": False, "via": None, "until_utc": None, "calibrated": False,
+                    "next_change_utc": None}
+        return st if isinstance(st, dict) else None
+
     def _need_drops(self):
         if self.drops is None:
             raise ValueError(f"drop buff table unavailable: {self.drops_error}")
@@ -730,6 +755,10 @@ class GrindService:
             raise ValueError(f"unknown drop buff: {arg['id']}")
         if not isinstance(arg["on"], bool):
             raise ValueError("on must be true or false")
+        if arg["id"] == NIGHT_ID and self.night is not None and self.night_set is not None:
+            # Plan 131: a typed night toggle is an expiring override of the clock.
+            self.night_set(arg["on"])
+            return self.view()
         with self._lock:
             doc = self._load()
             on = [i for i in doc["drop_on"] if i != arg["id"]]

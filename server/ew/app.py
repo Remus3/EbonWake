@@ -45,7 +45,7 @@ from pathlib import Path
 from urllib.parse import parse_qs
 
 from . import (__version__, autotick, autowatch, bossdrift, bosses, context, coupons, crafting,
-               dataverdicts, deadeye, fameauto,
+               dataverdicts, daynight, deadeye, fameauto,
                derived, detect, enhance, eventcurrency, eventnotices, events, gamewatch, grind, imperial, inventory, itemnames,
                knownissues, leveling, logindays, maint, maintdigest, market, mounts, ocr, ocrauto, onboarding, overrides,
                pets,
@@ -230,6 +230,12 @@ class EWServer(ThreadingHTTPServer):
             epoch=lambda: self.leveling.active_epoch(),
             prices=lambda iid: market.price_of(self.market.client.sublist(iid)["data"]),
             tax=self.tax)
+        # Plan 131: a calibrated game clock sets the drop calculator's night flag;
+        # a typed night toggle is a ledger override until the next day / night change.
+        self.daynight = daynight.DayNightService(self.store, clock=grind_clock or time.time,
+                                                 ledger=self.overrides)
+        self.grind.night = self.daynight.effective
+        self.grind.night_set = self.daynight.set_override
         # XP stack counts armed grind buffs that carry an xp_pct (plan 011).
         # Plan 060: Combat Secret Book ledger; Black Shrine books follow plan 033 ticks.
         # Plan 081: a typed Hot Time window ends at the next maintenance end.
@@ -400,7 +406,8 @@ class EWServer(ThreadingHTTPServer):
             bosses=self.bosses,  # plan 111: a boss loot screen ticks the loot itself
             catalog=self.names.catalog,  # plan 113: off-table loot names
             currency=self.currency,  # plan 115: exchange / tooltip -> event currency balance
-            deadeye=self.deadeye)  # plan 118: enhancement window -> FS / crons / Agris
+            deadeye=self.deadeye,  # plan 118: enhancement window -> FS / crons / Agris
+            daynight=self.daynight)  # plan 131: minimap game-time tooltip -> night clock
         # Plan 081: the running session's OCR loot counts prefill the loot form;
         # plan 113: an auto session closes with them as its loot, cache-priced.
         self.grind.ocr_loot = self.ocr_auto.loot_prefill
@@ -656,7 +663,13 @@ class EWServer(ThreadingHTTPServer):
         """Plan 079 ledger keys with a live signal -> zero-arg reader. Plan 109:
         the zero-touch guard (tests/test_zero_touch_keys.py) reads this map."""
         return {"market.vp": self._vp_live, "events.maintenance_start_utc": self._maint_live,
-                "market.fame_pct": self._fame_live, "profile.multi_character": self._multi_live}
+                "market.fame_pct": self._fame_live, "profile.multi_character": self._multi_live,
+                "grind.night": self._night_live}
+
+    def _night_live(self):
+        """Plan 131: the calibrated game clock's night flag, or None uncalibrated."""
+        st = self.daynight.state()
+        return {"value": st["night"], "signal": "game_clock"} if st is not None else None
 
     # Plan 109: live signals that do not cover every operator, so the key still
     # needs an operator value (the one zero-touch gap left), with the reason.
@@ -1075,6 +1088,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": str(e)})
         if path == "/api/zones/xp":
             return self._send(200, self.server.zones.view())
+        if path == "/api/daynight":  # plan 131: night flag + next day / night change
+            return self._send(200, self.server.daynight.view())
         if path == "/api/settings":
             return self._send(200, self.server.settings_out(self.server.settings.view()))
         if path == "/api/pets":

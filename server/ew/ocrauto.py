@@ -25,7 +25,8 @@ the exchange window / a tooltip sets that event's balance in eventcurrency
 shot sets the current failstack, crons owned and Agris pity in deadeye
 (`ocrinfer.enhance_fields`). Plan 127: a Black Spirit's Scheduler shot ticks
 its done Today rows (AutoTick.scheduler, logged with an Undo) and queues each
-unmatched line once. Nothing reaches the game: the input is image files the operator
+unmatched line once. Plan 131: a minimap game-time tooltip shot calibrates the
+day / night clock (`daynight`; a read off the clock past its band is held). Nothing reaches the game: the input is image files the operator
 saved with the game's own screenshot key, read after they are written.
 """
 
@@ -35,7 +36,7 @@ import re
 import threading
 import time
 
-from . import autotick, ocr, ocrinfer, zoneinfo
+from . import autotick, daynight, ocr, ocrinfer, zoneinfo
 from .grind import MAX_BUFF_MINUTES, MAX_LOOT_COUNT, MAX_SILVER, SEED_BUFFS
 from .leveling import _ok_pct
 from .levels import LEVEL_RANGE
@@ -73,7 +74,7 @@ CURRENCY_KIND = "currency_balance"
 # pity {family, step, stacks}) -> deadeye; an Agris fix is the stacks count.
 ENH_KINDS = ("enh_fs", "enh_crons", "enh_agris")
 KINDS = ("silver", "buff", "level", "gear", "book_use") + PLANNER_KINDS + (
-    zoneinfo.KIND, "loot", CURRENCY_KIND) + ENH_KINDS
+    zoneinfo.KIND, "loot", CURRENCY_KIND) + ENH_KINDS + (daynight.KIND,)
 # a book suggestion and a zone read are accept / discard only; a loot fix is a count
 FIX_KINDS = ("silver", "buff", "level", "gear") + PLANNER_KINDS + (
     "loot", CURRENCY_KIND) + ENH_KINDS
@@ -316,6 +317,8 @@ def _check_value(kind, v):
         return v
     if kind == zoneinfo.KIND:
         return zoneinfo.check_value(v)
+    if kind == daynight.KIND:
+        return daynight.check_value(v)
     if kind == "fame":
         if _ok_num(v) and 0 <= v <= ocrinfer.FAME_MAX_READ:
             return v
@@ -362,7 +365,7 @@ class AutoOcr:
     def __init__(self, store, game, reader, grind, settings=None, clock=time.time,
                  on_change=None, leveling=None, progress=None, play=None, regions=None,
                  loot_target=None, zones=None, bosses=None, catalog=None, currency=None,
-                 deadeye=None, on_doc=None, today_auto=None):
+                 deadeye=None, on_doc=None, today_auto=None, daynight=None):
         self.store = store
         self.game = game
         self.reader = reader              # OcrService (plan 009): .doc(name) -> {text, lines}
@@ -386,6 +389,8 @@ class AutoOcr:
         self.currency = currency
         # Plan 118: DeadeyeService; without one the enhancement window is not read.
         self.deadeye = deadeye
+        # Plan 131: DayNightService; without one the game-time tooltip is not read.
+        self.daynight = daynight
         # Plan 114: fn(file, doc, shot_at) given every doc this worker read
         # (AutoTick.on_doc: Today `shot:<cue>` rows); no second OCR.
         self.on_doc = on_doc
@@ -539,6 +544,8 @@ class AutoOcr:
         fields += ocrinfer.planner_fields(doc, size=size, regions=self.regions)
         if self.zones is not None:
             fields += zoneinfo.parse(doc, self.zone_titles)
+        if self.daynight is not None and self.daynight.table is not None:
+            fields += daynight.parse(doc, self.daynight.titles)
         shot_at = _ts(shot.get("mtime")) or self.clock()
         if self.currency is not None:
             fields += ocrinfer.currency_field(doc, self.currency.rules, shot_at)
@@ -582,6 +589,13 @@ class AutoOcr:
                 if act == "hold":
                     hold = why
                     f = dict(f, why=f"{f['why']}; {why}")
+            if f["kind"] == daynight.KIND:
+                act, why = self.daynight.ocr_check(f["value"], shot_at)
+                if act == "skip":
+                    continue  # an older shot than the newest game-time read
+                if act == "hold":
+                    hold = why  # plan 131: drift outside the period band
+                    f = dict(f, why=f"{f['why']}; {why}")
             if f["kind"] in ENH_KINDS:
                 try:
                     act, why = self.deadeye.ocr_check(f["kind"], f["value"], shot_at)
@@ -598,7 +612,7 @@ class AutoOcr:
                     if agree is not None:
                         self._drop_review(agree)
                     touched = True
-                    if f["kind"] == zoneinfo.KIND:
+                    if f["kind"] in (zoneinfo.KIND, daynight.KIND):
                         self._log_applied(f["kind"], f["value"], f["conf"], shot["name"], uid)
                     if before is not None:
                         self._suggest_book(shot["name"], f["value"], shot_at, *before,
@@ -1052,6 +1066,10 @@ class AutoOcr:
                 level = self.leveling.level_at(shot_at) if self.leveling is not None else None
                 key, prev = self.zones.commit(value, _str(file, 255), shot_at, level)
                 entry.update(key=key, prev=prev, read_at=_iso(shot_at))
+            elif kind == daynight.KIND:
+                # Plan 131: an operator accept of a held read starts a new chain.
+                entry["prev"] = self._need(self.daynight).commit(
+                    value, _str(file, 255), shot_at, uid, force=via != "auto")
             elif kind == "loot":
                 cur = self.store.get("ocr_loot")
                 if (_ts(cur.get("started")) or 0) > _ts(value["started"]):
@@ -1145,6 +1163,8 @@ class AutoOcr:
             elif c.get("kind") == zoneinfo.KIND:
                 self._need(self.zones).restore(c.get("key"), c.get("prev"), c.get("read_at"),
                                                c.get("file"))
+            elif c.get("kind") == daynight.KIND:
+                self._need(self.daynight).restore(uid, c.get("prev"))
             elif c.get("kind") == "loot":
                 v = c.get("value") if isinstance(c.get("value"), dict) else {}
                 self._loot_restore(v.get("spot"), v.get("started"), v.get("name"),

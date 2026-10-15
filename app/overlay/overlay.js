@@ -46,7 +46,10 @@
    action from GET /api/whatnow (same cadence as Today) or the full view an
    SSE `whatnow` event carries; its due counts down locally ("Kzarka spawns -
    in 8m"), "All clear - play" when nothing is due. Offline keeps the line,
-   muted. */
+   muted.
+   Night (plan 131): with the Grind widgets, GET /api/daynight after each
+   grind GET; a chip on the Grind row ("night ends in 12m", "night in 9m"
+   inside 15 min, "night (typed)") from C.nightChip, counted down locally. */
 (function () {
   'use strict';
   const C = window.EWCore;
@@ -65,6 +68,8 @@
   let grind = null;
   let grindAt = 0;
   let grindStale = false;
+  let night = null;
+  let nightStale = false;
   let events = null;
   let eventsAt = 0;
   let eventsStale = false;
@@ -146,7 +151,13 @@
       else if (secs === null) s.textContent = 'idle';
       else s.textContent = C.spotName(grind.spots, grind.active.spot) + ' ' + C.fmtElapsed(secs);
       s.className = cls;
-      showRow('ov-grind-row', true, s.textContent);
+      // Plan 131: the night chip rides the Grind row and keeps it shown.
+      const p = document.getElementById('ov-night');
+      const chip = C.nightChip(night, now);
+      p.hidden = !chip;
+      p.textContent = chip ? chip.text : '';
+      p.className = 'ew-pill ' + (chip ? chip.cls : 'unknown') + (nightStale ? ' ew-stale' : '');
+      showRow('ov-grind-row', true, chip ? chip.text : s.textContent);
     }
     if (W.grindBuff) {
       const b = document.getElementById('ov-buff');
@@ -373,6 +384,18 @@
     }).catch(function () {
       grindStale = true;
     }).then(function () { drawGrind(Date.now()); });
+    loadNight();
+  }
+
+  // Plan 131: the night chip (GET /api/daynight) with the Grind row.
+  function loadNight() {
+    getJSON('/api/daynight').then(function (d) {
+      if (!d || typeof d !== 'object' || Array.isArray(d)) throw new Error('bad body');
+      night = d;
+      nightStale = false;
+    }).catch(function () {
+      nightStale = true;
+    }).then(function () { drawGrind(Date.now()); });
   }
 
   function loadEvents() {
@@ -511,6 +534,7 @@
       setServer('offline');
       todayStale = true;
       grindStale = true;
+      nightStale = true;
       drawToday(Date.now());
       if (W.dice) drawDice(Date.now());
       if (grindOn()) drawGrind(Date.now());
