@@ -130,7 +130,8 @@
   // Plan 111: auto-applied rows (book use, zone read, boss loot tick), Undo by id.
   const OCR_APPLIED_RE = /^a[0-9]{1,9}$/;
   // Plan 127: + today {row, title} (a Black Spirit's Scheduler shot ticked a Today row).
-  const OCR_APPLIED_KINDS = ['book_use', 'zone_xp', 'boss', 'today'];
+  // Plan 132: + myinfo_xp {level, xp, to_next, pct} (a My Info (P) exact XP read).
+  const OCR_APPLIED_KINDS = ['book_use', 'zone_xp', 'boss', 'today', 'myinfo_xp'];
   const OCR_APPLIED_VIEW = 10;
   // Plan 066: + level {level, pct}, gear (ap / aap / dp int) and book_use
   // {size, pct_before, pct_after} (accept / discard only).
@@ -142,8 +143,11 @@
   // imperial bonus pct, at most 2 decimals; a fix is the corrected pct).
   // Plan 127: + scheduler_row (name = the unknown Scheduler line, value =
   // {cadence: daily|weekly, state: done|open, remaining_s}; accept adds a Today row).
+  // Plan 132: + myinfo_xp {level, xp, to_next, pct} (accept / discard only).
   const OCR_AUTO_KINDS = ['silver', 'buff', 'level', 'gear', 'book_use', 'loot',
-    'currency_balance', 'enh_fs', 'enh_crons', 'enh_agris', 'cp', 'mastery', 'scheduler_row'];
+    'currency_balance', 'enh_fs', 'enh_crons', 'enh_agris', 'cp', 'mastery', 'scheduler_row',
+    'myinfo_xp'];
+  const OCR_XP_MAX = 1e13;   // server leveling.MAX_XP
   const OCR_ENH_FS_MAX = 999;        // server ocrinfer.ENH_FS_MAX
   const OCR_ENH_CRONS_MAX = 1e9;     // server ocrinfer.ENH_CRONS_MAX
   const OCR_ENH_AGRIS_MAX = 1000;    // server ocrinfer.ENH_AGRIS_MAX
@@ -168,8 +172,21 @@
       ocrPct(v.pct_after);
   }
 
+  function ocrMyInfoValue(v) {
+    const xp = function (n) { return Number.isInteger(n) && n >= 0 && n <= OCR_XP_MAX; };
+    if (!plainObject(v) || !exact(v, ['level', 'xp', 'to_next', 'pct']) ||
+        !Number.isInteger(v.level) || v.level < 1 || v.level > OCR_LEVEL_MAX || !ocrPct(v.pct) ||
+        !xp(v.xp) || !xp(v.to_next) || v.xp + v.to_next <= 0) return null;
+    return { level: v.level, xp: v.xp, to_next: v.to_next, pct: v.pct };
+  }
+
+  function ocrGroup(n) {
+    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
   function ocrAutoValue(kind, v) {
     if (kind === 'level') return ocrLevelValue(v) ? { level: v.level, pct: v.pct } : null;
+    if (kind === 'myinfo_xp') return ocrMyInfoValue(v);
     if (kind === 'book_use') {
       return ocrBookValue(v) ? { size: v.size, pct_before: v.pct_before, pct_after: v.pct_after } : null;
     }
@@ -259,6 +276,8 @@
     } else if (r.kind === 'today') {
       value = plainObject(v) && typeof v.row === 'string' && v.row && typeof v.title === 'string' &&
         v.title ? { row: v.row.slice(0, 40), title: v.title.slice(0, 80) } : null;
+    } else if (r.kind === 'myinfo_xp') {
+      value = ocrMyInfoValue(v);
     } else if (plainObject(v) && typeof v.zone_name === 'string') {
       value = { zone_name: v.zone_name.slice(0, 60),
         recommended_level: Number.isInteger(v.recommended_level) ? v.recommended_level : null,
@@ -282,6 +301,7 @@
     if (r.kind === 'book_use') t = v.size + ' book used ' + v.pct_before + '% -> ' + v.pct_after + '%';
     else if (r.kind === 'boss') t = v.boss + ' loot ticked ' + v.day;
     else if (r.kind === 'today') t = v.title + ' ticked (Scheduler)';
+    else if (r.kind === 'myinfo_xp') t = ocrMyInfoText(v);
     else {
       t = 'zone ' + v.zone_name + (v.recommended_level === null ? '' : ' Lv ' + v.recommended_level) +
         ', ' + v.monsters + ' monster' + (v.monsters === 1 ? '' : 's');
@@ -323,10 +343,17 @@
       ' (' + s.n + ' shots over ' + Math.round(s.span_s / 60) + 'm)';
   }
 
+  // Plan 132: "Lv 66 XP 1,234,567,890 / 5,000,000,000 (24.691%)".
+  function ocrMyInfoText(v) {
+    return 'Lv ' + v.level + ' XP ' + ocrGroup(v.xp) + ' / ' + ocrGroup(v.xp + v.to_next) +
+      ' (' + v.pct + '%)';
+  }
+
   function ocrValueText(r) {
     // Exact digits: a review decision needs the read number, not a rounded 1.23M.
     if (r.kind === 'silver') return 'silver ' + String(r.value).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     if (r.kind === 'level') return 'Lv ' + r.value.level + ' ' + r.value.pct + '%';
+    if (r.kind === 'myinfo_xp') return ocrMyInfoText(r.value);
     if (r.kind === 'gear') return r.name.toUpperCase() + ' ' + r.value;
     if (r.kind === 'currency_balance') return 'event ' + r.name + ' currency ' + r.value;
     if (r.kind === 'enh_fs') return 'failstack +' + r.value;
@@ -371,7 +398,7 @@
 
   // Operator-typed fix value -> POST body, or null when it is not a whole number.
   function ocrFixBody(id, kind, text) {
-    if (kind === 'book_use') return null;
+    if (kind === 'book_use' || kind === 'myinfo_xp') return null;
     if (kind === 'level') {
       // "61 12.5" / "Lv 61 12.500%"
       const m = /^\s*(?:lv\.?\s*)?([0-9]{1,2})\s+([0-9]{1,3}(?:\.[0-9]{1,3})?)\s*%?\s*$/i
