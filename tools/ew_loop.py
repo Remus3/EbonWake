@@ -106,7 +106,8 @@ from loop_prompts import (  # noqa: E402
     GATES, NO_ROADMAP, resolve_prompt,  # noqa: F401
 )
 from loop_roadmap import (  # noqa: E402
-    data_items, dependency_cycles, dispatchable, handoff_items, is_duplicate,
+    commit_subject, data_items, dependency_cycles, dispatchable, handoff_items, is_duplicate,
+    merge_subject,  # noqa: F401
     plan_depends, plan_doc, plan_titles, resolve_item, roadmap_flip_time, roadmap_rows,
     RUN_FIELDS, VERDICTS_REL, _KEY_RX, _norm_words, base_kind, flip_roadmap,  # noqa: F401
     resolve_roadmap, title_tokens,  # noqa: F401
@@ -829,13 +830,16 @@ class Tick(InboxMixin, MergeMixin):
         passed = rec.get("verdict") == "PASS"
         # the ROADMAP row is flipped in main at merge, never in the lane commit
         # (fix-0130: lane flips of adjacent rows collided on every parallel merge)
+        # PUBREPO 1b: Conventional Commits subject; the label stays in the body
         if not gates_ok:
-            head = f"WIP (gates failed, not merged): {rec['label']}"
+            head = commit_subject(rec, wip="gates failed, not merged")
         elif not passed:
-            head = f"WIP (no verifier PASS after {MAX_ROUNDS}/{MAX_ROUNDS}, adjudicate): {rec['label']}"
+            head = commit_subject(
+                rec, wip=f"no verifier PASS after {MAX_ROUNDS}/{MAX_ROUNDS}, adjudicate")
         else:
-            head = rec["label"]
-        msg = (f"{head}\n\nrefute-rounds: {rounds}/{MAX_ROUNDS}\n"
+            head = commit_subject(rec)
+        msg = (f"{head}\n\n{ascii_text(rec['label'], 300)}\n\n"
+               f"refute-rounds: {rounds}/{MAX_ROUNDS}\n"
                f"verifier: {rec.get('verdict', 'none')}\nloop item: {rec['id']}\n")
         rec["gates_ok"] = gates_ok  # a refused commit is salvaged with the same verdict
         r = self.d.git(["add", "-A"], wt)

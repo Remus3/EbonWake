@@ -10,6 +10,7 @@ from pathlib import Path
 
 from loop_base import (
     DEPENDS_RX, DEP_ID_RX, MAX_ATTEMPTS, ROADMAP_REL, ROW_RX, SKIP_TAGS, STOP,
+    ascii_text,
 )
 from loop_prompts import resolve_prompt
 
@@ -60,6 +61,60 @@ def plan_doc(root, plan_id):
 def base_kind(rec):
     """The item's own kind; a plan 058 resolve run keeps it in base_kind."""
     return rec.get("base_kind") or rec.get("kind")
+
+
+# PUBREPO order (MAIN 2026-10-15, item 1b): commit subjects for outsiders.
+# Lane commits: Conventional Commits, the item id in the scope; merge commits:
+# `merge: <topic>`. No lane or worktree name ever reaches a subject; session
+# detail (refute rounds, verifier, loop item) stays in the body.
+SUBJECT_MAX = 100
+_PLAN_DOC_TAIL_RX = re.compile(r"\s*\(plan doc [^)]*\)\s*$", re.I)
+_FIX_HEAD_RX = re.compile(r"^(?:fix|bug)(?:es|ed)?\b[\s:-]*", re.I)
+_SCOPE_BAD_RX = re.compile(r"[^a-z0-9-]+")
+_LABEL_HEAD_RX = re.compile(r"^(?:plan|order|hand-off|deep-dive)\s+[^\s:]+:?\s*", re.I)
+
+
+def _clip(text, limit):
+    text = " ".join(str(text).split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit - 3].rsplit(" ", 1)[0] or text[:limit - 3]
+    return cut.rstrip(" :;,-") + "..."
+
+
+def _subject_parts(rec):
+    """(type, scope, description) of an item's commit."""
+    kind = base_kind(rec)
+    iid = _SCOPE_BAD_RX.sub("-", str(rec.get("id", "")).lower()).strip("-") or "item"
+    if kind == "deep-dive":
+        return "docs", "research", f"idle deep-dive {rec.get('date', '')}".strip()
+    if kind == "handoff":
+        title = rec.get("text") or rec.get("title") or rec.get("label", "")
+    else:
+        title = rec.get("title") or _LABEL_HEAD_RX.sub("", rec.get("label", ""), count=1)
+    title = _PLAN_DOC_TAIL_RX.sub("", ascii_text(title)).strip()
+    ctype = "feat" if kind == "plan" else "chore"
+    if kind == "plan" and _FIX_HEAD_RX.match(title):
+        ctype, title = "fix", _FIX_HEAD_RX.sub("", title, count=1)
+    prefix = {"plan": "plan", "order": "order", "handoff": "handoff"}.get(kind, "item")
+    return ctype, f"{prefix}-{iid}", title or "loop item"
+
+
+def commit_subject(rec, wip=None):
+    """Conventional Commits subject of an item's lane commit; `wip` (the
+    reason) marks a kept-unmerged commit as chore + WIP."""
+    ctype, scope, desc = _subject_parts(rec)
+    if wip:
+        ctype, desc = "chore", f"WIP ({wip}) {desc}"
+    head = f"{ctype}({scope}): "
+    return head + _clip(desc, SUBJECT_MAX - len(head))
+
+
+def merge_subject(rec):
+    """`merge: <topic> (<scope>)` for an item's --no-ff merge into main."""
+    _, scope, desc = _subject_parts(rec)
+    tail = f" ({scope})"
+    return "merge: " + _clip(desc, SUBJECT_MAX - len("merge: ") - len(tail)) + tail
 
 
 # a resolve item copies its record minus these per-run fields

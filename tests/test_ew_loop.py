@@ -1991,7 +1991,7 @@ def test_resolve_lane_merges_through_the_normal_path_and_drops_the_ref(tmp_path)
     assert "keep_ref" not in rec and keep_refs(root) == ""
     assert (root / "f.txt").read_text() == "a\nb\n"
     assert git(root, "merge-base", "--is-ancestor", kept, "main") == ""
-    assert git(root, "log", "-1", "--format=%s", "main") == "merge lane-2: plan 013: t"
+    assert git(root, "log", "-1", "--format=%s", "main") == "merge: plan 013 (plan-013)"
     assert "| 013 | Season pass tracker | [x] done" in (root / "docs/plans/ROADMAP.md").read_text()
     assert git(root, "status", "--porcelain") == ""
 
@@ -2520,3 +2520,67 @@ def test_launch_review_and_push_argv(tmp_path):
     assert ew_loop._launch(tmp_path, "012", popen=popen, cmd="review") == 9
     assert ew_loop._launch(tmp_path, None, popen=popen, cmd="push") == 9
     assert argvs[0][-2:] == ["review", "012"] and argvs[1][-1] == "push"
+
+
+# ---------------------------------------------------------------- commit subjects
+# PUBREPO order (MAIN 2026-10-15, item 1b): lane commits carry Conventional
+# Commits subjects for outsiders (the item id in the scope, session detail in
+# the body); merge subjects read `merge: <topic>`, never a lane or worktree name.
+
+CC_RX = re.compile(r"^(feat|fix|docs|chore)\([a-z0-9-]+\): \S")
+
+
+def test_conventional_commit_subjects_by_item_kind():
+    cs = ew_loop.commit_subject
+    plan = {"id": "132", "kind": "plan", "label": "plan 132: My Info XP OCR",
+            "title": "My Info XP OCR: absolute samples (plan doc docs/plans/132-x.md;"
+                     " depends on 116, 063)"}
+    assert cs(plan) == "feat(plan-132): My Info XP OCR: absolute samples"
+    fixp = dict(plan, id="133", title="Fix stale gate cache on rename")
+    assert cs(fixp) == "fix(plan-133): stale gate cache on rename"
+    order = {"id": "N3018ab", "kind": "order", "title": "PUBREPO posture"}
+    assert cs(order) == "chore(order-n3018ab): PUBREPO posture"
+    ho = {"id": "H7", "kind": "handoff", "text": "rerun the OCR fixture sweep"}
+    assert cs(ho) == "chore(handoff-h7): rerun the OCR fixture sweep"
+    dd = {"id": "DD-2026-10-15", "kind": "deep-dive", "date": "2026-10-15",
+          "title": "idle deep-dive"}
+    assert cs(dd) == "docs(research): idle deep-dive 2026-10-15"
+    res = dict(plan, kind="resolve", base_kind="plan")
+    assert cs(res) == cs(plan)
+    for rec in (plan, fixp, order, ho, dd):
+        s = cs(rec)
+        assert CC_RX.match(s) and len(s) <= 100 and s.isascii(), s
+        assert "lane" not in s and "worktree" not in s
+    assert len(cs(dict(plan, title="word " * 60))) <= 100
+
+
+def test_wip_subjects_stay_conventional():
+    rec = {"id": "012", "kind": "plan", "title": "Grind spot recommender"}
+    s = ew_loop.commit_subject(rec, wip="gates failed, not merged")
+    assert s == "chore(plan-012): WIP (gates failed, not merged) Grind spot recommender"
+    assert CC_RX.match(s)
+
+
+def test_merge_subject_names_the_topic_never_the_lane():
+    rec = {"id": "132", "kind": "plan", "label": "plan 132: My Info XP OCR",
+           "title": "My Info XP OCR (plan doc docs/plans/132-x.md)", "lane": "build"}
+    s = ew_loop.merge_subject(rec)
+    assert s == "merge: My Info XP OCR (plan-132)"
+    assert "lane" not in s and "worktree" not in s and "build" not in s
+
+
+def test_lane_and_merge_commits_use_the_generated_subjects(tmp_path):
+    root, wt = git_world(tmp_path)
+    sp = FakeSpawn([{"rc": 0, "error": None, "result": "fine\nVERDICT: PASS"}])
+    d = deps(root, spawn=sp, git=real_git,
+             lane_state=lambda: [{"index": i, "state": "RUNNING", "lane": n}
+                                 for i, n in enumerate(("build", "data", "review"))])
+    ew_loop.tick(deps=d, no_push=True)
+    rec = ew_loop.Items(root).get("012")
+    assert rec["state"] == "merged"
+    assert git(root, "log", "-1", "--format=%s", rec["commit"]) == \
+        "feat(plan-012): Grind spot recommender"
+    assert git(root, "log", "-1", "--format=%s", "main") == \
+        "merge: Grind spot recommender (plan-012)"
+    body = git(root, "log", "-1", "--format=%B", rec["commit"])
+    assert "loop item: 012" in body and "plan 012: Grind spot recommender" in body
