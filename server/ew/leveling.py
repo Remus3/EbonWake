@@ -57,6 +57,7 @@ MAX_HOT_RETIRED = 20
 HHMM_RE = re.compile(r"^([01][0-9]|2[0-3]):([0-5][0-9])$")
 MARKER_SOURCE = "profile"  # plan 041: server-written level marker, pct unknown
 OCR_SOURCE = "ocr"  # plan 066: a sample read from a screenshot (ts = the shot time)
+XP_SOURCES = ("myinfo", "f2")  # plan 133: the window an exact XP read came from
 _UTC = _dt.timezone.utc
 
 
@@ -389,6 +390,8 @@ def _clean_sample(s):
             out["source"] = OCR_SOURCE
             if _has_xp(s):  # plan 132: a My Info (P) read
                 out["xp"], out["to_next"] = s["xp"], s["to_next"]
+                if s.get("xp_src") in XP_SOURCES:  # plan 133: which window it came from
+                    out["xp_src"] = s["xp_src"]
     if s.get("superseded") is True:
         out["superseded"] = True  # plan 116: kept for the record, never counted
     return out
@@ -881,17 +884,20 @@ class LevelingService:
         """Current level-percent per hour (epoch-aware), or None."""
         return self.view()["rate_pct_h"]
 
-    def ocr_sample(self, level, pct, shot_ts, xp=None, to_next=None):
+    def ocr_sample(self, level, pct, shot_ts, xp=None, to_next=None, xp_src=None):
         """Plan 066, server side only (never a POST op): {ts = the shot time,
         level, pct, source: "ocr"}. A typed sample in that second is never
         replaced (manual entry wins); an OCR one is. Returns the ts. Plan 132:
         a My Info read adds absolute `xp` / `to_next` and records the level's
-        total in `level_xp` (source "operator shot")."""
+        total in `level_xp` (source "operator shot"). Plan 133: `xp_src`
+        (myinfo | f2) tags which window an exact read came from."""
         if not _ok_int(level, *LEVEL_RANGE) or not _ok_pct(pct):
             raise ValueError("ocr sample must be a level and a pct 0..100")
         exact = xp is not None or to_next is not None
         if exact and not _has_xp({"xp": xp, "to_next": to_next}):
             raise ValueError(f"xp and to_next must be whole numbers 0..{MAX_XP}, total > 0")
+        if xp_src is not None and (not exact or xp_src not in XP_SOURCES):
+            raise ValueError(f"xp_src must be one of {XP_SOURCES} on an exact read")
         ts = _iso(_dt.datetime.fromtimestamp(int(shot_ts), _UTC))
         with self._lock:
             doc = self._load()
@@ -901,6 +907,8 @@ class LevelingService:
             row = {"ts": ts, "level": level, "pct": _norm_pct(pct), "source": OCR_SOURCE}
             if exact:
                 row.update(xp=xp, to_next=to_next)
+                if xp_src is not None:
+                    row["xp_src"] = xp_src
                 doc["level_xp"][str(level)] = {"total": xp + to_next, "ts": ts,
                                                "source": LEVEL_XP_SOURCE}
             doc["samples"].append(row)

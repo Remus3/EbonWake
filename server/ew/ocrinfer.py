@@ -266,7 +266,56 @@ def myinfo_xp_field(doc):
     conf, why[, mismatch: True]} from a My Info (P) shot, or None. pct is
     xp / (xp + to_next); a shown XP % that differs by more than MYINFO_PCT_TOL
     marks the read `mismatch` (the worker holds it)."""
+    return _exact_xp_field(ocr._lines(doc.get("lines") if isinstance(doc, dict) else None),
+                           MYINFO_KIND)
+
+
+# Plan 133: Adventurer's Note (F2) prints the same level figures. The window
+# title tells the shot apart from My Info (P); the parse and its guards are
+# the plan 132 ones. A read of either kind that lands within XP_CROSS_S of a
+# read of the other kind at the same level must agree on the level's total.
+ADV_NOTE_KIND = "adv_note_xp"
+XP_SOURCES = {MYINFO_KIND: "myinfo", ADV_NOTE_KIND: "f2"}
+XP_CROSS_S = 600            # both kinds read within 10 minutes
+XP_CROSS_TOL = 0.01         # percent of the level total
+_ADV_NOTE_TITLE = re.compile(r"adventurer\W{0,2}s?\s*note", re.IGNORECASE)
+
+
+def adv_note_xp_field(doc):
+    """Plan 133: {kind: adv_note_xp, ...} as myinfo_xp_field, from a shot whose
+    lines carry the Adventurer's Note title; None without it."""
     lines = ocr._lines(doc.get("lines") if isinstance(doc, dict) else None)
+    if not any(_ADV_NOTE_TITLE.search(ln["text"]) for ln in lines):
+        return None
+    return _exact_xp_field(lines, ADV_NOTE_KIND)
+
+
+def xp_cross(samples, kind, value, shot_at):
+    """Plan 133: the committed exact sample of the other kind (by `xp_src`;
+    an untagged one is a plan 132 My Info read) at the same level whose shot
+    lies within XP_CROSS_S of `shot_at` and whose level total differs from
+    this read's by over XP_CROSS_TOL percent; the nearest such one, else None."""
+    mine = XP_SOURCES[kind]
+    total = value["xp"] + value["to_next"]
+    best = None
+    for s in samples:
+        if s.get("superseded") is True or s.get("source") != "ocr" \
+                or not isinstance(s.get("xp"), int) or not isinstance(s.get("to_next"), int) \
+                or s.get("xp_src", "myinfo") == mine or s.get("level") != value["level"]:
+            continue
+        when = today._parse_iso(s.get("ts"))
+        if when is None:
+            continue
+        gap = abs(when.timestamp() - shot_at)
+        other = s["xp"] + s["to_next"]
+        if gap > XP_CROSS_S or abs(other - total) * 100 <= XP_CROSS_TOL * max(other, total):
+            continue
+        if best is None or gap < best[0]:
+            best = (gap, s)
+    return None if best is None else best[1]
+
+
+def _exact_xp_field(lines, kind):
     level, reads = None, {}
     for i, ln in enumerate(lines):
         labelled = False
@@ -306,7 +355,7 @@ def myinfo_xp_field(doc):
     if to_next < 0 or total <= 0 or total > MYINFO_MAX_XP:
         return None
     pct = _norm_pct(round(100 * xp / total, 3))
-    out = {"kind": MYINFO_KIND, "name": MYINFO_KIND,
+    out = {"kind": kind, "name": kind,
            "value": {"level": level, "xp": xp, "to_next": to_next, "pct": pct},
            "conf": round(conf, 3), "why": "; ".join(whys)}
     shown = None

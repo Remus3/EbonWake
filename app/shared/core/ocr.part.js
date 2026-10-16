@@ -132,7 +132,10 @@
   // Plan 127: + today {row, title} (a Black Spirit's Scheduler shot ticked a Today row).
   // Plan 131: + gametime {game: "HH:MM"} (a minimap tooltip calibrated the night clock).
   // Plan 132: + myinfo_xp {level, xp, to_next, pct} (a My Info (P) exact XP read).
-  const OCR_APPLIED_KINDS = ['book_use', 'zone_xp', 'boss', 'today', 'gametime', 'myinfo_xp'];
+  // Plan 133: + adv_note_xp, the same value from Adventurer's Note (F2).
+  const OCR_APPLIED_KINDS = ['book_use', 'zone_xp', 'boss', 'today', 'gametime', 'myinfo_xp',
+    'adv_note_xp'];
+  const OCR_EXACT_KINDS = ['myinfo_xp', 'adv_note_xp'];
   const OCR_GAME_RE = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
   const OCR_APPLIED_VIEW = 10;
   // Plan 066: + level {level, pct}, gear (ap / aap / dp int) and book_use
@@ -146,9 +149,10 @@
   // Plan 127: + scheduler_row (name = the unknown Scheduler line, value =
   // {cadence: daily|weekly, state: done|open, remaining_s}; accept adds a Today row).
   // Plan 132: + myinfo_xp {level, xp, to_next, pct} (accept / discard only).
+  // Plan 133: + adv_note_xp (same value, read from F2).
   const OCR_AUTO_KINDS = ['silver', 'buff', 'level', 'gear', 'book_use', 'loot',
     'currency_balance', 'enh_fs', 'enh_crons', 'enh_agris', 'cp', 'mastery', 'scheduler_row',
-    'gametime', 'myinfo_xp'];
+    'gametime', 'myinfo_xp', 'adv_note_xp'];
   const OCR_XP_MAX = 1e13;   // server leveling.MAX_XP
   const OCR_ENH_FS_MAX = 999;        // server ocrinfer.ENH_FS_MAX
   const OCR_ENH_CRONS_MAX = 1e9;     // server ocrinfer.ENH_CRONS_MAX
@@ -188,7 +192,7 @@
 
   function ocrAutoValue(kind, v) {
     if (kind === 'level') return ocrLevelValue(v) ? { level: v.level, pct: v.pct } : null;
-    if (kind === 'myinfo_xp') return ocrMyInfoValue(v);
+    if (OCR_EXACT_KINDS.includes(kind)) return ocrMyInfoValue(v);
     if (kind === 'book_use') {
       return ocrBookValue(v) ? { size: v.size, pct_before: v.pct_before, pct_after: v.pct_after } : null;
     }
@@ -287,7 +291,7 @@
         v.title ? { row: v.row.slice(0, 40), title: v.title.slice(0, 80) } : null;
     } else if (r.kind === 'gametime') {
       value = ocrGameValue(v);
-    } else if (r.kind === 'myinfo_xp') {
+    } else if (OCR_EXACT_KINDS.includes(r.kind)) {
       value = ocrMyInfoValue(v);
     } else if (plainObject(v) && typeof v.zone_name === 'string') {
       value = { zone_name: v.zone_name.slice(0, 60),
@@ -314,6 +318,7 @@
     else if (r.kind === 'today') t = v.title + ' ticked (Scheduler)';
     else if (r.kind === 'gametime') t = 'night clock set from game time ' + v.game;
     else if (r.kind === 'myinfo_xp') t = ocrMyInfoText(v);
+    else if (r.kind === 'adv_note_xp') t = 'F2 ' + ocrMyInfoText(v);
     else {
       t = 'zone ' + v.zone_name + (v.recommended_level === null ? '' : ' Lv ' + v.recommended_level) +
         ', ' + v.monsters + ' monster' + (v.monsters === 1 ? '' : 's');
@@ -366,6 +371,7 @@
     if (r.kind === 'silver') return 'silver ' + String(r.value).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     if (r.kind === 'level') return 'Lv ' + r.value.level + ' ' + r.value.pct + '%';
     if (r.kind === 'myinfo_xp') return ocrMyInfoText(r.value);
+    if (r.kind === 'adv_note_xp') return 'F2 ' + ocrMyInfoText(r.value);
     if (r.kind === 'gear') return r.name.toUpperCase() + ' ' + r.value;
     if (r.kind === 'currency_balance') return 'event ' + r.name + ' currency ' + r.value;
     if (r.kind === 'enh_fs') return 'failstack +' + r.value;
@@ -411,7 +417,7 @@
 
   // Operator-typed fix value -> POST body, or null when it is not a whole number.
   function ocrFixBody(id, kind, text) {
-    if (kind === 'book_use' || kind === 'myinfo_xp') return null;
+    if (kind === 'book_use' || OCR_EXACT_KINDS.includes(kind)) return null;
     if (kind === 'level') {
       // "61 12.5" / "Lv 61 12.500%"
       const m = /^\s*(?:lv\.?\s*)?([0-9]{1,2})\s+([0-9]{1,3}(?:\.[0-9]{1,3})?)\s*%?\s*$/i
