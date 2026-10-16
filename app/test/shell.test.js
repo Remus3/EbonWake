@@ -104,7 +104,7 @@ test('plan 078: a Ctrl+K button in the top bar opens the palette, title lists th
 test('plan 078: tab strip scrolls instead of clipping; badges and pill never wrap; .ew-jump outline', () => {
   const css = read('shared/ew.css');
   const rule = (sel) => {
-    const m = new RegExp('(^|\\n)' + sel.replace(/[.[\]"=-]/g, '\\$&') + '\\s*\\{([^}]*)\\}').exec(css);
+    const m = new RegExp('(^|\\n)' + sel.replace(/[\\.[\]"=>-]/g, '\\$&') + '\\s*\\{([^}]*)\\}').exec(css);
     return m ? m[2] : '';
   };
   // A space class after the colon would read as a drive path to the leak sweep.

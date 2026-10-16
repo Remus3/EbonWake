@@ -9,6 +9,7 @@ import datetime as dt
 import http.client
 import json
 import threading
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -71,8 +72,8 @@ def test_sources_official_https_only():
     for s in events.SOURCES:
         assert set(s) == {"name", "url"}
         assert s["url"].startswith("https://") and s["name"]
-    urls = " ".join(s["url"] for s in events.SOURCES)
-    assert "naeu.playblackdesert.com" in urls and "twitch.tv" in urls
+    hosts = {urlsplit(s["url"]).hostname for s in events.SOURCES}
+    assert "www.naeu.playblackdesert.com" in hosts and "www.twitch.tv" in hosts
 
 
 def test_seed_not_reapplied(tmp_path, clock):
