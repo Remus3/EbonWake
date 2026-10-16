@@ -73,7 +73,7 @@ def test_sources_official_https_only():
         assert set(s) == {"name", "url"}
         assert s["url"].startswith("https://") and s["name"]
     hosts = {urlsplit(s["url"]).hostname for s in events.SOURCES}
-    assert "www.naeu.playblackdesert.com" in hosts and "www.twitch.tv" in hosts
+    assert hosts >= {"www.naeu.playblackdesert.com", "www.twitch.tv"}
 
 
 def test_seed_not_reapplied(tmp_path, clock):
