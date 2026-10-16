@@ -129,6 +129,7 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 130 | Known-issues advisories: curated official known-issue windows (Trading EXP shortfall, Lv59 stall, Agris Fever 10-15) exclude suspect XP samples and show a chip on Leveling / Enhance / Market (plan doc docs/plans/130-known-issues-advisories.md; depends on 064, 116, 060) | [x] done 2026-10-14 (loop; refute 0/3 PASS) |
 | 131 | Night drop-chance clock: calibrated game clock derives the night flag for the drop-buff calculator (plan doc docs/plans/131-night-drop-clock.md; depends on 038, 063) | [x] done 2026-10-15 (loop; refute 0/3 PASS) |
 | 132 | My Info (P) exact XP OCR: absolute XP samples for the leveling rate fit (plan doc docs/plans/132-myinfo-exact-xp-ocr.md; depends on 116, 063, 018) | [x] done 2026-10-15 (loop; refute 1/3 PASS) |
+| 133 | Adventurer's Note (F2) level-figures OCR: second exact-XP window and cross-check for plan 132 (plan doc docs/plans/133-adventurers-note-f2-ocr.md; depends on 132, 063, 016) | [ ] open |
 
 Ranking rationale per deep dive / audit and the closed channel-order
 sections: `docs/plans/ROADMAP-history.md` (moved verbatim 2026-10-09, plan
@@ -136,6 +137,9 @@ sections: `docs/plans/ROADMAP-history.md` (moved verbatim 2026-10-09, plan
 
 Ranking 20261015 deep dive: 132 (exact XP sharpens every level ETA at Lv
 66-75) above 131 (night flag is a minor drop modifier).
+
+Ranking 20261016 deep dive: 133 (redundant exact-XP read; low urgency, below
+any 132 follow-up).
 
 Rules: refute rounds capped at 3 per item; every plan lands via a lane worktree
 and one push; ETA log updated by every run.
