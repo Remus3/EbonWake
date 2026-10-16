@@ -1,6 +1,6 @@
 EW NEXT SESSION
 ---------------
-SESSION: 34
+SESSION: 35
 
 Next action: monitor the loop (\EbonwakeOps\LaneLoop, progress/loop.json,
 loop_items/*.json); any item left in adjudicate / merge-conflict / gave-up
@@ -8,18 +8,11 @@ loop_items/*.json); any item left in adjudicate / merge-conflict / gave-up
 Context). After the operator's next logon, read back MAIN ORDER N1af105
 step 5 (OPERATOR bullet below) and record it. Answer any MAIN reply to the
 2026-10-12 notes (kit v17 ANSWER, SF-deny + commit-msg temp-path
-INFORMATION) and to the 2026-10-15 N301812 ANSWER. Otherwise work the top
-ROADMAP open row, or let the idle deep-dive seed new rows.
+INFORMATION) and to the 2026-10-15 N301812 ANSWER (none as of session
+34). Otherwise work the top ROADMAP open row, or let the idle deep-dive
+seed new rows.
 
 Carried forward (not acted on yet):
-- Loop checklist header (`python tools/ew_loop.py checklist` /
-  progress/loop.json) prints the fire count instead of the session number
-  (SESSION line of this file) for an interactive session; fix so the
-  header reads `Session <n> checklist` from the hand-off counter (FLEET
-  item 13 a), with a test. Low priority.
-- Optional commit-msg Conventional Commits check from MAIN ORDER N301812
-  (not added in session 33): add only if the order text makes it
-  required; else leave open, low priority.
 - OPERATOR: MAIN ORDER N1af105 step 5 read-back - at the next operator
   logon, confirm no dashboard window shows, the tray icon is present and
   the hotkey opens the dashboard. Steps 1-4 done (step 4 = logon task
@@ -47,7 +40,7 @@ Carried forward (not acted on yet):
   worktree list` and fleet_lanes.worktree_path(i) for i=0..2, remove HALT,
   flip ROADMAP row 106 to [x]. Reverses if MAIN orders trees to set it
   themselves.
-  Read 2026-10-14 session 32: UNSET.
+  Read 2026-10-16 session 34: UNSET.
 - MAIN to record EW's port block 8940-8959 in the machine-wide registry and
   add EW to the roster / lane widget (roster INFO 0230 says EW is a member;
   Hbd1ed4).
@@ -183,14 +176,12 @@ Carried forward (not acted on yet):
   docs/research/0014 line 19 (ProgramData kit path); the vendored kit uses
   the same name, so it stays.
 
-Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew, fire ~962 at
-21:04 2026-10-15, state idle, HALT absent, no lane locks, no stuck items
-(read session 33). progress/loop.json still listed N301812 as "session:
-needs .claude/, CLAUDE.md" at fire 962 although loop item N301812 is
-session_done - check it clears on the next tick. Logon task \Ebonwake args
-end in --hidden, delay PT1M, enabled (read back session 31).
-FLEET_SIDECAR_ROOT absent in HKCU Environment (read 2026-10-15 session
-33; row 106 stays MAIN-gated).
+Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew, task Ready, last
+result 0, fire 1031 (read session 34), HALT absent, no lane locks, no stuck
+items; totals 147 merged, 18 no-change, 1 failed (N7416e2, known, fixed by
+hand). Logon task \Ebonwake args end in --hidden, delay PT1M, enabled (read
+back session 31). FLEET_SIDECAR_ROOT absent in HKCU Environment (read
+2026-10-16 session 34; row 106 stays MAIN-gated).
 ROADMAP open: none (row 106 [>] MAIN-gated). State: ops/loop/control/
 loop_items/*.json, progress/loop.json, progress/lane-<i>.json,
 inbox_status.json. Merge-stuck items are fixed by a session agent (merge
@@ -208,28 +199,25 @@ merge-conflict / gave-up / failed-dirty; any MAIN reply to the 2026-10-12
 notes or the N301812 ANSWER answered (or acked by ledger line); new
 deep-dive rows built by the loop.
 
-Do NOT redo: session 33 (2026-10-15): MAIN ORDER N301812 (PUBREPO) all
-done and read back - tags 0 local / 0 remote, release process
-docs/process/releases.md (287b2d5); ew_loop / loop_roadmap Conventional
-Commits subjects + `merge: <topic>` pinned in tests/test_ew_loop.py (4
-tests) and README "How this repo is built" + Apache-2.0 statement
-(bc06037, merge 8619a62); CodeQL alerts 1-3 fixed, open alerts 0 after
-rescan on 773ee40; dependabot #5, #4 applied, #3 partial (ruff pin only;
-regenerated lockfiles dropped the Windows colorama pin), all closed with
-comments, open bot PRs 0; dependabot alerts ON, security-update PRs OFF;
-outsider read clean; 9 failed Actions runs / 30 d (6 ci, 3 codeql), 0
-token hits; fleet.operatorIdent noreply = yes. ANSWER note
-moon_sync_outbox/2026-10-15-2115-from-EW-ANSWER-re-...-ONE-ANSWER.md
-delivered 1/1, HOP 2, 1/6 cap used 2026-10-15. Loop item N301812
-session_done. Session 32: read-only. Session 31: N1af105 step 4 (82f9146).
-Older sessions: docs/handoff-ledger.txt and git log.
+Do NOT redo: session 34 (2026-10-16): loop checklist header reads the
+SESSION number from this file (loop item H7e6e46, merge 5c7b9b3) - done.
+Optional Conventional Commits commit-msg check (N301812) RULED closed, no
+change: subjects already pinned by tests/test_ew_loop.py; alternative (a
+commit-msg hook check) rejected because it could block kit / operator
+commits; loop item H6e69b0 also ended no-change. Reverses if MAIN orders a
+hook check in writing. Loop merged deep-dive 20261016 (26b5c5c) and plan
+133 (f35dd07). Inbox: no new notes (newest ANSWER class, no reply), 0
+outbound 2026-10-16. Session 33: MAIN ORDER N301812 (PUBREPO) all done and
+read back (docs/handoff-ledger.txt, git log 287b2d5..773ee40). Session 31:
+N1af105 step 4 (82f9146). Older sessions: docs/handoff-ledger.txt and git
+log.
 
 In flight: none. Loop armed, no lane running, no session agents.
 
-Status: session 33 pushed main through 773ee40 (merge 8619a62, fix 773ee40);
-ci + codeql success on 773ee40. /done gates (session 33): gated pytest
-green rc 0 (146 s), gated node 782 pass 0 fail (npm.cmd), leak sweep
-ARMED (19). /done commits only this hand-off on top of 773ee40. Session
-jsonl < 10 MB (0.7 MB).
+Status: session 34 made no code commits; main at f35dd07 = origin before
+this hand-off; ci + codeql success on f35dd07; server health ok on :8940.
+/done gates (session 34): gated pytest green rc 0 (103 s), gated node 785
+pass 0 fail (npm.cmd), leak sweep ARMED (19). /done commits only this
+hand-off on top of f35dd07. Session jsonl < 10 MB (largest 2.0 MB).
 
 Start with: read this file, then CLAUDE.md, docs/plans/ROADMAP.md, git log -10.
