@@ -11,7 +11,7 @@ from loop_base import (
     RED_TTL_S, RESOLVABLE, ROADMAP_REL, ascii_text, atomic_write, epoch_of, iso,
     read_json,
 )
-from loop_roadmap import base_kind, flip_roadmap, resolve_roadmap
+from loop_roadmap import base_kind, flip_roadmap, merge_subject, resolve_roadmap
 
 
 # ---------------------------------------------------------------- gate verdicts
@@ -93,7 +93,6 @@ class MergeMixin:
         if br != "main" or self.dirty(main):
             self.step(f"{rec['id']}: main not clean on main, merge deferred")
             return
-        lane = Path(rec["worktree"]).name
         g = self.d.git
         if g(["merge-base", "--is-ancestor", rec["commit"], "HEAD"], main).returncode == 0:
             # already in main (a crash after the merge commit): re-run is a no-op
@@ -124,8 +123,9 @@ class MergeMixin:
                 pass
         state = "merge-conflict"
         if why is None:
-            msg = (f"merge {lane}: {rec['label']}\n\nrefute-rounds: "
-                   f"{rec.get('rounds', 0)}/{MAX_ROUNDS}\n")
+            # PUBREPO 1b: `merge: <topic>`, never the lane / worktree name
+            msg = (f"{merge_subject(rec)}\n\n{ascii_text(rec['label'], 300)}\n\n"
+                   f"refute-rounds: {rec.get('rounds', 0)}/{MAX_ROUNDS}\n")
             c = g(["commit", "-q", "-F", "-"], main, input=msg)
             if c.returncode != 0:
                 # main's own hook (leak sweep) refused clean merged content: a

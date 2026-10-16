@@ -32,6 +32,7 @@ overlay for one Black Desert Online player, fed by a small local server on
 - [Quick start](#quick-start)
 - [Privacy](#privacy)
 - [How it works](#how-it-works)
+- [How this repo is built](#how-this-repo-is-built)
 - [Status](#status)
 - [Contributing](#contributing)
 - [License and disclaimer](#license-and-disclaimer)
@@ -136,9 +137,42 @@ docs/        spec, plans, research, ADRs
 Decisions live in [`docs/adr/`](docs/adr/) and the spec in
 [`docs/design/0001-ebonwake-spec.md`](docs/design/0001-ebonwake-spec.md).
 
-Ebonwake is built by Claude Code agent sessions under the rules in
-[`CLAUDE.md`](CLAUDE.md): spec first, failing test first, an independent
-verifier before any done-claim, and a leak sweep on every commit and push.
+## How this repo is built
+
+Ebonwake is written with AI-assisted tooling (Claude Code agent sessions)
+under the direction of one human operator, who sets the goals, reviews the
+results and owns every commit. Several files that look unusual in an ordinary
+project exist because of that; they are the documented process, not runtime
+code:
+
+- [`CLAUDE.md`](CLAUDE.md) - the standing rules every agent session follows:
+  the game-safety floor, spec first, failing test first, an independent
+  verifier before any done-claim, ASCII + LF, no secrets in tracked files.
+- [`.claude/`](.claude/) - session configuration: agent definitions (for
+  example the verifier and the adjudicator that rules on blocked decisions),
+  slash commands such as the end-of-session ritual, and hook settings.
+- [`ops/`](ops/) - `ops/fleet_kit/` is a vendored, version-pinned helper kit
+  (git locking, test-suite gating, commit identity checks) that is never
+  edited here; `ops/loop/` holds a shared concurrency governor and the
+  scheduled work loop's local control files (the loop itself is
+  `tools/ew_loop.py`). Runtime state lives under `ops/runtime/` and is
+  gitignored.
+- [`.githooks/`](.githooks/) - pre-commit and pre-push hooks run a leak
+  sweep (machine paths, account ids, emails, secret shapes); the commit-msg
+  hook strips AI or bot attribution trailers. Install them in a fresh clone with
+  `python tools/install_hooks.py`.
+- [`EW-NEXT-SESSION.txt`](EW-NEXT-SESSION.txt) - the hand-off: the only
+  continuity between sessions, listing the next action and every open item.
+- [`docs/plans/ROADMAP.md`](docs/plans/ROADMAP.md) and `docs/plans/` - the
+  work queue; each change starts as a plan there.
+
+Commit subjects follow [Conventional Commits](https://www.conventionalcommits.org/)
+(for example `feat(plan-132): ...`, `fix(...)`, `merge: <topic>`); session
+detail such as refute rounds and the verifier verdict sits in the commit body.
+
+**Licence:** Ebonwake is open source under the Apache License 2.0 - see
+[`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). AI assistance does not change
+the licence or the warranty disclaimer it contains.
 
 ## Status
 
