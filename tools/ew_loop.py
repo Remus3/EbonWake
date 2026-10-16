@@ -1288,12 +1288,21 @@ class Tick(InboxMixin, MergeMixin):
         return self.write(state, task, lines, started)
 
 
-def render_checklist(doc):
-    """The item-13 block for a loop.json doc: `Session <fire> checklist`, one
-    line per remaining task, then the /done line (kit fleet_checklist.render)."""
+def handoff_session(text):
+    """The `SESSION: <n>` counter of a hand-off file (CLAUDE.md loop rule 5), or None."""
+    m = re.search(r"^SESSION:\s*(\d+)\s*$", text or "", re.M)
+    return int(m.group(1)) if m else None
+
+
+def render_checklist(doc, session=None):
+    """The item-13 block for a loop.json doc: `Session <n> checklist`, one
+    line per remaining task, then the /done line (kit fleet_checklist.render).
+    n is the hand-off session counter when given (interactive session, FLEET
+    item 13 a), else the tick's fire count (a headless fire uses its run count)."""
     cl = ew_lane._load("fleet_checklist", "ops/fleet_kit/fleet_checklist.py")
     rows = [r for r in (doc.get("checklist") or []) if isinstance(r, dict)]
-    return cl.render(int(doc.get("fire", 0) or 0), rows)
+    n = session if session is not None else int(doc.get("fire", 0) or 0)
+    return cl.render(n, rows)
 
 
 def tick(dry_run=False, no_push=False, deps=None):
@@ -1483,8 +1492,12 @@ def main(argv=None):
     if a.cmd == "push":
         return push_worker()
     doc = read_json(ROOT / "ops/loop/control/progress/loop.json", {}) or {}
+    try:  # FLEET item 13 a: an interactive session heads with the hand-off counter
+        session = handoff_session((ROOT / f"{CODE}-NEXT-SESSION.txt").read_text(encoding="utf-8"))
+    except OSError:
+        session = None
     # kit v10: emit() never raises (a cp1252 console gets "[ ]", pythonw prints nothing)
-    ew_lane._load("fleet_checklist", "ops/fleet_kit/fleet_checklist.py").emit(render_checklist(doc))
+    ew_lane._load("fleet_checklist", "ops/fleet_kit/fleet_checklist.py").emit(render_checklist(doc, session))
     return 0
 
 

@@ -671,6 +671,25 @@ def test_checklist_lines(tmp_path):
     assert st["code"] == "EW" and st["state"] == "running" and st["next_tick"]
 
 
+def test_checklist_cli_heads_with_handoff_session(tmp_path, monkeypatch, capsys):
+    # FLEET item 13 a: an interactive `checklist` reads `Session <n>` from the
+    # hand-off SESSION line, not the tick's fire count
+    assert ew_loop.handoff_session("x\nSESSION: 34\ny\n") == 34
+    assert ew_loop.handoff_session("no counter") is None
+    doc = {"fire": 7, "checklist": [{"id": "012", "task": "Grind", "state": None,
+                                     "eta_s": None}]}
+    assert ew_loop.render_checklist(doc).splitlines()[0] == "Session 7 checklist"
+    assert ew_loop.render_checklist(doc, 34).splitlines()[0] == "Session 34 checklist"
+    (tmp_path / "ops/loop/control/progress").mkdir(parents=True)
+    (tmp_path / "ops/loop/control/progress/loop.json").write_text(json.dumps(doc))
+    monkeypatch.setattr(ew_loop, "ROOT", tmp_path)
+    assert ew_loop.main(["checklist"]) == 0
+    assert capsys.readouterr().out.splitlines()[0] == "Session 7 checklist"
+    (tmp_path / "EW-NEXT-SESSION.txt").write_text("hand-off\nSESSION: 34\n")
+    assert ew_loop.main(["checklist"]) == 0
+    assert capsys.readouterr().out.splitlines()[0] == "Session 34 checklist"
+
+
 # ---------------------------------------------------------------- finish + merge
 
 def git(cwd, *args):
