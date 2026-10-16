@@ -1074,6 +1074,8 @@ class Handler(BaseHTTPRequestHandler):
                 rows = knownissues.active(lv._now(), area, lv.issues)
             except ValueError as e:
                 return self._send(400, {"error": str(e)})
+            if area in (None, "leveling"):  # plan 133: a held My Info / F2 disagreement
+                rows += self.server.ocr_auto.xp_advisories()
             return self._send(200, {"area": area, "issues": rows, "error": lv.issue_error})
         if path == "/api/bosses":
             return self._send(200, self.server.bosses_view(refresh=True))
