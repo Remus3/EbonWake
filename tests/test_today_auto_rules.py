@@ -12,7 +12,7 @@ import re
 
 import pytest
 
-from server.ew import autotick, bosses, gamewatch, ocr, ocrauto, today
+from server.ew import autotick, bosses, gamewatch, ocrauto, today
 from server.ew.store import Store
 
 UTC = dt.timezone.utc
@@ -341,11 +341,13 @@ def test_ocr_worker_survives_a_broken_on_doc(tmp_path):
     def boom(*a):
         raise RuntimeError("x")
 
-    auto = ocrauto.AutoOcr(Store(tmp_path / "store"), _OcrGame(),
-                           _Reader(FIXTURES["barter-run"]), None,
+    reader = _Reader(FIXTURES["barter-run"])
+    auto = ocrauto.AutoOcr(Store(tmp_path / "store"), _OcrGame(), reader, None,
                            clock=lambda: 1_790_000_100.0, on_doc=boom)
     auto._process("k", {"name": "x.jpg", "size": 10, "mtime": "2026-09-22T11:33:30+00:00"})
-    assert ocr is not None  # reached: the hook's error never breaks the worker
+    # reached without raising, and the shot was still read: the hook's error never
+    # breaks the worker (plan 151 TESTS-B-03: was a vacuous `ocr is not None`)
+    assert reader.calls == 1
 
 
 def test_app_wires_ocr_doc_to_autotick():

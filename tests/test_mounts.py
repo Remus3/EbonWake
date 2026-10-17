@@ -331,7 +331,7 @@ def _no_network(url, timeout):
 @pytest.fixture()
 def srv(tmp_path):
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
-                          market_seed=[], profile_cfg={},
+                          market_seed=[], profile_cfg={}, config_path=tmp_path / "local.json",
                           market_client=market.ArshaClient(fetch=_no_network,
                                                            cache_dir=tmp_path / "cache"))
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)

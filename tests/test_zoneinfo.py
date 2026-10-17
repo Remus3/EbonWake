@@ -12,7 +12,8 @@ import threading
 import pytest
 
 from server.ew import app as ewapp
-from server.ew import grind, leveling, levels, ocr, ocrauto, spots, whatnow, xpbooks, zoneinfo
+from server.ew import (grind, leveling, levels, market, ocr, ocrauto, spots, whatnow, xpbooks,
+                       zoneinfo)
 from server.ew.store import Store
 
 T0 = 1_790_000_000.0
@@ -486,10 +487,16 @@ def test_level_at_read_unknown_without_an_older_sample(env):
 
 # -- route ------------------------------------------------------------------------
 
+def _no_network(url, timeout):
+    raise AssertionError("test touched the network")
+
+
 @pytest.fixture()
 def srv(tmp_path):
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
-                          market_seed=[], profile_cfg={})
+                          market_seed=[], profile_cfg={}, config_path=tmp_path / "local.json",
+                          market_client=market.ArshaClient(fetch=_no_network,
+                                                           cache_dir=tmp_path / "cache"))
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     yield s

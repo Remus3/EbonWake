@@ -383,7 +383,7 @@ def psrv(tmp_path):
                           sse_interval=0.05, market_seed=[],
                           market_client=market.ArshaClient(fetch=_no_network,
                                                            cache_dir=tmp_path / "cache"),
-                          profile_client=pc)
+                          profile_client=pc, config_path=tmp_path / "local.json")
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     yield s
@@ -427,7 +427,9 @@ def test_route_state_sources_profile(psrv):
 
 def test_route_no_profile_configured(tmp_path):
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", market_seed=[],
-                          profile_cfg={})
+                          market_client=market.ArshaClient(fetch=_no_network,
+                                                           cache_dir=tmp_path / "cache"),
+                          profile_cfg={}, config_path=tmp_path / "local.json")
     try:
         assert s.progress.view()["profile"]["status"] == "none"
     finally:
@@ -551,7 +553,7 @@ def test_route_post_does_not_wait_on_slow_upstream(tmp_path):
                           sse_interval=0.05, market_seed=[],
                           market_client=market.ArshaClient(fetch=_no_network,
                                                            cache_dir=tmp_path / "cache"),
-                          profile_client=pc)
+                          profile_client=pc, config_path=tmp_path / "local.json")
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     try:
@@ -1064,7 +1066,7 @@ def hsrv(tmp_path):
                           sse_interval=0.05, market_seed=[], leveling_clock=clk,
                           market_client=market.ArshaClient(fetch=_no_network,
                                                            cache_dir=tmp_path / "cache"),
-                          profile_client=pc)
+                          profile_client=pc, config_path=tmp_path / "local.json")
     s.progress.spawn = _sync
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
@@ -1098,7 +1100,8 @@ def test_route_auto_level_off_by_config(tmp_path):
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", market_seed=[],
                           market_client=market.ArshaClient(fetch=_no_network,
                                                            cache_dir=tmp_path / "cache"),
-                          profile_client=pc, profile_cfg={"auto_level": False})
+                          profile_client=pc, profile_cfg={"auto_level": False},
+                          config_path=tmp_path / "local.json")
     try:
         assert s.progress.auto_level is False
     finally:

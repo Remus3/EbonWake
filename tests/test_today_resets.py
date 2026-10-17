@@ -13,10 +13,14 @@ import threading
 import pytest
 
 from server.ew import app as ewapp
-from server.ew import today
+from server.ew import market, today
 from server.ew.store import Store
 
 UTC = dt.timezone.utc
+
+
+def _no_network(url, timeout):
+    raise AssertionError("test touched the network")
 SUNDAY = {"every": "week", "weekday": 6, "at": "00:00"}
 FIVE_AM = {"every": "day", "at": "05:00"}
 
@@ -234,19 +238,26 @@ def test_view_offers_presets_and_nothing_auto_added(tmp_path):
 @pytest.fixture()
 def tsrv(tmp_path):
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
-                          sse_interval=0.05, market_seed=[], profile_cfg={})
+                          sse_interval=0.05, market_seed=[], profile_cfg={},
+                          config_path=tmp_path / "local.json",
+                          market_client=market.ArshaClient(fetch=_no_network,
+                                                           cache_dir=tmp_path / "cache"))
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     yield s
     s.shutdown()
+    s.server_close()
 
 
 def _post(srv, body):
     c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=5)
-    c.request("POST", "/api/today", body=json.dumps(body),
-              headers={"Content-Type": "application/json"})
-    r = c.getresponse()
-    return r.status, json.loads(r.read())
+    try:
+        c.request("POST", "/api/today", body=json.dumps(body),
+                  headers={"Content-Type": "application/json"})
+        r = c.getresponse()
+        return r.status, json.loads(r.read())
+    finally:
+        c.close()
 
 
 def test_route_add_with_rule_and_400s(tsrv):

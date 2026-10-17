@@ -27,14 +27,47 @@ def _funcs():
             yield node
 
 
+def write_opens(tree):
+    """Lines of open() calls that are not an explicit read-only mode."""
+    bad = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        if isinstance(f, ast.Name) and f.id == "open":
+            pos = node.args[1:2]  # open(path, mode)
+        elif isinstance(f, ast.Attribute) and f.attr in ("open", "fdopen"):
+            # os.open / os.fdopen take flags or a descriptor: never a plain read
+            if isinstance(f.value, ast.Name) and f.value.id == "os":
+                bad.append(node.lineno)
+                continue
+            # io.open(path, mode); Path.open(mode)
+            io_open = isinstance(f.value, ast.Name) and f.value.id == "io"
+            pos = node.args[1:2] if io_open else node.args[:1]
+        else:
+            continue
+        modes = list(pos) + [k.value for k in node.keywords if k.arg == "mode"]
+        if not modes or any(not (isinstance(m, ast.Constant) and isinstance(m.value, str))
+                            or set(m.value) & set("wax+") for m in modes):
+            bad.append(node.lineno)
+    return bad
+
+
 def test_no_write_mode_open():
-    for node in ast.walk(TREE):
-        if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "open":
-            modes = [a for a in node.args[1:2]] + [k.value for k in node.keywords if k.arg == "mode"]
-            assert modes, "open() without an explicit mode"
-            for m in modes:
-                assert isinstance(m, ast.Constant) and isinstance(m.value, str)
-                assert not set(m.value) & set("wax+"), f"write-mode open at line {node.lineno}"
+    assert write_opens(TREE) == []
+
+
+def test_write_open_scan_sees_every_open_form():
+    """TESTS-B-04 (plan 151): Path.open / io.open / os.open slipped past the scan."""
+    src = ("open(p, 'rb')\n"            # 1 ok
+           "open(p)\n"                  # 2 no explicit mode
+           "open(p, 'wb')\n"            # 3
+           "p.open('wb')\n"             # 4 Path.open
+           "p.open(mode='a')\n"         # 5
+           "io.open(p, 'w')\n"          # 6
+           "os.open(p, os.O_RDWR)\n"    # 7 flags, never a read-only mode string
+           "p.open('rb')\n")            # 8 ok
+    assert write_opens(ast.parse(src)) == [2, 3, 4, 5, 6, 7]
 
 
 def test_no_os_level_mutation():

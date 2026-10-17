@@ -50,6 +50,31 @@ changed) npm test green; ASCII / LF.
 
 Depends on: 135, 136, 137, 138, 139, 140.
 
+## As-built deviations
+
+1. TESTS-B-03 and TESTS-B-05 are FIXED without a red-then-green test.
+   Decision: fix them in place and say so in the audit row. Alternatives:
+   leave them (a known-dead assertion and an unjoined thread stay), or invent
+   a meta-test (an AST rule for "no assert on a module object" / "every
+   started Thread is joined" would be broader than the two defects and flag
+   correct daemon threads elsewhere). Why: both defects live inside a test
+   body, so the test itself is the only thing that can change; there is no
+   production behaviour that fails first. Reverses if: a reviewer shows a
+   cheap guard that pins either pattern without false positives.
+2. The checklist progress file `ops/loop/control/progress/p151-build.json`
+   was not written: every write path to the MAIN checkout (Write tool,
+   `python -c` through `fleet_headless.write_progress`, a helper script)
+   was refused by this run's permission set. Decision: proceed, record here.
+   Alternatives: stop the lane (wastes the run), write it inside the
+   worktree (wrong place per FLEET item 12, the widget never reads it).
+   Reverses if: the lane prompt's permission set grants that one path.
+3. The isolation guard is scoped to tests/test_[m-z]*.py (this plan's
+   slice); the a-l half is FILED (row below), not fixed here, so this lane
+   never edits the tests-a slice in parallel with its own lane.
+
+refute-rounds: 0/3
+
 ## Proposed ROADMAP rows
 
-(filled by the lane if any finding is FILED)
+| NNN | EWServer reads market / profile config from the injected config_path, not REPO_ROOT (TESTS-B-06) | [ ] open |
+| NNN | Extend the plan 151 test-isolation guard to tests/test_[a-l]*.py and fix its fixtures (TESTS-B-07) | [ ] open |

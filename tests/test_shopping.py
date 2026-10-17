@@ -301,7 +301,7 @@ def srv(tmp_path):
     client = market.ArshaClient(fetch=_no_network, cache_dir=tmp_path / "cache")
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
                           sse_interval=0.05, market_seed=[], market_client=client,
-                          profile_cfg={})
+                          profile_cfg={}, config_path=tmp_path / "local.json")
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     yield s

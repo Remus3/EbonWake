@@ -310,7 +310,7 @@ def msrv(tmp_path):
     client = market.ArshaClient(fetch=f, clock=Clock(), cache_dir=tmp_path / "cache")
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
                           sse_interval=0.05, market_client=client, market_seed=[4901],
-                          profile_cfg={})
+                          profile_cfg={}, config_path=tmp_path / "local.json")
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     yield s
@@ -401,10 +401,14 @@ def test_slow_fetch_does_not_block_other_keys(tmp_path):
     t = threading.Thread(target=c.sublist, args=(1,))
     t.start()
     done = threading.Event()
-    threading.Thread(target=lambda: (c.sublist(2), done.set())).start()
-    assert done.wait(2), "fresh key 2 waited behind slow key 1"
-    gate.set()
-    t.join()
+    t2 = threading.Thread(target=lambda: (c.sublist(2), done.set()))
+    t2.start()
+    try:
+        assert done.wait(2), "fresh key 2 waited behind slow key 1"
+    finally:
+        gate.set()  # plan 151 TESTS-B-05: release and join both workers, pass or fail
+        t.join(5)
+        t2.join(5)
 
 
 def test_corrupt_cache_and_backoff_degrade(tmp_path):
