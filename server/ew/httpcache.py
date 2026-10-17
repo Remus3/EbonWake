@@ -6,13 +6,25 @@ failure backs off `min(30 * 2**n, 1800)` s; a `Pending` answer ("being fetched,
 retry later") is transient and retries after a flat PENDING_RETRY_S without
 growing n. During backoff or failure the last cache is served `stale: true`
 with `error`; no cache -> `data: null`. Read-only GET only (ToS floor).
+
+Plan 139 politeness: a 200's `ETag` / `Last-Modified` are kept in the entry and
+sent back as `If-None-Match` / `If-Modified-Since` on the next fetch of that
+key; a 304 refreshes `fetched_at`, keeps `data` and clears the backoff. A 429 /
+503 `Retry-After` (seconds or HTTP date) stretches the backoff to
+`min(max(generic, retry_after), BACKOFF_MAX_S)`. Only `default_fetch` speaks
+this; an injected or module-own fetch never takes the path. The cache hands
+validators to the fetch through a per-thread context, so every caller's
+`fetch(url, timeout) -> bytes` shape is unchanged.
 """
 
 import datetime as _dt
+import email.utils
 import json
 import threading
 import time
+import urllib.error
 import urllib.request
+from collections import namedtuple
 from pathlib import Path
 
 from . import __version__
@@ -37,15 +49,104 @@ def iso(epoch):
     return _dt.datetime.fromtimestamp(epoch, _dt.timezone.utc).replace(microsecond=0).isoformat()
 
 
-def default_fetch(url, timeout):
-    """Plain GET; raises on HTTP error or timeout, Pending on HTTP 202."""
-    req = urllib.request.Request(url, method="GET",
-                                 headers={"User-Agent": f"Ebonwake/{__version__}",
-                                          "Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 (fixed https bases)
-        if r.status == 202:
-            raise Pending("being fetched, retry later")
-        return r.read()
+class NotModified(UpstreamError):
+    """HTTP 304 to a conditional GET: the cached data is still current."""
+
+
+FetchResult = namedtuple("FetchResult", "status headers body")
+RETRY_AFTER_STATUS = (429, 503)
+_ctx = threading.local()  # .cond = _Cond while a cached_get download runs
+
+
+class _Cond:
+    """Validators in, response facts out, for the first default_fetch of one
+    download (a second GET to another URL in the same download is plain)."""
+
+    def __init__(self, etag=None, last_modified=None):
+        self.etag = etag
+        self.last_modified = last_modified
+        self.url = None
+        self.not_modified = False
+        self.etag_out = None
+        self.last_modified_out = None
+        self.retry_after = None
+
+
+def _lower(headers):
+    try:
+        return {str(k).lower(): v for k, v in (headers or {}).items()}
+    except AttributeError:
+        return {}
+
+
+def _str_or_none(v):
+    return v if isinstance(v, str) and v else None
+
+
+def fetch_result(url, timeout, headers=None, opener=None):
+    """Plain GET -> FetchResult(status, lower-cased headers, body). A 304 is a
+    result, not an error; any other HTTP error raises. `opener` stands in for
+    urlopen (tests, no socket)."""
+    h = {"User-Agent": f"Ebonwake/{__version__}", "Accept": "application/json"}
+    h.update(headers or {})
+    req = urllib.request.Request(url, method="GET", headers=h)
+    try:
+        with (opener or urllib.request.urlopen)(req, timeout=timeout) as r:  # noqa: S310 (fixed https bases)
+            return FetchResult(r.status, _lower(r.headers), r.read())
+    except urllib.error.HTTPError as e:
+        if e.code == 304:
+            return FetchResult(304, _lower(e.headers), b"")
+        raise
+
+
+def default_fetch(url, timeout, opener=None):
+    """Plain GET -> body bytes; raises on HTTP error or timeout, Pending on
+    HTTP 202, NotModified on 304. Inside cached_get the first call sends the
+    key's stored validators and reports the response validators / Retry-After."""
+    cond = getattr(_ctx, "cond", None)
+    if cond is not None and cond.url is None:
+        cond.url = url
+    mine = cond is not None and cond.url == url
+    headers = {}
+    if mine and cond.etag:
+        headers["If-None-Match"] = cond.etag
+    if mine and cond.last_modified:
+        headers["If-Modified-Since"] = cond.last_modified
+    try:
+        res = fetch_result(url, timeout, headers, opener)
+    except urllib.error.HTTPError as e:
+        if mine and e.code in RETRY_AFTER_STATUS:
+            cond.retry_after = _lower(e.headers).get("retry-after")
+        raise
+    if res.status == 304:
+        if mine:
+            cond.not_modified = True
+        raise NotModified("304 not modified")
+    if res.status == 202:
+        raise Pending("being fetched, retry later")
+    if mine:
+        cond.etag_out = _str_or_none(res.headers.get("etag"))
+        cond.last_modified_out = _str_or_none(res.headers.get("last-modified"))
+    return res.body
+
+
+def retry_after_s(value, now):
+    """Seconds to wait from a Retry-After value (delta seconds or HTTP date; a
+    past date = 0), or None when missing or garbage."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    v = value.strip()
+    if v.isdigit():
+        return int(v)
+    try:
+        when = email.utils.parsedate_to_datetime(v)
+    except (TypeError, ValueError, IndexError):
+        return None
+    if when is None:
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=_dt.timezone.utc)
+    return max(0, int(when.timestamp() - now))
 
 
 def read_json(path):
@@ -74,6 +175,12 @@ class CachedClient:
         self._bo_lock = threading.Lock()   # guards backoff.json read-modify-write
         self._keylocks = {}
         self._inflight = set()             # keys with a background refresh running
+        # Plan 139: since-start counters for /api/health.
+        self.stats = {"hits_304": 0, "retry_after_honoured": 0}
+
+    def _count(self, name):
+        with self._lock:
+            self.stats[name] += 1
 
     def _keylock(self, key):
         with self._lock:
@@ -130,6 +237,9 @@ class CachedClient:
             if bo and now < bo.get("until", 0):
                 return self._result(cached, now, ttl, True, bo.get("error") or "backoff")
             n = int(bo.get("n", 0)) if bo else 0
+            cond = _Cond(_str_or_none(cached.get("etag")),
+                         _str_or_none(cached.get("last_modified"))) if cached else _Cond()
+            prev, _ctx.cond = getattr(_ctx, "cond", None), cond
             try:
                 data = download()
             except Pending as e:
@@ -138,11 +248,30 @@ class CachedClient:
                                         "pending": True})
                 return self._result(cached, now, ttl, True, err)
             except UpstreamError as e:
-                wait = min(BACKOFF_BASE_S * 2 ** n, BACKOFF_MAX_S)
+                # A 304 arrives wrapped by the caller's download; the flag says it.
+                if cond.not_modified and cached:
+                    entry = dict(cached, fetched_at=now)
+                    atomic_write_json(self._cache_path(key), entry)
+                    if bo:
+                        self._set_backoff(key, None)
+                    self._count("hits_304")
+                    return self._result(entry, now, ttl, False, None)
+                wait = BACKOFF_BASE_S * 2 ** n
+                ra = retry_after_s(cond.retry_after, now)
+                if ra is not None:
+                    wait = max(wait, ra)
+                    self._count("retry_after_honoured")
+                wait = min(wait, BACKOFF_MAX_S)
                 err = str(e)
                 self._set_backoff(key, {"n": n + 1, "until": now + wait, "error": err})
                 return self._result(cached, now, ttl, True, err)
+            finally:
+                _ctx.cond = prev
             entry = {"fetched_at": now, "data": data}
+            if cond.etag_out:
+                entry["etag"] = cond.etag_out
+            if cond.last_modified_out:
+                entry["last_modified"] = cond.last_modified_out
             atomic_write_json(self._cache_path(key), entry)
             if bo:
                 self._set_backoff(key, None)

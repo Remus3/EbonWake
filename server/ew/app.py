@@ -953,6 +953,14 @@ class EWServer(ThreadingHTTPServer):
         return {"commit": self.commit, "started": self.started, "pid": os.getpid(),
                 "config_hash": self.cfg_hash, "schema": 1}
 
+    def upstream_stats(self):
+        """Plan 139: per-cache conditional-GET / Retry-After counters since
+        start; None for a cache that is not configured (no profile family)."""
+        def one(client):
+            stats = getattr(client, "stats", None)
+            return dict(stats) if isinstance(stats, dict) else None
+        return {"market": one(self.market.client), "profile": one(self.progress.profile)}
+
     def state(self):
         return {"app": "ebonwake", "version": __version__, "tabs": TABS,
                 "sources": {"market": self.market.source(), "today": self.today.source(),
@@ -1009,7 +1017,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(403, {"error": "host"})
         path, _, query = self.path.partition("?")
         if path == "/api/health":
-            return self._send(200, {"ok": True, "app": "ebonwake", "port": ports.SERVER})
+            return self._send(200, {"ok": True, "app": "ebonwake", "port": ports.SERVER,
+                                    "upstream": self.server.upstream_stats()})
         if path == "/api/version":
             return self._send(200, self.server.version())
         if path == "/api/state":

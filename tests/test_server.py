@@ -45,6 +45,16 @@ def test_health(srv):
     assert st == 200 and json.loads(body)["ok"] is True
 
 
+def test_health_upstream_counters(srv):
+    """Plan 139: per-cache 304 / Retry-After counters since start."""
+    doc = json.loads(_get(srv, "/api/health")[2])
+    assert doc["upstream"] == {"market": {"hits_304": 0, "retry_after_honoured": 0},
+                               "profile": None}
+    srv.market.client.stats["hits_304"] = 3
+    doc = json.loads(_get(srv, "/api/health")[2])
+    assert doc["upstream"]["market"]["hits_304"] == 3
+
+
 def test_version_contract(srv):
     st, _, body = _get(srv, "/api/version")
     doc = json.loads(body)
