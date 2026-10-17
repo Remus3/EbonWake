@@ -130,15 +130,20 @@
     box.textContent = '';
     const opts = S.data && Array.isArray(S.data.goal_options) ? S.data.goal_options : [];
     const on = S.data && Array.isArray(S.data.goals) ? S.data.goals : [];
+    const boxes = [];
     opts.forEach(function (g) {
       if (!g || typeof g.id !== 'string' || typeof g.title !== 'string') return;
       const lab = el('label', null);
       const cb = el('input');
       cb.type = 'checkbox';
       cb.checked = on.indexOf(g.id) >= 0;
+      boxes.push({ id: g.id, cb: cb });
+      // Plan 146: the full set from the boxes as shown, so a second tick sent
+      // before the first save answers never drops the first one.
       cb.addEventListener('change', function () {
-        const next = on.filter(function (x) { return x !== g.id; });
-        if (cb.checked) next.push(g.id);
+        const next = on.filter(function (x) {
+          return !boxes.some(function (b) { return b.id === x; });
+        }).concat(boxes.filter(function (b) { return b.cb.checked; }).map(function (b) { return b.id; }));
         send({ goals: next }, 'goals saved');
       });
       lab.appendChild(cb);
