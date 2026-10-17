@@ -130,6 +130,7 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 131 | Night drop-chance clock: calibrated game clock derives the night flag for the drop-buff calculator (plan doc docs/plans/131-night-drop-clock.md; depends on 038, 063) | [x] done 2026-10-15 (loop; refute 0/3 PASS) |
 | 132 | My Info (P) exact XP OCR: absolute XP samples for the leveling rate fit (plan doc docs/plans/132-myinfo-exact-xp-ocr.md; depends on 116, 063, 018) | [x] done 2026-10-15 (loop; refute 1/3 PASS) |
 | 133 | Adventurer's Note (F2) level-figures OCR: second exact-XP window and cross-check for plan 132 (plan doc docs/plans/133-adventurers-note-f2-ocr.md; depends on 132, 063, 016) | [x] done 2026-10-16 (loop; refute 0/3 PASS) |
+| 134 | Targeted deep-dive (operator order 2026-10-17): autonomous operation, efficiency, player features - research doc docs/research/0029-deep-dive-autonomy-efficiency.md + at most 6 deduped plans 135.. with proposed rows (plan doc docs/plans/134-autonomy-efficiency-deep-dive.md) | [ ] open (priority) |
 
 Ranking rationale per deep dive / audit and the closed channel-order
 sections: `docs/plans/ROADMAP-history.md` (moved verbatim 2026-10-09, plan
