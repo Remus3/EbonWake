@@ -12,5 +12,6 @@
   "ocr": {"weight": 0.3, "horizon_s": 86400, "nominal_s": 7200},
   "maint_loss": {"weight": 2.0, "horizon_s": 86400, "nominal_s": 3600},
   "event": {"weight": 0.5, "horizon_s": 86400, "nominal_s": 86400},
-  "claim": {"weight": 0.9, "horizon_s": 259200, "nominal_s": 86400}
+  "claim": {"weight": 0.9, "horizon_s": 259200, "nominal_s": 86400},
+  "silver": {"weight": 0.3, "horizon_s": 604800, "nominal_s": 14400}
 }

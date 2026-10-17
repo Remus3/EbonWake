@@ -19,6 +19,7 @@ block), /api/settings (plan 030), /api/pets
 /api/signals (plan 073, GET only; plan 079 adds its `overrides` section; plan 085 a `data` row),
 /api/data/verdicts (plan 085, GET only: hinted data rows vs the cached patch notes),
 /api/loop (plan 136, GET only: loop tick age, lanes, stuck items, halt / backoff),
+/api/silvergoal (plan 140, GET only; the typed goal is POST /api/grind {"week_goal"}),
 /api/overrides (plan 079, GET only; POST /api/settings {"clear": key} retires one),
 /api/portraits + /api/portraits/img/<id> (plan 082; SSE `portraits`; plan 083 adds
 ?cls= gallery, screenshot ids and POST pick / clear / bind), /api/prompts (plan 070: quiet gate, alert ladder,
@@ -51,8 +52,8 @@ from . import (__version__, autotick, autowatch, bossdrift, bosses, context, cou
                knownissues, leveling, logindays, loopstatus, maint, maintdigest, market, mounts, ocr, ocrauto, onboarding, overrides,
                pets,
                ports,
-               playsession, portraits, progress, prompts, settings, shopping, signals, single,
-               spots, summary,
+               playsession, portraits, progress, prompts, settings, shopping, signals, silvergoal,
+               single, spots, summary,
                today, weekly, whatnow, xpbooks, zoneinfo)
 from .store import Store
 
@@ -464,6 +465,11 @@ class EWServer(ThreadingHTTPServer):
             self.store, clock=today_clock or time.time,
             cp=lambda: (self.progress.lifeskill_view().get("cp") or {}).get("value"),
             prices=self.market.cached_prices, name=self.names.name, reads=self._ocr_read)
+        # Plan 140: weekly silver goal over the grind + sales ledgers; the typed
+        # goal is a plan 079 override until the weekly reset.
+        self.silvergoal = silvergoal.SilverGoalService(
+            self.store, self.overrides, clock=grind_clock or time.time,
+            running=lambda: self.game.view().get("state") in ("running", "logged_in"))
         # Plan 069: next best action over the views above; never fetches (market
         # prices come from the cache only, coupons / notices from the store).
         self.whatnow = whatnow.WhatNowService({
@@ -475,7 +481,8 @@ class EWServer(ThreadingHTTPServer):
             "market": self._market_alerts,
             "ocr": lambda: self.ocr_auto_out(self.ocr_auto.view()),  # plan 070 gate
             "logins": lambda: self.login_days(self.events.view()["items"]),  # plan 075
-            "currency": self.currency.view},  # plan 095
+            "currency": self.currency.view,  # plan 095
+            "silver": self.silvergoal.view},  # plan 140
             clock=today_clock or time.time)
         # Plan 136: the loop tick's own control files, read-only (MAIN checkout;
         # a test store root reads its parent, never the real tree).
@@ -1130,6 +1137,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, self.server.imperial.view())
         if path == "/api/whatnow":
             return self._send(200, self.server.whatnow.view())
+        if path == "/api/silvergoal":  # plan 140: read-only weekly silver goal
+            return self._send(200, self.server.silvergoal.view())
         if path == "/api/maint/digest":
             self.server.notices.view(refresh=False)  # plan 064: import cached maintenance reads
             return self._send(200, self.server.maintdigest.view())
@@ -1197,12 +1206,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def _post_grind(self, body):
         ops = {"start", "stop", "log", "delete", "add_spot", "buff", "clear_buff",
-               "drop_toggle", "drop_override", "loot_item", "loot_forget", "keep", "edit"}
+               "drop_toggle", "drop_override", "loot_item", "loot_forget", "keep", "edit",
+               "week_goal"}
         if len(body) != 1 or not (ops & set(body)):
             raise ValueError("body must be one of {start|stop|log|delete|add_spot|buff|"
                              "clear_buff|drop_toggle|drop_override|loot_item|loot_forget|"
-                             "keep|edit: ...}")
+                             "keep|edit|week_goal: ...}")
         (op, arg), = body.items()
+        if op == "week_goal":  # plan 140: the typed goal is a ledger override
+            return self.server.silvergoal.set_goal(arg)
         out = getattr(self.server.grind, op)(arg)
         if op == "stop":  # plan 062: a manual Stop overrides the auto play session
             self.server.play.manual_stop()

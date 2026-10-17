@@ -42,3 +42,43 @@ Reads EW's own ledgers built from operator screenshots, the session log and
 public APIs; no game input, memory read or client file.
 
 Depends on: none.
+
+## As-built deviations
+
+1. Typed goal write path. Decision: POST /api/grind `{"week_goal": silver |
+   null}` (an op on the existing grind route; null clears) writes ledger key
+   `grind.week_goal`, like plan 131's night toggle. Alternatives: a settings
+   SPEC key through POST /api/settings (would write a weekly value into
+   config/local.json and leave it there after expiry); a new POST route
+   (forbidden by the plan). Why: no new route, nothing written to the config
+   file, same pattern as the other grind ledger key. Reverses if: the
+   settings route gains non-file ledger keys.
+2. New override expiry rule `until:week_reset` (overrides.RULE_RE /
+   expiry_at): the next NA weekly reset after set-at, via
+   today.next_weekly_reset - no new reset constant. Alternatives: `days:7`
+   (outlives the week it was typed in). Why: the plan asks for "expiring
+   with the week". Reverses if: the ledger gains a generic reset-rule expiry.
+3. Zero-touch guard: `grind.week_goal` is an EXEMPT key (pure preference;
+   the history goal applies without it) in tests/test_zero_touch_keys.py.
+   Alternatives: none (the guard fails any new typed key). Reverses if: a
+   live goal signal appears.
+4. Session silver is the row's `silver` (typed or OCR delta), not the plan
+   039 loot value. Alternatives: loot value as the Summary card uses. Why:
+   unsold loot is not earned silver, and counting it double-counts when it
+   sells. Reverses if: the operator asks for loot value in the weekly figure.
+5. History weeks: the last 4 full weeks that END after the first ledger
+   entry; a quiet week after that counts as 0. Fewer than 4 such weeks use
+   what exists; none, or a median of 0, means no goal. Alternatives: require
+   4 full weeks (no goal for a month after install). Why: zero-touch sooner.
+   Reverses if: a 1-week median proves noisy in use.
+6. Card with no goal: the "This week" card folds to its pill ("no goal
+   yet") plus a closed `weekly silver goal` details form, so a goal can be
+   typed before a full week of history exists. Alternatives: fully hidden
+   (no way to type the first goal). Reverses if: the goal form moves to
+   Settings.
+7. What-now source `silver` (weight 0.3, undated, nominal 4 h, horizon 7 d)
+   in data/whatnow_weights.json; the candidate needs `running` (game state
+   running / logged_in), `hidden: false`, `on_track: false` and a positive
+   needed-per-day. Alternatives: due the weekly reset (a low score until the
+   last day). Why: an undated low-weight row surfaces while playing without
+   crowding timed actions. Reverses if: it outranks timed rows in use.

@@ -1,5 +1,5 @@
 {
- "_doc": "Plan 079: per override key, its expiry rule (days:N, until:maint_end, until:path_missing, or none - none only for the allowlisted keys in overrides.NONE_OK) and the dashboard cards that show its badge. A key ending in .* covers every key under that prefix. Plan 080: first_sight true = a config/local.json incident switch whose expiry runs from when EW first reads it (not the file mtime); note = the badge reason for it.",
+ "_doc": "Plan 079: per override key, its expiry rule (days:N, until:maint_end, until:path_missing, until:week_reset (plan 140: the next NA weekly reset), or none - none only for the allowlisted keys in overrides.NONE_OK) and the dashboard cards that show its badge. A key ending in .* covers every key under that prefix. Plan 080: first_sight true = a config/local.json incident switch whose expiry runs from when EW first reads it (not the file mtime); note = the badge reason for it.",
  "keys": {
   "market.vp": {"label": "Value Pack (typed)", "expiry": "days:30",
                 "cards": ["grind", "crafting", "inventory", "market"]},
@@ -12,6 +12,9 @@
                                    "cards": ["events", "home"]},
   "grind.night": {"label": "Night drop buff (typed)", "expiry": "days:1", "cards": ["grind"],
                   "note": "typed night toggle; ends at the next day / night change of the calibrated game clock"},
+  "grind.week_goal": {"label": "Weekly silver goal (typed)", "expiry": "until:week_reset",
+                      "cards": ["grind"],
+                      "note": "typed weekly goal; ends at the weekly reset, then the history goal (median of 4 weeks + 10 percent) applies"},
   "overlay.mode.*": {"label": "Overlay widget pin / block", "expiry": "days:7",
                      "cards": ["overlay"]},
   "bdo.install_dir": {"label": "BDO install folder", "expiry": "until:path_missing",
