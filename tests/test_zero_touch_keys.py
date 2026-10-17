@@ -22,6 +22,7 @@ EXEMPT = {
     "bdo.install_dir": "auto-detected (plan 065); typed only to point elsewhere",
     "bdo.documents_dir": "auto-detected (plan 065); typed only to point elsewhere",
     "profile.family": "the identity key every profile read starts from",
+    "grind.week_goal": "pure preference (plan 140); the history goal applies without it",
 }
 NEEDS_OPERATOR = ["profile.multi_character"]
 

@@ -20,7 +20,9 @@
     // rows the OCR read with a fuzzy name (shown with "?").
     lootImport: { busy: false, msg: '' }, lootLow: {}, lootTyped: {},
     // Plan 046: GET /api/summary (last game session, today, this week).
-    summary: null, summaryErr: null
+    summary: null, summaryErr: null,
+    // Plan 140: GET /api/silvergoal (this week's earned / goal / pace).
+    silver: null, silverErr: null
   };
 
   function el(tag, cls, text) {
@@ -73,6 +75,7 @@
       .then(function () { loadLoot(false); });
     loadRecs();
     loadSummary();
+    loadSilver();
   }
 
   function loadSummary() {
@@ -759,6 +762,7 @@
     drawRecs();
     drawSession();
     drawSummary();
+    drawWeek();
     drawLog();
     drawSpots();
     drawBuffs(Date.now());
@@ -918,6 +922,83 @@
     return { card: c.card, pill: c.pill, body: list };
   }
 
+  // Plan 140: "This week" - earned / goal bar, needed per day, projection. With
+  // no goal (no typed goal, no full week logged) only the goal form shows,
+  // folded into one line.
+  function weekCard() {
+    const c = card('This week');
+    const box = el('div', null);
+    c.body.appendChild(box);
+    const det = el('details', null);
+    det.appendChild(el('summary', null, 'weekly silver goal'));
+    const form = el('form', 'ew-form');
+    const inp = el('input');
+    inp.placeholder = 'e.g. 300M (blank = from history)';
+    inp.title = 'typed goal, until the weekly reset; blank goes back to the history goal';
+    form.appendChild(inp);
+    const go = el('button', 'ew-btn', 'set');
+    go.type = 'submit';
+    form.appendChild(go);
+    const note = el('span', 'ew-muted', '');
+    form.appendChild(note);
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      const r = window.EWSilverGoal.goalBody(inp.value);
+      if (r.error) { note.textContent = r.error; return; }
+      const b = bridge();
+      if (!b) { note.textContent = 'saving needs the Ebonwake app window'; return; }
+      note.textContent = 'saving...';
+      window.EWToast.via(b).post('/api/grind', r.body).then(function (res) {
+        if (res && res.ok) {
+          inp.value = '';
+          note.textContent = r.body.week_goal === null ? 'typed goal cleared' : 'goal set';
+          S.silver = res.data && typeof res.data === 'object' ? res.data : S.silver;
+          drawWeek();
+        } else {
+          note.textContent = 'failed: ' + ((res && res.error) || 'unknown error');
+        }
+      }, function (e) { note.textContent = 'failed: ' + (e && e.message || e); });
+    });
+    det.appendChild(form);
+    c.body.appendChild(det);
+    return { card: c.card, pill: c.pill, body: box, det: det };
+  }
+
+  function loadSilver() {
+    getJSON('/api/silvergoal').then(function (d) {
+      S.silver = d && typeof d === 'object' && !Array.isArray(d) ? d : null;
+      S.silverErr = S.silver ? null : 'bad silver goal reply';
+    }, function (e) { S.silverErr = e.message; }).then(drawWeek);
+  }
+
+  function drawWeek() {
+    const ui = S.ui;
+    if (!ui || !window.EWSilverGoal) return;
+    const w = ui.week;
+    w.body.textContent = '';
+    if (S.silverErr) w.body.appendChild(el('div', 'ew-err', S.silverErr));
+    const c = window.EWSilverGoal.card(S.silver);
+    if (!c) {
+      w.pill.className = 'ew-pill off';
+      w.pill.textContent = 'no goal yet';
+      return;
+    }
+    w.pill.className = 'ew-pill ' + c.cls;
+    w.pill.textContent = c.pill;
+    const row = el('div', 'ew-srow');
+    row.appendChild(el('span', 'ew-mname', 'earned'));
+    row.appendChild(el('span', 'ew-mprice', c.earned));
+    w.body.appendChild(row);
+    const bar = el('div', 'ew-bar');
+    const fill = el('div', 'ew-bar-fill');
+    fill.style.width = c.bar;
+    bar.appendChild(fill);
+    w.body.appendChild(bar);
+    if (c.needed) w.body.appendChild(el('div', null, c.needed));
+    if (c.projection) w.body.appendChild(el('div', 'ew-muted', c.projection));
+    if (c.source) w.body.appendChild(el('div', 'ew-muted', c.source));
+  }
+
   function mount(panel) {
     S.panel = panel;
     panel.classList.add('ew-grind');
@@ -931,10 +1012,11 @@
     const d = card('Drop rate');
     const sm = card('Summary');
     sm.pill.textContent = 'session / day / week';
-    [s, sm, w, l, p, b, d].forEach(function (x) { panel.appendChild(x.card); });
+    const wk = weekCard();
+    [s, wk, sm, w, l, p, b, d].forEach(function (x) { panel.appendChild(x.card); });
     S.ui = {
       form: s.form, msg: s.msg, clock: s.clock, activeSpot: s.activeSpot, sessionErr: s.err, lootBody: s.loot,
-      ended: s.ended, summaryBody: sm.body,
+      ended: s.ended, summaryBody: sm.body, week: wk,
       sessionPill: s.pill, recBody: w.body, recPill: w.pill,
       logBody: l.body, logPill: l.pill, spotBody: p.body, buffBody: b.body, buffClocks: [],
       dropBody: d.body, dropPill: d.pill

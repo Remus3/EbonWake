@@ -3,7 +3,7 @@
 Pure inference over views EW already serves (bosses 031, resets 021, grind
 buffs 005, Hot Time 011 / 064, maintenance 059 / 064, coupons 006, dice 056,
 market alerts 002, level deadlines 024, OCR review 063, login days 075,
-reward claim windows 086, event currency 095) plus an injected
+reward claim windows 086, event currency 095, weekly silver goal 140) plus an injected
 clock; nothing reads the game. Each adapter turns one view into candidates
 {source, text, why, due, left_s}; `rank` scores them
 
@@ -29,8 +29,10 @@ from .today import _parse_iso
 
 WEIGHTS_FILE = Path(__file__).resolve().parent / "data" / "whatnow_weights.json"
 SOURCES = ("boss", "reset", "buff", "hot", "maint", "coupon", "dice", "market", "deadline", "ocr",
-           "maint_loss", "event", "claim")
+           "maint_loss", "event", "claim", "silver")
 DEFAULT_WEIGHTS = {
+    # plan 140: the week's silver goal off pace while the game runs (undated)
+    "silver": {"weight": 0.3, "horizon_s": 604800, "nominal_s": 14400},
     # plan 086: rewards left in Mail / Safe past the event, gone at the deadline
     "claim": {"weight": 0.9, "horizon_s": 259200, "nominal_s": 86400},
     # plan 074: a loss warning outranks the plain maintenance row at the same due
@@ -445,6 +447,29 @@ def ocr_review(view, now):
                   "System tab review queue", None, now)]
 
 
+def _silver(n):
+    for div, unit in ((10 ** 9, "B"), (10 ** 6, "M"), (10 ** 3, "K")):
+        if n >= div:
+            return f"{n / div:.1f}{unit}"
+    return str(n)
+
+
+def silver_goal(view, now):
+    """Plan 140: the week's silver goal off pace, only while the game runs (undated)."""
+    view = _dict(view)
+    p = _dict(view.get("pace"))
+    if view.get("hidden") is not False or view.get("running") is not True:
+        return []
+    need = p.get("needed_per_day")
+    if p.get("on_track") is not False or not (_num(need) and need > 0):
+        return []
+    why = f"week {_silver(view.get('earned') or 0)} of {_silver(view.get('goal') or 0)}"
+    if _num(p.get("projection")):
+        why += f", on pace for {_silver(p['projection'])}"
+    return [_cand("silver", f"Grind {_silver(need)} silver/day for the week's goal", why, None,
+                  now)]
+
+
 # input name -> adapter(data, now); `maint` data is {slot, notices}
 ADAPTERS = {
     "bosses": [from_bosses],
@@ -458,6 +483,7 @@ ADAPTERS = {
     "ocr": [ocr_review],
     "logins": [login_days],
     "currency": [event_currency],
+    "silver": [silver_goal],
 }
 
 

@@ -8,8 +8,9 @@ one live entry per key; retired entries are kept (last MAX_RETIRED) for the
 digest history.
 
 The tracked `data/override_policy.json` gives each key its expiry rule
-(`days:N`, `until:maint_end`, `until:path_missing`, or `none` - only for the
-NONE_OK keys) and the cards that show its badge.
+(`days:N`, `until:maint_end`, `until:path_missing`, `until:week_reset` - plan
+140, the next NA weekly reset - or `none` - only for the NONE_OK keys) and the
+cards that show its badge.
 
 `resolve` is pure over the doc: a fresh live value retires a live override
 (`retired_by: "<signal>"`), an expired one retires `"expired"`, a folder that
@@ -27,8 +28,11 @@ import threading
 import time
 from pathlib import Path
 
+from . import today
+
 POLICY_FILE = Path(__file__).resolve().parent / "data" / "override_policy.json"
-RULE_RE = re.compile(r"^(days:[1-9][0-9]{0,3}|until:maint_end|until:path_missing|none)$")
+RULE_RE = re.compile(r"^(days:[1-9][0-9]{0,3}|until:maint_end|until:path_missing|"
+                     r"until:week_reset|none)$")
 # Plan 083: `portrait.*` (a gallery pick) is cosmetic - it changes no number.
 NONE_OK = ("market.fame_pct", "profile.family", "bdo.install_dir", "bdo.documents_dir",
            "ui.scale", "portrait.*")
@@ -109,6 +113,9 @@ def expiry_at(rule, set_at, maint_end=None):
             except Exception:  # noqa: BLE001 - no window known: the weekly fallback
                 end = None
         return end if isinstance(end, (int, float)) and end > set_at else set_at + MAINT_FALLBACK_S
+    if rule == "until:week_reset":  # plan 140: the next NA weekly reset after set_at
+        at = _dt.datetime.fromtimestamp(set_at, _dt.timezone.utc)
+        return today.next_weekly_reset(at).timestamp()
     return None
 
 
