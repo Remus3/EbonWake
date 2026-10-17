@@ -996,6 +996,21 @@ class Handler(BaseHTTPRequestHandler):
         name = host.rsplit(":", 1)[0] if not host.startswith("[") else host.split("]")[0] + "]"
         return name in LOOPBACK_HOSTS
 
+    def _cors_headers(self):
+        """Plan 153 (SERVER-A-05): Allow-Origin only for the dashboard origins -
+        `null` (dashboard / overlay load from file://) and this server's own
+        loopback origins - so another web page cannot read /api/* cross-origin.
+        No Origin header (not a cross-origin browser read) keeps `*`."""
+        origin = self.headers.get("Origin")
+        if origin is None:
+            self.send_header("Access-Control-Allow-Origin", "*")
+            return
+        self.send_header("Vary", "Origin")
+        port = self.server.server_address[1]
+        own = {"http://%s:%d" % (h, port) for h in LOOPBACK_HOSTS}
+        if origin == "null" or origin in own:
+            self.send_header("Access-Control-Allow-Origin", origin)
+
     def _send(self, code, body, ctype="application/json", cors=True):
         data = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
         self.send_response(code)
@@ -1003,7 +1018,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         if cors:
-            self.send_header("Access-Control-Allow-Origin", "*")
+            self._cors_headers()
         self.end_headers()
         self.wfile.write(data)
 
@@ -1495,7 +1510,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._cors_headers()
         self.end_headers()
         game, lev, bus, play = self.server.game, self.server.leveling, self.server.bus, \
             self.server.play
