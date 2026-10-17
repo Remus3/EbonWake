@@ -66,8 +66,9 @@ test('appCommit is read-only; restart is one allowlisted, sender-checked IPC', (
   assert.match(pre, /ipcRenderer\.invoke\('ew:restart-server'\)/);
   // plan 030 adds the two payload-free settings reloads (settings.test.js).
   // plan 057 adds ew:open-external (allowlisted https links).
-  assert.strictEqual((pre.match(/ipcRenderer\.\w+\(/g) || []).length, 6,
-    'post + restart + notify + 2 reloads + open-external only');
+  // plan 135 adds ew:watchdog (read-only watchdog summary, no payload).
+  assert.strictEqual((pre.match(/ipcRenderer\.\w+\(/g) || []).length, 7,
+    'post + restart + notify + 2 reloads + open-external + watchdog only');
   assert.match(m, /rev-parse', '--short', 'HEAD'/);
   assert.match(m, /windowsHide: true/);
   assert.match(m, /additionalArguments: \['--ew-app-commit=' \+ APP_COMMIT[,\]]/);
@@ -142,12 +143,12 @@ test('ew:notify is the one new allowlisted channel: sender-checked, validated, r
   const channels = (pre.match(/ipcRenderer\.\w+\('([^']+)'/g) || []).map((s) => s.replace(/^.*'([^']+)'$/, '$1')).sort();
   // plan 030 adds the two payload-free settings reloads (settings.test.js).
   assert.deepStrictEqual(channels, ['ew:notify', 'ew:open-external', 'ew:post', 'ew:reload-overlay',
-    'ew:reload-shell', 'ew:restart-server']);
+    'ew:reload-shell', 'ew:restart-server', 'ew:watchdog']);
   assert.match(pre, /notify: function \(n\) \{ return ipcRenderer\.invoke\('ew:notify', n\); \}/);
   assert.match(pre, /notifyPrefs: function \(\) \{ return NOTIFY_ARG; \}/);
   const mainChannels = (m.match(/ipcMain\.(handle|on)\('([^']+)'/g) || []).map((s) => s.replace(/^.*'([^']+)'$/, '$1')).sort();
   assert.deepStrictEqual(mainChannels, ['ew:notify', 'ew:open-external', 'ew:overlay-size', 'ew:post',
-    'ew:reload-overlay', 'ew:reload-shell', 'ew:restart-server']);
+    'ew:reload-overlay', 'ew:reload-shell', 'ew:restart-server', 'ew:watchdog']);
   const h = m.slice(m.indexOf("ipcMain.handle('ew:notify'"), m.indexOf("ipcMain.handle('ew:notify'") + 900);
   assert.match(h, /event\.sender !== dashboard\.webContents/);
   assert.match(h, /core\.validNotify\(n\)/);

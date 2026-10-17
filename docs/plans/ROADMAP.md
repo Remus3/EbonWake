@@ -131,7 +131,7 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 132 | My Info (P) exact XP OCR: absolute XP samples for the leveling rate fit (plan doc docs/plans/132-myinfo-exact-xp-ocr.md; depends on 116, 063, 018) | [x] done 2026-10-15 (loop; refute 1/3 PASS) |
 | 133 | Adventurer's Note (F2) level-figures OCR: second exact-XP window and cross-check for plan 132 (plan doc docs/plans/133-adventurers-note-f2-ocr.md; depends on 132, 063, 016) | [x] done 2026-10-16 (loop; refute 0/3 PASS) |
 | 134 | Targeted deep-dive (operator order 2026-10-17): autonomous operation, efficiency, player features - research doc docs/research/0029-deep-dive-autonomy-efficiency.md + at most 6 deduped plans 135.. with proposed rows (plan doc docs/plans/134-autonomy-efficiency-deep-dive.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
-| 135 | Server watchdog: the app health-polls and auto-restarts a dead EW server (plan doc docs/plans/135-server-watchdog.md) | [ ] open (priority) |
+| 135 | Server watchdog: the app health-polls and auto-restarts a dead EW server (plan doc docs/plans/135-server-watchdog.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
 | 136 | Loop status card: last tick age, lanes, stuck items, halt and backoff on the dashboard (plan doc docs/plans/136-loop-status-card.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
 | 137 | Stalled-lane flag: a lane silent for twice its ETA shows stalled in the loop checklist (plan doc docs/plans/137-stalled-lane-flag.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
 | 138 | Control ledger rotation: cap timings, usage, claims and finished lane status files (plan doc docs/plans/138-control-ledger-rotation.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
