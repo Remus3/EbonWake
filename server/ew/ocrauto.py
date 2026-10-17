@@ -1427,13 +1427,17 @@ class AutoOcr:
 
     # -- thread ------------------------------------------------------------------
 
+    def _tick(self):
+        try:
+            self.scan()
+            self.drain()
+        except Exception as e:  # noqa: BLE001 - a bad tick never kills the worker
+            with self._lock:  # plan 143: but plan 073 health shows it
+                self._err = (f"{type(e).__name__}: {e}"[:200], self.clock())
+
     def _run(self, interval):
         while not self._stop.is_set():
-            try:
-                self.scan()
-                self.drain()
-            except Exception:  # noqa: BLE001 - a bad tick never kills the worker
-                pass
+            self._tick()
             self._stop.wait(interval)
 
     def start(self, interval=POLL_S):
