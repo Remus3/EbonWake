@@ -44,6 +44,32 @@ files). Nothing in `tools/` or `server/` rotates or caps a file.
   at most 8-35 days of rows and `run_starts` / `eta.estimate` give the same
   answers as before.
 
+## As-built deviations
+
+- Slice 0 before numbers not recorded. Decision: skip the measurement in
+  this lane. Alternatives: block the lane on it; measure from the worktree's
+  own (empty) control dir. Why: the lane's permission set denies every read
+  of the main checkout, and the numbers do not change the rules (all fixed
+  by the plan). Reverses if: a session with main-checkout read access runs
+  `python tools/ledger_rotate.py --dry-run` before the first daily rotation
+  and records the counts here.
+- Lane progress file written in the worktree's `ops/loop/control/progress/`,
+  not the main checkout. Decision: worktree copy. Alternatives: no progress
+  file. Why: writes outside the worktree were denied; the loop's blocked-
+  marker read checks the worktree first. Reverses if: lane permissions allow
+  the main-checkout progress path.
+- Archive order: rows are appended to the archive after the size re-stat and
+  before the live replace. A failed replace (Windows writer holding the file)
+  can duplicate a row in the archive on the retry, never lose one. Why:
+  FLEET item 9 (moves, never a loss) outranks archive dedupe. Reverses if:
+  duplicate archive rows are measured to matter to a consumer.
+- Row time: `ts` (usage ISO, timings epoch), else `at` (kit claims /
+  gitlock / identity naive local ISO). Rows with neither stay live, like torn
+  lines. Progress files without a parseable `updated` stay.
+- The daily marker is `ops/loop/control/ledger_rotate.json`; a day with a
+  skipped ledger is not marked, so the next tick retries the same day.
+  `--now` was added to the CLI for fixtures.
+
 ## Game ToS
 
 EW control files only; nothing reaches the game client.
