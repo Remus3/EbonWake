@@ -238,7 +238,7 @@ def nsrv(tmp_path):
     client = market.ArshaClient(fetch=fetch, clock=Clock(), cache_dir=tmp_path / "cache")
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
                           sse_interval=0.05, market_client=client, market_seed=[4901],
-                          profile_cfg={})
+                          profile_cfg={}, config_path=tmp_path / "local.json")
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     s.calls = calls

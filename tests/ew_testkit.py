@@ -20,6 +20,14 @@ def _no_network(url, timeout):
     raise AssertionError("test touched the network")
 
 
+def offline_market(tmp_path):
+    """A market client that never fetches and caches under tmp_path (plan 157:
+    a test server never falls back to the live ops/runtime market cache)."""
+    from server.ew import market
+
+    return market.ArshaClient(fetch=_no_network, cache_dir=tmp_path / "mcache")
+
+
 def _get(s, path, host=None):
     port = s.server_address[1]
     c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)

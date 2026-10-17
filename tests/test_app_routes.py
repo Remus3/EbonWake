@@ -9,7 +9,7 @@ import time
 import pytest
 
 from server.ew import app as ewapp
-from server.ew import gamewatch
+from server.ew import gamewatch, market
 from ew_testkit import bmp
 
 CHAR = "12345678901234567"
@@ -32,7 +32,10 @@ def srv(tmp_path):
     (docs / "FaceTexture").mkdir(parents=True)
     w = gamewatch.GameWatch(install_dir=str(inst), documents_dir=str(docs), tasklist=Tasklist())
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
-                          market_seed=[], profile_cfg={}, game_watch=w)
+                          market_seed=[], profile_cfg={}, game_watch=w,
+                          config_path=tmp_path / "local.json",
+                          market_client=market.ArshaClient(fetch=_no_network,
+                                                           cache_dir=tmp_path / "cache"))
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     yield s, inst, docs

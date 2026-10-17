@@ -16,6 +16,7 @@ import pytest
 
 from server.ew import app as ewapp
 from server.ew import grind
+from ew_testkit import offline_market
 from server.ew.store import Store
 
 UTC = dt.timezone.utc
@@ -337,7 +338,9 @@ def test_out_of_range_stamp_route_ok(tmp_path, clock):
                      "buffs": [{"id": "x", "name": "X", "ends": "0001-01-01T00:00:00+01:00"}],
                      "updated": "0001-01-01T00:00:00+01:00"})
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
-                          sse_interval=0.05, market_seed=[], grind_clock=clock)
+                          sse_interval=0.05, market_seed=[], grind_clock=clock,
+                          profile_cfg={}, config_path=tmp_path / "local.json",
+                          market_client=offline_market(tmp_path))
     threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
     try:
         status, doc, _ = _req(s, "GET", "/api/grind")
@@ -359,7 +362,9 @@ def test_source(svc):
 @pytest.fixture()
 def gsrv(tmp_path, clock):
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
-                          sse_interval=0.05, market_seed=[], grind_clock=clock)
+                          sse_interval=0.05, market_seed=[], grind_clock=clock,
+                          profile_cfg={}, config_path=tmp_path / "local.json",
+                          market_client=offline_market(tmp_path))
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     yield s
@@ -974,7 +979,7 @@ def test_route_loot_get_and_post(tmp_path, clock):
                             cache_dir=tmp_path / "cache")
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
                           sse_interval=0.05, market_seed=[], grind_clock=clock,
-                          market_client=mc)
+                          market_client=mc, profile_cfg={}, config_path=tmp_path / "local.json")
     threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
     try:
         _req(s, "POST", "/api/grind", {"add_spot": "Polly's Forest"})

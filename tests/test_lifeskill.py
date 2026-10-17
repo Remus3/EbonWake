@@ -224,7 +224,7 @@ def srv(tmp_path):
                           sse_interval=0.05, market_seed=[],
                           market_client=market.ArshaClient(fetch=_no_network,
                                                            cache_dir=tmp_path / "cache"),
-                          profile_client=pc)
+                          profile_client=pc, config_path=tmp_path / "local.json")
     s.progress.spawn = _sync
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()

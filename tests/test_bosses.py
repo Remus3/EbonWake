@@ -275,7 +275,8 @@ def srv(tmp_path):
                           market_seed=[], profile_cfg={},
                           market_client=market.ArshaClient(fetch=_no_network,
                                                            cache_dir=tmp_path / "cache"),
-                          bosses_clock=Clock(T(2026, 10, 5, 19, 10)))
+                          bosses_clock=Clock(T(2026, 10, 5, 19, 10)),
+                          config_path=tmp_path / "local.json")
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     yield s
