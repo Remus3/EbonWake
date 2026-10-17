@@ -23,7 +23,7 @@ from pathlib import Path
 
 from . import __version__
 from .events import CODE_RE, MAX_TITLE, MAX_URL
-from .httpcache import CachedClient, UpstreamError, freshness, read_json
+from .httpcache import CachedClient, UpstreamError, freshness, read_json, same_origin_open
 from .store import atomic_write_json
 
 HOST = "www.naeu.playblackdesert.com"
@@ -63,7 +63,7 @@ def default_fetch(url, timeout):
     req = urllib.request.Request(url, method="GET",
                                  headers={"User-Agent": USER_AGENT,
                                           "Accept": "text/html,text/plain;q=0.9"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 (fixed https URLs)
+    with same_origin_open(req, timeout) as r:  # plan 154: no off-origin redirect
         return r.read(MAX_BYTES)
 
 

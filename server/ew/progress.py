@@ -20,7 +20,8 @@ import urllib.parse
 from pathlib import Path
 
 from . import brackets, coupons
-from .httpcache import CachedClient, Pending, UpstreamError, freshness, read_json
+from .httpcache import (CachedClient, Pending, UpstreamError, freshness, read_json,
+                        same_origin_fetch)
 from .levels import LEVEL_RANGE
 from .store import atomic_write_json, atomic_write_text
 from .today import slug
@@ -226,7 +227,8 @@ class ProfileClient(CachedClient):
     backoff_horizon_s = FAIL_BACKOFF_S  # plan 142: a longer `until` is a clock jump
 
     def __init__(self, family, base_url=None, fetch=None, clock=time.time, cache_dir=None):
-        super().__init__(fetch=fetch, clock=clock,
+        # Plan 154: robots-gated base, so redirects stay on its origin.
+        super().__init__(fetch=fetch or same_origin_fetch, clock=clock,
                          cache_dir=cache_dir if cache_dir is not None else _DEFAULT_CACHE)
         self.family = family
         self.base = base_url.rstrip("/") if base_ok(base_url) else DEFAULT_BASE
