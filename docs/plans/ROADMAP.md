@@ -149,6 +149,11 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 150 | Hardening audit tests-a: tests/test_[a-l]*.py plus tests/conftest.py (test hygiene and coverage gaps) - findings fixed TDD, record docs/audit/20261017-tests-a.md (plan doc docs/plans/150-audit-tests-a.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
 | 151 | Hardening audit tests-b: tests/test_[m-z]*.py (test hygiene and coverage gaps) - findings fixed TDD, record docs/audit/20261017-tests-b.md (plan doc docs/plans/151-audit-tests-b.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
 | 152 | Hardening audit ops-ci-config: ops/ non-kit files, .github/, config templates, root files - findings fixed TDD, record docs/audit/20261017-ops-ci-config.md (plan doc docs/plans/152-audit-ops-ci-config.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
+| 153 | CORS: answer GET / SSE only for the dashboard origins (audit follow-on SERVER-A-05; plan doc docs/plans/153-cors-dashboard-origins.md) | [ ] open |
+| 154 | Robots-gated fetchers refuse cross-host redirects (audit follow-on SERVER-A-06; plan doc docs/plans/154-robots-fetch-no-cross-host-redirect.md) | [ ] open |
+| 155 | Server config readers honour the injected config_path (audit follow-on TESTS-A-01, TESTS-A-15; plan doc docs/plans/155-config-path-injection.md) | [ ] open |
+| 156 | Test hygiene follow-ups from the 20261017 audit (audit follow-on TESTS-A-16, -17, -18, -19, -25, -26, -27, -28; plan doc docs/plans/156-test-hygiene-followups.md) | [ ] open |
+| 157 | Extend the test-isolation guard to tests/test_[a-l]*.py (audit follow-on TESTS-B-07; plan doc docs/plans/157-test-isolation-guard-a-l.md) | [ ] open |
 
 Ranking rationale per deep dive / audit and the closed channel-order
 sections: `docs/plans/ROADMAP-history.md` (moved verbatim 2026-10-09, plan
@@ -166,7 +171,10 @@ upkeep and politeness).
 
 Audit 20261017 (operator order, session 36): plans 141-152, one file-by-file
 hardening slice each (about 7k lines, lane timeout 5400 s); queued after the
-0029 rows merged; findings in docs/audit/20261017-<slice>.md.
+0029 rows merged; findings in docs/audit/20261017-<slice>.md. Result: 67 FIXED, 15 FILED;
+the FILED product / test items became rows 153-157 (TESTS-A-01 / -15 and
+TESTS-B-06 folded into 155); OPS-CI-CONFIG-07..10 (shared slots.py) went to
+MAIN as a kit defect note.
 
 Rules: refute rounds capped at 3 per item; every plan lands via a lane worktree
 and one push; ETA log updated by every run.
