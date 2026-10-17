@@ -11,6 +11,7 @@ const http = require('http');
 const path = require('path');
 const core = require('./shared/ewcore');
 const tray = require('./shared/tray');
+const watchdog = require('./shared/watchdog');
 
 const REPO = path.resolve(__dirname, '..');
 
@@ -272,6 +273,49 @@ async function restartServer() {
   }
 }
 
+// Plan 135: the watchdog probes /api/health every 20 s; three fails in a row
+// call restartServer() above (no new spawn path), with backoff and an hourly
+// cap (shared/watchdog.js). A manual restart in flight pauses it. Each
+// auto-restart appends {at, reason, n} to ops/runtime/watchdog.jsonl.
+let wdState = watchdog.initial();
+let wdBusy = false;
+const WD_LOG = path.join(REPO, 'ops', 'runtime', 'watchdog.jsonl');
+
+function logAutoRestart(row) {
+  try {
+    let text = '';
+    try { text = fs.readFileSync(WD_LOG, 'utf8'); } catch (e) { /* first row */ }
+    fs.mkdirSync(path.dirname(WD_LOG), { recursive: true });
+    const tmp = WD_LOG + '.tmp';
+    fs.writeFileSync(tmp, watchdog.capLog(text, row), 'utf8');
+    fs.renameSync(tmp, WD_LOG);
+  } catch (e) { /* the log is best effort; the restart still runs */ }
+}
+
+async function watchdogTick() {
+  if (wdBusy) return;
+  wdBusy = true;
+  try {
+    const h = restarting ? null : await getLocal('/api/health');
+    const probe = h && h.status === 200 ? 'ok' : 'fail';
+    const now = Date.now();
+    const r = watchdog.next(wdState, probe, now, { restarting: restarting });
+    wdState = r.state;
+    if (r.action === 'restart') {
+      logAutoRestart({ at: new Date(now).toISOString(), reason: 'health probe failed ' + wdState.fails + 'x',
+        n: watchdog.summary(wdState, now).restartsLastHour });
+      await restartServer();
+    }
+  } finally {
+    wdBusy = false;
+  }
+}
+
+ipcMain.handle('ew:watchdog', function (event) {
+  if (!dashboard || event.sender !== dashboard.webContents) return null;
+  return watchdog.summary(wdState, Date.now());
+});
+
 let trayIcon = null;
 function createTray() {
   const img = nativeImage.createFromBitmap(tray.iconBitmap(16), { width: 16, height: 16, scaleFactor: 1 });
@@ -339,6 +383,8 @@ if (!app.requestSingleInstanceLock()) {
     createTray();
     globalShortcut.register(keys.toggleOverlay, toggleOverlay);
     globalShortcut.register(keys.showDashboard, showDashboard);
+    // The selftest runs without a server on purpose; no watchdog there.
+    if (!process.env.EW_SELFTEST) setInterval(watchdogTick, watchdog.POLL_MS);
     if (process.env.EW_SELFTEST) {
       selftest.run({
         app: app, dashboard: dashboard, overlay: overlay, keys: keys,

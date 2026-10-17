@@ -50,3 +50,37 @@ Touches only the EW server process on 127.0.0.1:8940; never the game
 process, its window, memory or files.
 
 Depends on: none.
+
+## As-built deviations
+
+1. Signature `next(state, probe, now, opts)`: the manual-restart lock rides
+   in an optional 4th argument `{restarting}` instead of a probe value.
+   Alternatives: a third probe value `busy`. Why: probe stays the plain
+   health result; main passes its existing `restarting` flag as is.
+   Reverses if: a caller needs the lock state inside `state`.
+2. Order of checks on a fail: backoff first, then the hourly cap. With the
+   cap first, the probe right after the 6th restart (still inside its
+   backoff) gave up before the 6th restart had a chance to work. Reverses
+   if: the operator wants an immediate give-up at the cap.
+3. A recovered-then-crashed server inside the same hour gives up again
+   (one `give-up` per outage while 6 restarts are in the rolling hour);
+   an ok probe always clears gave-up, as the plan says.
+4. Surfacing is a pull, not a push: the dashboard reads the summary through
+   a new read-only, payload-free, sender-checked `ew:watchdog` invoke on its
+   existing 5 s System repaint (the shell IPC allowlist pins in
+   `shell.test.js` grew by this one channel). Alternatives: main pushes
+   `webContents.send` events. Why: matches every other bridge call (invoke),
+   no listener plumbing in the sandboxed preload, survives a dashboard
+   reload. The gave-up toast fires on the dashboard's own transition into
+   `gave-up` (EWToast, plan 026 path). Reverses if: a 5 s lag matters.
+5. No watchdog under `EW_SELFTEST` (the selftest runs without a server on
+   purpose; a watchdog would spawn one mid-run).
+6. A hung server that holds the port but does not answer /api/version is
+   not killed (tray.killablePid needs the EW contract); the respawn then
+   fails to bind and the hourly cap ends in `gave-up`. Kept on purpose: the
+   watchdog adds no new kill path.
+7. Merge with main (plan 136 Loop card): dashboard.js paintSystem keeps both
+   calls, `paintLoop()` then `pullWatchdog()`; both functions and both
+   System markup nodes (sys-watchdog, sys-loop) retained. Alternatives: fold
+   into one painter. Why: independent features, zero behavior change.
+   Reverses if: the two cards are merged in the UI.

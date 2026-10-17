@@ -240,6 +240,10 @@
         const fr = el('div', 'ew-fresh');
         fr.id = 'sys-fresh';
         const sh = card('Signal health', fr); // plan 073: was "Data freshness"
+        const wd = el('div', 'ew-muted ew-sigline'); // plan 135: server watchdog
+        wd.id = 'sys-watchdog';
+        wd.hidden = true;
+        sh.appendChild(wd);
         // Plan 110: patch-notes verdicts on tracked data rows (plan 085).
         const dv = el('details', 'ew-ldet');
         dv.appendChild(el('summary', 'ew-muted', 'Data checks (patch notes vs tracked rows)'));
@@ -362,6 +366,7 @@
     }
     paintVerdicts();
     paintLoop();
+    pullWatchdog();
   }
 
   // Plan 136: the Loop card, rebuilt only when the /api/loop body changes.
@@ -389,6 +394,26 @@
       box.appendChild(row);
     });
     if (v.more) box.appendChild(el('div', 'ew-muted ew-sigline', v.more));
+  }
+
+  // Plan 135: the app's server watchdog (main process) as one System line;
+  // the move into gave-up raises one toast. Read-only bridge, no payload.
+  let wdPrev = null;
+  function pullWatchdog() {
+    if (!bridge || typeof bridge.watchdog !== 'function' || !window.EWWatchdog) return;
+    bridge.watchdog().then(function (s) {
+      const box = document.getElementById('sys-watchdog');
+      const line = window.EWWatchdog.statusLine(s, Date.now());
+      if (box) {
+        box.hidden = !line;
+        if (line && box.textContent !== line) box.textContent = line;
+      }
+      const st = s && s.state;
+      if (st === 'gave-up' && wdPrev !== 'gave-up' && window.EWToast) {
+        window.EWToast.toast('bad', 'EW server keeps dying - watchdog gave up; use Restart server', 'watchdog:gave-up');
+      }
+      wdPrev = st || null;
+    }, function () { /* main not answering: keep the last line */ });
   }
 
   // Plan 110: the Data checks list, rebuilt only when the verdicts body changes

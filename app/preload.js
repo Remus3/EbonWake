@@ -15,6 +15,8 @@
    overlay window, and the hotkeys + dashboard zoom (main re-reads the config).
    Plan 057 adds {url} open-in-browser for allowlisted https source links
    (main re-checks core.externalUrl; the dashboard itself never navigates).
+   Plan 135 adds a read-only, payload-free read of the server watchdog
+   summary ({state, restartsLastHour, lastRestart}).
    The overlay window has its own one-way preload (overlay/preload.js). */
 'use strict';
 
@@ -37,5 +39,6 @@ contextBridge.exposeInMainWorld('ewApi', {
   notifyPrefs: function () { return NOTIFY_ARG; },
   reloadOverlay: function () { return ipcRenderer.invoke('ew:reload-overlay'); },
   reloadShell: function () { return ipcRenderer.invoke('ew:reload-shell'); },
-  openExternal: function (url) { return ipcRenderer.invoke('ew:open-external', { url: url }); }
+  openExternal: function (url) { return ipcRenderer.invoke('ew:open-external', { url: url }); },
+  watchdog: function () { return ipcRenderer.invoke('ew:watchdog'); }
 });
