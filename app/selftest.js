@@ -186,7 +186,10 @@ async function run(o) {
   } catch (e) {
     res.error = String(e && e.stack || e);
   }
-  fs.writeFileSync(o.out, JSON.stringify(res, null, 1));
+  // Atomic (plan 148 APP-SHELL-03): a reader never sees a half-written result.
+  const tmp = o.out + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(res, null, 1));
+  fs.renameSync(tmp, o.out);
   if (!process.env.EW_SELFTEST_STAY) o.app.quit();
 }
 

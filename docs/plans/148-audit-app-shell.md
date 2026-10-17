@@ -52,4 +52,22 @@ Depends on: 135, 136, 137, 138, 139, 140.
 
 ## Proposed ROADMAP rows
 
-(filled by the lane if any finding is FILED)
+(none - every finding was fixed or ruled NOT-A-BUG; see
+`docs/audit/20261017-app-shell.md`)
+
+## As-built deviations
+
+1. New module `app/shared/localhttp.js` (APP-SHELL-01). Decision: move
+   main.js `getLocal` / `postLocal` into a pure Node module so the cut-off
+   reply hang is tested against a real local socket. Alternatives: patch
+   in place and pin with a source regex only (cannot show the hang is gone);
+   load main.js under a fake `electron` (large rig for two functions). Why:
+   smallest change that makes the defect testable; reply shapes, timeouts and
+   the 64 KiB cap are unchanged. The test that failed first is the static
+   "main.js reaches the server only through shared/localhttp"; the module's
+   behaviour tests were written with it. Reverses if: main.js gains an
+   Electron-free test harness, then the helpers may move back.
+2. Progress file `ops/loop/control/progress/p148-build.json` was not written:
+   the lane's permission mode refused writes outside the worktree. Decision:
+   carry on inline (the run is short and foreground). Reverses if: the lane
+   permission set allows the main-checkout progress path.

@@ -269,11 +269,13 @@ html, body {
 }
 .ew-tx:hover { color: var(--fk-status-bad); border-color: var(--fk-border); }
 /* This week (plan 033): name, n/per_week, -/+, then the gap and reset on a wrap line. */
-.ew-wrow { display: flex; flex-wrap: wrap; }
-.ew-wrow .ew-mname { flex: 1 1 auto; min-width: 0; }
-.ew-wrow > .ew-muted { flex-basis: 100%; padding-left: 8px; white-space: normal; }
-.ew-wrow.locked .ew-mname { color: var(--fk-text-muted); }
-.ew-wrow.done .ew-mname { text-decoration: none; }
+/* Plan 148 APP-SHELL-05: scoped to .ew-trow so the Market watch row
+   (.ew-mrow.ew-wrow, plan 027 grid) keeps its columns. */
+.ew-trow.ew-wrow { display: flex; flex-wrap: wrap; }
+.ew-trow.ew-wrow .ew-mname { flex: 1 1 auto; min-width: 0; }
+.ew-trow.ew-wrow > .ew-muted { flex-basis: 100%; padding-left: 8px; white-space: normal; }
+.ew-trow.ew-wrow.locked .ew-mname { color: var(--fk-text-muted); }
+.ew-trow.ew-wrow.done .ew-mname { text-decoration: none; }
 /* Season pass (plan 013): done but unclaimed = highlighted, not struck through. */
 .ew-season .ew-trow { grid-template-columns: minmax(0, 1fr) auto; }
 .ew-trow.ew-unclaimed { background: var(--fk-surface); border-left: 2px solid var(--fk-status-warn); }
@@ -583,7 +585,8 @@ html.ew-overlay, html.ew-overlay body { background: transparent; height: auto; o
 
 /* Settings tab (plan 030) */
 .ew-sgroup { display: flex; flex-direction: column; gap: 4px; }
-.ew-srow { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+/* Plan 148 APP-SHELL-04: scoped so the Grind .ew-srow grid (plan 005) stays a grid. */
+.ew-sgroup .ew-srow { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .ew-slabel { flex: 0 0 220px; }
 .ew-sinput { width: 180px; }
 .ew-sdef { font-size: 12px; }

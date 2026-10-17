@@ -368,11 +368,17 @@
     }).catch(function () { /* keep the last one */ });
   }
 
+  // Plan 148 APP-SHELL-02: every GET (body included) is aborted after
+  // GET_TIMEOUT_MS, so a server that accepts and never answers reads offline
+  // and GETs never pile up behind it.
+  const GET_TIMEOUT_MS = 10000;
   function getJSON(path) {
-    return fetch(C.SERVER + path).then(function (r) {
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = ctl ? setTimeout(function () { ctl.abort(); }, GET_TIMEOUT_MS) : null;
+    return fetch(C.SERVER + path, ctl ? { signal: ctl.signal } : undefined).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
-    });
+    }).finally(function () { if (timer !== null) clearTimeout(timer); });
   }
 
   function loadGrind() {
