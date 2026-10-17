@@ -7,9 +7,9 @@ const { app, BrowserWindow, Menu, Notification, Tray, dialog, globalShortcut, ip
 const selftest = require('./selftest');
 const childProcess = require('child_process');
 const fs = require('fs');
-const http = require('http');
 const path = require('path');
 const core = require('./shared/ewcore');
+const localhttp = require('./shared/localhttp');
 const tray = require('./shared/tray');
 const watchdog = require('./shared/watchdog');
 
@@ -145,31 +145,9 @@ ipcMain.on('ew:overlay-size', function (event, px) {
 // Dashboard writes (plans 002, 003): the server answers no CORS preflight, so
 // the dashboard cannot POST itself. Only the dashboard may ask, only allowlisted
 // routes with an exact body shape pass (core.validPost), and only the local EW
-// server is ever contacted.
+// server is ever contacted (shared/localhttp settles even on a cut-off reply).
 function postLocal(route, body) {
-  const base = new URL(core.SERVER);
-  const data = Buffer.from(JSON.stringify(body), 'utf8');
-  return new Promise(function (resolve) {
-    const req = http.request({
-      hostname: base.hostname, port: base.port, path: route, method: 'POST', timeout: 10000,
-      headers: { 'Content-Type': 'application/json', 'Content-Length': data.length }
-    }, function (res) {
-      const chunks = [];
-      let size = 0;
-      res.on('data', function (c) { size += c.length; if (size <= 65536) chunks.push(c); });
-      res.on('end', function () {
-        let parsed = null;
-        try { parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch (e) { /* non-JSON */ }
-        const ok = res.statusCode >= 200 && res.statusCode < 300;
-        resolve(ok ? { ok: true, status: res.statusCode, data: parsed }
-          : { ok: false, status: res.statusCode,
-            error: (parsed && typeof parsed.error === 'string' ? parsed.error : 'HTTP ' + res.statusCode) });
-      });
-    });
-    req.on('timeout', function () { req.destroy(new Error('timeout')); });
-    req.on('error', function (e) { resolve({ ok: false, error: 'server offline (' + e.message + ')' }); });
-    req.end(data);
-  });
+  return localhttp.post(core.SERVER, route, body, 10000);
 }
 
 ipcMain.handle('ew:post', function (event, route, body) {
@@ -229,22 +207,7 @@ ipcMain.handle('ew:reload-shell', function (event) {
 
 // GET a local EW server route: resolves { status, server, doc } or null.
 function getLocal(route) {
-  const base = new URL(core.SERVER);
-  return new Promise(function (resolve) {
-    const req = http.get({ hostname: base.hostname, port: base.port, path: route, timeout: 1500 },
-      function (res) {
-        const chunks = [];
-        let size = 0;
-        res.on('data', function (c) { size += c.length; if (size <= 65536) chunks.push(c); });
-        res.on('end', function () {
-          let doc = null;
-          try { doc = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch (e) { /* non-JSON */ }
-          resolve({ status: res.statusCode, server: res.headers.server, doc: doc });
-        });
-      });
-    req.on('timeout', function () { req.destroy(new Error('timeout')); });
-    req.on('error', function () { resolve(null); });
-  });
+  return localhttp.get(core.SERVER, route, 1500);
 }
 
 // Tray "Restart server" (plan 010): stop only the EW server that answers
