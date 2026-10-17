@@ -43,7 +43,7 @@ overlay for one Black Desert Online player, fed by a small local server on
 |---|---|
 | **Today** | Daily and weekly checklist with NA reset countdowns, login events, dice |
 | **Market** | Central Market prices, history, order book and alert thresholds from the public arsha.io API - read-only, cached, with backoff |
-| **Progress** | Main-story, season-pass and gear tracks; optional public profile card (BDO-REST-API) |
+| **Progress** | Main-story, season-pass and gear tracks; optional profile card from a self-hosted BDO-REST-API |
 | **Grind** | Grind session log, silver per hour, buff timers |
 | **Events** | Coupon, event and Twitch-drop tracker with expiries |
 | **Deadeye** | Build notes and an enhancement plan |
@@ -71,9 +71,11 @@ a setting:
 - **No packet access** and **no client file changes**.
 - **No authenticated market actions** - market calls are read-only `GET`s.
 
-What it does read: the public arsha.io v2 market API, the public BDO-REST-API
-profile endpoint, a tail of the client's own session log (running / logged in /
-disconnected only), screenshots **you** take (OCR), and what you type.
+What it does read: the public arsha.io v2 market API, an optional self-hosted
+BDO-REST-API instance for the profile card (the public instance disallows bots
+in its robots.txt and is never called), a tail of the client's own session log
+(running / logged in / disconnected only), screenshots **you** take (OCR), and
+what you type.
 
 The overlay is a separate always-on-top Electron window with
 `setIgnoreMouseEvents(true)`, toggled by Electron's `globalShortcut`. No
@@ -91,8 +93,8 @@ npm install --prefix app           # once, installs Electron
 npm start --prefix app             # dashboard + overlay (Ctrl+Alt+E toggles overlay)
 ```
 
-Per-host settings (hotkeys, market watchlist, optional profile family name, OCR
-engine) go in `config/local.json`, copied from
+Per-host settings (hotkeys, game folders, market tax bonuses, optional profile
+family name and self-hosted profile API, OCR engine) go in `config/local.json`, copied from
 [`config/local.example.json`](config/local.example.json). It is gitignored.
 
 ### Requirements
@@ -119,8 +121,9 @@ both on every push.
 - The server binds `127.0.0.1` only.
 - Your checklists, notes, grind logs and screenshot results stay in the local,
   gitignored `ops/runtime/` directory.
-- The profile card sends only the family name you configure, and only to the
-  public profile API.
+- The profile card is off by default. When on, it sends only the family name
+  you configure, and only to the self-hosted BDO-REST-API instance you set as
+  `profile.base_url` (run it on loopback); the public instance is never called.
 - API keys, if you add any, live in user environment variables and are
   referenced - never stored - from `config/local.json`.
 
@@ -178,8 +181,8 @@ the licence or the warranty disclaimer it contains.
 
 Shipped: every tab above plus the overlay, game-state watch, screenshot OCR,
 official-notice import, world bosses, enhancement / market / grind planners and
-a start-on-login package. Open: the self-running work loop (built; scheduled
-task read-back pending). The open-work queue is
+a start-on-login package, and the self-running work loop (a scheduled task,
+installed and read back). The open-work queue is
 [`docs/plans/ROADMAP.md`](docs/plans/ROADMAP.md). There is no packaged release
 yet; run from a clone.
 
