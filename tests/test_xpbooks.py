@@ -9,7 +9,7 @@ import threading
 import pytest
 
 from server.ew import app as ewapp
-from server.ew import leveling, weekly, xpbooks
+from server.ew import leveling, market, weekly, xpbooks
 from server.ew.store import Store
 
 UTC = dt.timezone.utc
@@ -352,11 +352,18 @@ def test_book_use_needs_typed_pct(store, clock):
 
 # --- routes --------------------------------------------------------------------
 
+def _no_network(url, timeout):
+    raise AssertionError("test touched the network")
+
+
 @pytest.fixture()
 def lsrv(tmp_path, clock):
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
                           sse_interval=0.05, market_seed=[], grind_clock=clock,
-                          leveling_clock=clock, today_clock=clock, profile_cfg={})
+                          leveling_clock=clock, today_clock=clock, profile_cfg={},
+                          config_path=tmp_path / "local.json",
+                          market_client=market.ArshaClient(fetch=_no_network,
+                                                           cache_dir=tmp_path / "cache"))
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     yield s

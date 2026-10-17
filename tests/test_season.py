@@ -370,6 +370,7 @@ def srv(tmp_path):
         raise AssertionError("network")
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
                           sse_interval=0.05, market_seed=[], profile_cfg={},
+                          config_path=tmp_path / "local.json",
                           market_client=market.ArshaClient(fetch=no_net,
                                                            cache_dir=tmp_path / "cache"))
     th = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)

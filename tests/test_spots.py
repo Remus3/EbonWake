@@ -12,7 +12,11 @@ import threading
 import pytest
 
 from server.ew import app as ewapp
-from server.ew import spots
+from server.ew import market, spots
+
+
+def _no_network(url, timeout):
+    raise AssertionError("test touched the network")
 
 
 def _row(sid, ap, dp, lvl, xp, silver, name=None):
@@ -246,7 +250,9 @@ def test_service_ok_status_and_count():
 @pytest.fixture()
 def srv(tmp_path):
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
-                          market_seed=[], profile_cfg={})
+                          market_seed=[], profile_cfg={}, config_path=tmp_path / "local.json",
+                          market_client=market.ArshaClient(fetch=_no_network,
+                                                           cache_dir=tmp_path / "cache"))
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     yield s

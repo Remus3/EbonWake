@@ -103,7 +103,7 @@ def test_real_server_banner_and_doc_pass_probe(tmp_path):
 
     from server.ew import market
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="c" * 40,
-                          market_seed=[], profile_cfg={},
+                          market_seed=[], profile_cfg={}, config_path=tmp_path / "local.json",
                           market_client=market.ArshaClient(
                               fetch=lambda u, t: (_ for _ in ()).throw(AssertionError()),
                               cache_dir=tmp_path / "cache"))

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from server.ew import app as ewapp
-from server.ew import progress, settings
+from server.ew import market, progress, settings
 from server.ew.store import Store
 
 FAMILY = "Testfam"
@@ -99,7 +99,9 @@ def test_server_with_shipped_defaults_makes_zero_requests(tmp_path):
     pc = progress.ProfileClient(FAMILY, base_url=None, fetch=net, clock=Clock(),
                                 cache_dir=tmp_path / "pcache")
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", market_seed=[],
-                          profile_client=pc)
+                          market_client=market.ArshaClient(fetch=net,
+                                                           cache_dir=tmp_path / "mcache"),
+                          profile_client=pc, config_path=tmp_path / "local.json")
     try:
         s.progress.spawn = _sync
         doc = s.progress.view()

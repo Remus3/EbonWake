@@ -367,7 +367,7 @@ def srv(tmp_path, watch):
                           market_client=market.ArshaClient(fetch=_no_network,
                                                            cache_dir=tmp_path / "cache"),
                           profile_cfg={}, game_watch=watch, ocr_runner=runner,
-                          ocr_cache_dir=tmp_path / "ocr")
+                          ocr_cache_dir=tmp_path / "ocr", config_path=tmp_path / "local.json")
     s.ocr_calls = calls
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
@@ -412,7 +412,7 @@ def test_route_ocr_failure_is_502(tmp_path, watch):
                           market_client=market.ArshaClient(fetch=_no_network,
                                                            cache_dir=tmp_path / "cache"),
                           profile_cfg={}, game_watch=watch, ocr_runner=runner,
-                          ocr_cache_dir=tmp_path / "ocr")
+                          ocr_cache_dir=tmp_path / "ocr", config_path=tmp_path / "local.json")
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     try:
@@ -428,7 +428,7 @@ def test_default_server_ocr_cache_not_in_repo_runtime_under_tests(tmp_path):
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", market_seed=[],
                           market_client=market.ArshaClient(fetch=_no_network,
                                                            cache_dir=tmp_path / "cache"),
-                          profile_cfg={})
+                          profile_cfg={}, config_path=tmp_path / "local.json")
     try:
         assert tmp_path in Path(s.ocr.cache_dir).parents
     finally:
@@ -1154,7 +1154,7 @@ def test_route_loot_import_never_writes_grind(tmp_path, watch):
                           market_client=market.ArshaClient(fetch=_no_network,
                                                            cache_dir=tmp_path / "cache"),
                           profile_cfg={}, game_watch=watch, ocr_runner=lambda p: LOOT_DOC,
-                          ocr_cache_dir=tmp_path / "ocr")
+                          ocr_cache_dir=tmp_path / "ocr", config_path=tmp_path / "local.json")
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     try:

@@ -11,10 +11,14 @@ import threading
 import pytest
 
 from server.ew import app as ewapp
-from server.ew import today
+from server.ew import market, today
 from server.ew.store import Store
 
 UTC = dt.timezone.utc
+
+
+def _no_network(url, timeout):
+    raise AssertionError("test touched the network")
 
 
 def T(*a):
@@ -304,7 +308,9 @@ def test_concurrent_ticks_lose_nothing(tmp_path):
 def tsrv(tmp_path):
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
                           sse_interval=0.05, market_seed=[],
-                          profile_cfg={})
+                          market_client=market.ArshaClient(fetch=_no_network,
+                                                           cache_dir=tmp_path / "cache"),
+                          profile_cfg={}, config_path=tmp_path / "local.json")
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     yield s
