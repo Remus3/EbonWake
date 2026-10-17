@@ -391,6 +391,17 @@ def test_ocr_error_skips_the_shot(env):
     assert env.auto.view()["review"] == [] and env.auto.scan() == 0
 
 
+def test_worker_tick_failure_is_reported_in_health(env):
+    """Plan 143 SERVER-C-02: a tick that raises (watcher, extractor, store) is
+    not silently dropped - plan 073 health shows it as the last error."""
+    def broken():
+        raise RuntimeError("watcher broke")
+    env.game.view = broken
+    env.auto._tick()  # never raises: a bad tick never kills the worker
+    h = env.auto.health()
+    assert h["error"] == "RuntimeError: watcher broke" and h["error_at"] == T0
+
+
 # -- confidence -----------------------------------------------------------------
 
 @pytest.mark.parametrize("text,value,lo,hi", [

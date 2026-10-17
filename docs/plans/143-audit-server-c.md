@@ -53,3 +53,15 @@ Depends on: 135, 136, 137, 138, 139, 140.
 ## Proposed ROADMAP rows
 
 (filled by the lane if any finding is FILED)
+
+## As-built (lane run 2026-10-17)
+
+Audit record: `docs/audit/20261017-server-c.md` - 9 files read, 3 FIXED
+(SERVER-C-01..03), 2 NOT-A-BUG, 0 FILED.
+
+## As-built deviations
+
+- Helper `AutoOcr._tick()` split out of `_run` so the error path is testable
+  without a thread. Alternatives: start/stop the real thread in the test
+  (timing-dependent, flaky). Why: deterministic test, no behaviour change.
+  Reverses if: the worker loop is rewritten.

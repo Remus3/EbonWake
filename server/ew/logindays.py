@@ -61,9 +61,12 @@ def _minutes(v):
 # -- history (pure) ------------------------------------------------------------------
 
 def split_minutes(start, end):
-    """Epoch interval -> {"YYYY-MM-DD": minutes}, split at 00:00 UTC."""
+    """Epoch interval -> {"YYYY-MM-DD": minutes}, split at 00:00 UTC. Only the
+    last KEEP_DAYS days before `end` (and nothing before 1970) are split: no
+    caller keeps more, and a corrupt stamp must neither loop per day back to it
+    nor reach fromtimestamp below 0 (OSError on Windows; plan 143)."""
     out = {}
-    t = start
+    t = max(start, end - KEEP_DAYS * 86400, 0)
     while t < end:
         day = _utc_date(t)
         nxt = _dt.datetime.combine(day + _dt.timedelta(days=1), _dt.time(0), _UTC).timestamp()
@@ -272,12 +275,19 @@ class LoginDays:
                 out.append((start, start + mins * 60))
         return [(a, b) for a, b in out if a is not None and b is not None and a < b]
 
+    @staticmethod
+    def _stamp(v):
+        """A stored stamp as epoch; one before 1970 is corrupt (_iso of it raises
+        OSError on Windows) and reads as none (plan 143)."""
+        t = _parse(v)
+        return t if t is not None and t >= 0 else None
+
     def _load(self, now):
         doc = self.store.get(DOMAIN)
         today = _utc_date(now)
         d = {"dates": trim(doc.get("dates"), today),
              "marked": sorted({m for m in doc.get("marked") or () if _date(m) is not None}),
-             "open": _parse(doc.get("open")), "seen": _parse(doc.get("seen")),
+             "open": self._stamp(doc.get("open")), "seen": self._stamp(doc.get("seen")),
              "since": doc.get("since") if _date(doc.get("since")) else None,
              "backfilled": doc.get("backfilled") is True}
         if not d["backfilled"]:

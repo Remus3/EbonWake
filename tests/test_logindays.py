@@ -111,6 +111,38 @@ def test_backfill_once_from_stored_play_sessions(store):
     assert ld.history()["dates"] == {"2026-10-02": 45.0, "2026-10-04": 90.0}  # once only
 
 
+def test_split_clamps_to_the_kept_window():
+    """Plan 143 SERVER-C-01: an interval reaching back before 1970 (a corrupt
+    stored stamp) raised OSError on Windows and looped once per day back to it;
+    only the last KEEP_DAYS days can ever be kept, so only they are split."""
+    end = ts("2026-10-06T12:00:00Z")
+    out = logindays.split_minutes(ts("1900-01-01T00:00:00Z"), end)
+    assert len(out) == logindays.KEEP_DAYS + 1 and max(out) == "2026-10-06"
+    assert min(out) == "2026-06-08" and out["2026-06-08"] == 720.0
+    assert logindays.split_minutes(ts("1950-01-01T00:00:00Z"), ts("1960-01-01T00:00:00Z")) == {}
+
+
+def test_backfill_and_open_interval_before_1970_never_break_history(store):
+    store.put("playsession", {"last": {"id": "p1", "start": "1900-01-01T00:00:00+00:00",
+                                       "end": "2026-10-04T21:30:00+00:00"}})
+    store.put("grind", {"sessions": [
+        {"id": "s1", "spot": "x", "started": "1960-01-01T00:00:00+00:00", "minutes": 45}]})
+    ld = logindays.LoginDays(store, clock=Clock("2026-10-06T12:00:00Z"))
+    h = ld.history()
+    assert min(h["dates"]) == "2026-06-09" and h["dates"]["2026-10-04"] == 1290.0
+    store.put("logindays", dict(store.get("logindays"), open="1971-01-01T00:00:00+00:00"))
+    h = ld.history()
+    assert h["logged_in"] is True and min(h["dates"]) >= "2026-06-08"
+    ld.on_game("logged_in", "running", ts("2026-10-06T12:00:00Z"))
+    assert store.get("logindays")["open"] is None
+    # sweep: a pre-1970 stamp is no stamp - saving it back raised OSError too
+    store.put("logindays", dict(store.get("logindays"), open="1965-01-01T00:00:00+00:00",
+                                seen="1965-01-01T00:00:00+00:00"))
+    ld.tick("logged_in", ts("2026-10-06T12:05:00Z"))
+    ld.on_game(None, "logged_in", ts("2026-10-06T12:05:00Z"))
+    assert store.get("logindays")["open"] == "2026-10-06T12:05:00+00:00"
+
+
 def test_since_is_first_run_day_without_history(store):
     ld = logindays.LoginDays(store, clock=Clock("2026-10-06T12:00:00Z"))
     assert ld.history()["since"] == "2026-10-06"
