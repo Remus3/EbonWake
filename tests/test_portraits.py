@@ -13,35 +13,7 @@ import pytest
 from server.ew import portraits
 from server.ew.store import Store
 
-T0 = 1_800_000_000.0
-CHAR_A = "12345678901234567"
-CHAR_B = "76543210987654321"
-
-
-class Clock:
-    def __init__(self, t=T0):
-        self.t = t
-
-    def __call__(self):
-        return self.t
-
-
-def bmp(w, h, bpp=32, top_down=False, pixel=lambda x, y: (x * 10 % 256, y * 20 % 256, 77)):
-    """Tiny BI_RGB BMP; rows bottom-up unless `top_down`. pixel -> (r, g, b)."""
-    stride = ((w * bpp + 31) // 32) * 4
-    rows = []
-    for y in range(h):
-        row = bytearray()
-        for x in range(w):
-            r, g, b = pixel(x, y)
-            row += bytes((b, g, r)) + (b"\xff" if bpp == 32 else b"")
-        rows.append(bytes(row) + b"\x00" * (stride - len(row)))
-    body = b"".join(rows if top_down else reversed(rows))
-    off = 14 + 40
-    head = b"BM" + struct.pack("<IHHI", off + len(body), 0, 0, off)
-    dib = struct.pack("<IiiHHIIiiII", 40, w, -h if top_down else h, 1, bpp, 0, len(body),
-                      2835, 2835, 0, 0)
-    return head + dib + body
+from ew_testkit import CHAR_A, CHAR_B, T0, Clock, bmp
 
 
 def png_decode(data):

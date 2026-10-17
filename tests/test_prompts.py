@@ -13,8 +13,7 @@ import pytest
 from server.ew import app as ewapp
 from server.ew import market, prompts, settings
 from server.ew.store import Store
-from tests.test_context import Clock, FakeWatch, _no_network
-from tests.test_server import _get
+from ew_testkit import Clock, FakeWatch, _get, _no_network
 
 UTC = dt.timezone.utc
 MIN = 60

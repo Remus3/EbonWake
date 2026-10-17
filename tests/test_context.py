@@ -11,9 +11,10 @@ import threading
 import time
 
 import pytest
+from ew_testkit import Clock, FakeWatch, _no_network
 
 from server.ew import app as ewapp
-from server.ew import bosses, context, gamewatch, maint, market, settings
+from server.ew import bosses, context, maint, market, settings
 
 UTC = dt.timezone.utc
 MIN = 60
@@ -237,14 +238,6 @@ def test_next_window_slot_and_notice():
 
 # --- service: caching, provider failure, fixture timeline -------------------------------
 
-class Clock:
-    def __init__(self, t):
-        self.t = float(t)
-
-    def __call__(self):
-        return self.t
-
-
 def _svc(clock, state, boss=None, writes=None):
     def settings_view():
         return settings.defaults()
@@ -310,32 +303,6 @@ def test_last_activity_uses_screenshots():
 
 
 # --- server: route + SSE push, no settings write, no recreate ---------------------------
-
-class FakeWatch(gamewatch.GameWatch):
-    """Unconfigured GameWatch whose state is set by the test."""
-
-    def __init__(self, clock):
-        super().__init__(None, None, clock=clock, tasklist=lambda: False)
-        self.forced = None
-
-    def poll(self):
-        now = self.clock()
-        with self._lock:
-            prev, state = self._state, self.forced
-            changed = state != prev
-            if changed:
-                self._state, self._since = state, now
-                self.seq += 1
-                self._cond.notify_all()
-        if changed:
-            for fn in list(self.listeners):
-                fn(prev, state, now)
-        return state
-
-
-def _no_network(url, timeout):
-    raise AssertionError("test touched the network")
-
 
 def _quiet_spawn():
     """A boss spawn with no reset (00:00 UTC), maintenance (Thu) or Hot Time near it."""

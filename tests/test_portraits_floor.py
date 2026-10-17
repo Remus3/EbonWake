@@ -104,7 +104,7 @@ def test_no_cache_customization_or_game_folder_reference():
 
 
 def test_scan_leaves_facetexture_untouched(tmp_path):
-    from tests.test_portraits import bmp
+    from ew_testkit import bmp
 
     face = tmp_path / "docs" / "FaceTexture"
     face.mkdir(parents=True)

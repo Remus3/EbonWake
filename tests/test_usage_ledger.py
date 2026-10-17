@@ -13,7 +13,13 @@ sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "tests"))
 import usage_ledger  # noqa: E402
 import ew_loop  # noqa: E402
-from test_ew_loop import deps, make_root  # noqa: E402
+from ew_loopkit import deps, isolate_git, make_root  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _isolated_git(monkeypatch):
+    isolate_git(monkeypatch)  # plan 156, TESTS-A-19
+
 
 NOW = 1_790_000_000.0
 USAGE = "ops/loop/control/headless_usage.jsonl"

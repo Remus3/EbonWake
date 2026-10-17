@@ -258,6 +258,19 @@ def test_refill_skips_the_running_session_and_old_sessions(rig):
     assert rig.gs.view()["sessions"] == []
 
 
+def test_refill_skips_a_session_that_ended_over_refill_max_ago(rig):
+    """Plan 156, TESTS-A-27: the test above never built an old session."""
+    s = rig.play(90)
+    assert s["silver"] == 0 and s["auto"] is True and "silver_src" not in s
+    rig.seed(sample(T10 + 2 * MIN, 500 * M), sample(T10 + 80 * MIN, 530 * M))
+    rig.clock.t = T10 + 90 * MIN + grind.REFILL_MAX_S + 1
+    assert rig.gs.refill_silver() is None
+    old = rig.gs.view()["sessions"][0]
+    assert old["silver"] == 0 and "silver_src" not in old
+    rig.clock.t = T10 + 90 * MIN + grind.REFILL_MAX_S  # at the limit it still fills
+    assert rig.gs.refill_silver() == s["id"]
+
+
 def test_dip_row_carries_lowered_conf(rig):
     rig.seed(sample(T10 + 1 * MIN, 100 * M), sample(T10 + 30 * MIN, 140 * M),
              sample(T10 + 31 * MIN, 90 * M), sample(T10 + 85 * MIN, 120 * M))
