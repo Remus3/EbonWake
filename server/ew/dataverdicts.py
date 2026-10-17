@@ -38,7 +38,11 @@ def _clean(v, fp):
     if not (isinstance(v, dict) and set(v) == set(FIELDS) and v["fp"] == fp
             and v["verdict"] in patchverify.VERDICTS):
         return None
-    if not (isinstance(v["notice_no"], int) and isinstance(v["url"], str)):
+    if not (isinstance(v["notice_no"], int) and not isinstance(v["notice_no"], bool)
+            and isinstance(v["url"], str) and isinstance(v["checked_at"], str)):
+        return None
+    # `date` is compared with fresh verdicts' dates (`_order`): str or None only.
+    if v["date"] is not None and not isinstance(v["date"], str):
         return None
     if v["evidence"] is not None and not isinstance(v["evidence"], str):
         return None

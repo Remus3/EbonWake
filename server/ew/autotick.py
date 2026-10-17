@@ -104,7 +104,7 @@ class AutoTick:
         self.on_change = on_change
         self._lock = threading.Lock()
         self._windows = []   # [[start, end|None]] logged_in spans, epoch s
-        self._seen = set()   # screenshot keys already scanned
+        self._seen = {}      # screenshot keys already scanned, oldest first (dict = ordered)
         self._last_eval = None
 
     def _enabled(self):
@@ -322,7 +322,10 @@ class AutoTick:
                  if f"{s.get('name')}|{s.get('size')}|{s.get('mtime')}" not in self._seen]
         if not fresh:  # the common poll: no config read, no store read
             return False
-        self._seen.update(f"{s.get('name')}|{s.get('size')}|{s.get('mtime')}" for s in fresh)
+        self._seen.update(dict.fromkeys(
+            f"{s.get('name')}|{s.get('size')}|{s.get('mtime')}" for s in fresh))
+        if len(self._seen) > MAX_SEEN:  # drop the oldest keys, never a still-listed one
+            self._seen = dict.fromkeys(list(self._seen)[-MAX_SEEN:])
         if not self._enabled():  # a shot taken while off is never suggested later
             return False
         found = {}
@@ -332,8 +335,6 @@ class AutoTick:
                 continue
             for day, boss in boss_suggestions(ts, self.table):
                 found.setdefault(f"{day}|{boss}", _iso(ts))
-        if len(self._seen) > MAX_SEEN:
-            self._seen = set(list(self._seen)[-MAX_SEEN:])
         if not found:
             return False
         with self._lock:
