@@ -1,6 +1,6 @@
 EW NEXT SESSION
 ---------------
-SESSION: 37
+SESSION: 38
 
 Next action: monitor the loop (\EbonwakeOps\LaneLoop, progress/loop.json,
 loop_items/*.json); any item left in adjudicate / merge-conflict / gave-up
@@ -10,7 +10,7 @@ step 5 (OPERATOR bullet below) and record it. Answer any MAIN reply to the
 2026-10-12 notes (kit v17 ANSWER, SF-deny + commit-msg temp-path
 INFORMATION), to the 2026-10-15 N301812 ANSWER and to the 2026-10-17 14:06
 INFORMATION (slots.py governor defects OPS-CI-CONFIG-07..10; none as of
-session 36). Otherwise let the idle deep-dive seed new rows (ROADMAP open:
+session 37). Otherwise let the idle deep-dive seed new rows (ROADMAP open:
 none besides MAIN-gated row 106).
 
 Carried forward (not acted on yet):
@@ -18,7 +18,8 @@ Carried forward (not acted on yet):
   logon, confirm no dashboard window shows, the tray icon is present and
   the hotkey opens the dashboard. Steps 1-4 done (step 4 = logon task
   reinstalled with --hidden in session 31, 82f9146).
-- OPERATOR (one batched ask, nothing blocks on it): QA plans 009-073 in
+- OPERATOR: asked session 37, awaiting answer (one batched ask, nothing
+  blocks on it; do not re-send): QA plans 009-073 in
   the dashboard / overlay (per-plan detail in docs/handoff-ledger.txt;
   plan 009 needs ~10 screenshots with the game UI SHOWN, via a rebound BDO
   Screenshot key) AND approve the OpenSSF scorecard v5.5.0 linux binary
@@ -41,7 +42,7 @@ Carried forward (not acted on yet):
   worktree list` and fleet_lanes.worktree_path(i) for i=0..2, remove HALT,
   flip ROADMAP row 106 to [x]. Reverses if MAIN orders trees to set it
   themselves.
-  Read 2026-10-17 session 35: UNSET.
+  Read 2026-10-17 session 37: UNSET (row 106 still waits on MAIN).
 - MAIN to record EW's port block 8940-8959 in the machine-wide registry and
   add EW to the roster / lane widget (roster INFO 0230 says EW is a member;
   Hbd1ed4).
@@ -177,14 +178,17 @@ Carried forward (not acted on yet):
   docs/research/0014 line 19 (ProgramData kit path); the vendored kit uses
   the same name, so it stays.
 
-Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew, armed; at /done
-(2026-10-17 16:35) all 3 lane locks free, no rows building / reviewing /
-resolving, HALT absent; loop_items: none stuck (153 hit merge-conflict
-14:36 and the loop's own resolve run merged it, 21f374b). Inbox: nothing
-new since 2026-10-15 19:41. Outbound 2026-10-17: 1 (INFORMATION to MAIN
-14:06). Logon task \Ebonwake args end in --hidden, delay PT1M, enabled
-(read back session 31). FLEET_SIDECAR_ROOT absent in HKCU Environment
-(read 2026-10-17 session 36; row 106 stays MAIN-gated).
+Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew, armed; session
+37 read: Ready, last run 16:34 rc 0, tick #1136; at /done (2026-10-17
+16:53) all 3 lane locks free, HALT absent; loop_items 172 merged, 18
+no-change, 1 failed (N7416e2, done by hand - NOTE above), none in
+adjudicate. Headless 55/120 in 24 h. Inbox: no unhandled ORDER / FIX /
+RULING, no MAIN reply to open notes. Outbound 2026-10-17: 1 (INFORMATION
+to MAIN 14:06). A loop tick that writes loop_inbox_watch.json during a
+whole suite trips fleet_test_guard (session 37 /done run 1, 16:49) - a
+race, not a test defect; re-run the gated suite. Logon task \Ebonwake args end in --hidden,
+delay PT1M, enabled (read back session 31). FLEET_SIDECAR_ROOT absent in HKCU Environment
+(read 2026-10-17 session 37 /done; row 106 stays MAIN-gated).
 ROADMAP open: none (row 106 [>] MAIN-gated). State: ops/loop/control/
 loop_items/*.json, progress/loop.json, progress/lane-<i>.json,
 inbox_status.json. Merge-stuck items are fixed by a session agent (merge
@@ -202,8 +206,10 @@ merge-conflict / gave-up / failed-dirty; any MAIN reply to the 2026-10-12
 notes, the N301812 ANSWER or the 2026-10-17 slots INFORMATION answered (or
 acked by ledger line); new deep-dive rows built by the loop.
 
-Do NOT redo: session 36 (2026-10-17, operator order): targeted deep-dive
-134 (docs/research/0029) -> plans 135-140 (server watchdog, loop status
+Do NOT redo: session 37: monitoring only, no code changes; the batched
+OPERATOR ask (QA 009-073, scorecard download, N1af105 step 5) was
+delivered in chat - do not re-send. Session 36 (2026-10-17, operator order): targeted
+deep-dive 134 (docs/research/0029) -> plans 135-140 (server watchdog, loop status
 card, stalled-lane flag, control ledger rotation, fetch politeness, weekly
 silver goal) all merged by the loop; then the A1 full file-by-file
 hardening + bug audit, plans 141-152 in 12 slices (server a-d, app-dash
@@ -222,14 +228,13 @@ check in writing. Session 33: MAIN ORDER N301812 all done (287b2d5..
 773ee40). Session 31: N1af105 step 4 (82f9146). Older sessions:
 docs/handoff-ledger.txt and git log.
 
-In flight: none. Session orchestrator agent finished (progress/
-session-orchestrator.json status done 16:24); loop armed, no lane running.
+In flight: none. Loop armed, no lane running (all lane locks free 16:53).
 
-Status: main = origin at dc25d77 before this hand-off (session 36 range
-1d991c8..dc25d77, all loop / orchestrator merges, pushed by them). /done
-gates run fresh 16:36: gated pytest rc 0 (129 s), gated node 835/0
+Status: main = origin at 3b94a6e before this hand-off (session 37: no
+code commits). /done gates run fresh 16:53: gated pytest rc 0 (128 s; run
+1 at 16:49 hit the loop-tick guard race above), gated node 835/0
 (npm.cmd), leak sweep ARMED (19). CI on dc25d77: ci 39070794330 success,
-codeql 39070794290 success. Server health ok on :8940. Session jsonl
-< 10 MB (largest 2.0 MB).
+codeql 39070794290 success (3b94a6e hand-off-only, no run). Server health
+ok on :8940. Session jsonl < 10 MB (largest 2.0 MB).
 
 Start with: read this file, then CLAUDE.md, docs/plans/ROADMAP.md, git log -10.
