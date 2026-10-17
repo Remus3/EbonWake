@@ -14,6 +14,7 @@ card: the view carries `error` and every write is refused.
 
 import datetime as _dt
 import json
+import math
 import re
 import threading
 import time
@@ -71,6 +72,10 @@ def _ts(s):
     except ValueError:
         return None
     return when.timestamp() if when.tzinfo is not None else None
+
+
+def _finite(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
 def _fame_ok(v):
@@ -321,8 +326,10 @@ class InventoryService:
         live = {}
         weight = None
         if w is not None:
-            mx, used = w["value"].get("max"), w["value"].get("used")
-            base = int(round(mx - owned - vp_lt)) if isinstance(mx, (int, float)) else None
+            # plan 142: a non-finite number is no read (int() raised; JSON had Infinity)
+            mx, used = (v if _finite(v) else None
+                        for v in (w["value"].get("max"), w["value"].get("used")))
+            base = int(round(mx - owned - vp_lt)) if mx is not None else None
             if base is not None and 0 <= base <= MAX_BASE_LT:
                 live["base_lt"] = dict(w, value=base)
             weight = dict(derived.pick(None, w, now), used=used, max=mx)

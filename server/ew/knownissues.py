@@ -38,7 +38,10 @@ def _utc(v, rid, name):
     when = _parse_iso(v)
     if when is None:
         raise ValueError(f"{rid}: {name} must be an ISO time with a UTC offset")
-    return _iso(when)
+    try:
+        return _iso(when)
+    except (OverflowError, ValueError):  # plan 142: same contract as levels._utc
+        raise ValueError(f"{rid}: {name} out of range") from None
 
 
 def _level(v, rid, name):
