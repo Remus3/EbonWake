@@ -22,7 +22,7 @@ from pathlib import Path
 from . import __version__
 from .bosses import AT_RE, pt_offset_hours
 from .coupons import MAX_BYTES, ROBOTS, TIMEOUT_S, robots_verdict
-from .httpcache import CachedClient, UpstreamError, read_json
+from .httpcache import CachedClient, UpstreamError, read_json, same_origin_open
 from .store import atomic_write_json
 
 USER_AGENT = f"Ebonwake/{__version__} (BDO companion; boss schedule check, 1 GET per day)"
@@ -50,7 +50,7 @@ def default_fetch(url, timeout):
     req = urllib.request.Request(url, method="GET",
                                  headers={"User-Agent": USER_AGENT,
                                           "Accept": "text/html,text/plain;q=0.9"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 (data-file https URLs)
+    with same_origin_open(req, timeout) as r:  # plan 154: no off-origin redirect
         return r.read(MAX_BYTES)
 
 

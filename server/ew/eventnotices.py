@@ -52,7 +52,7 @@ from . import patchverify
 from .coupons import DETAIL_PATHS, HOST, MAX_BYTES, ROBOTS, TIMEOUT_S, UA_TOKEN, is_detail_href
 from .coupons import robots_verdict
 from .coupons import _TOKEN_RE, _clean_title, copy_codes, is_code, is_word_code, parse_date
-from .httpcache import CachedClient, UpstreamError, freshness, read_json
+from .httpcache import CachedClient, UpstreamError, freshness, read_json, same_origin_open
 from .store import atomic_write_json
 from .today import _iso, _parse_iso
 
@@ -101,7 +101,7 @@ def default_fetch(url, timeout):
     req = urllib.request.Request(url, method="GET",
                                  headers={"User-Agent": USER_AGENT,
                                           "Accept": "text/html,text/plain;q=0.9"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 (fixed https URLs)
+    with same_origin_open(req, timeout) as r:  # plan 154: no off-origin redirect
         return r.read(MAX_BYTES)
 
 

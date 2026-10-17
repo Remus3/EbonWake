@@ -15,6 +15,9 @@ key; a 304 refreshes `fetched_at`, keeps `data` and clears the backoff. A 429 /
 this; an injected or module-own fetch never takes the path. The cache hands
 validators to the fetch through a per-thread context, so every caller's
 `fetch(url, timeout) -> bytes` shape is unchanged.
+
+Plan 154: robots-gated fetchers open through `same_origin_open`, which refuses
+a 3xx to another scheme / host / port (robots.txt covered one origin only).
 """
 
 import datetime as _dt
@@ -24,6 +27,7 @@ import math
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections import namedtuple
 from pathlib import Path
@@ -94,6 +98,42 @@ def _lower(headers):
 
 def _str_or_none(v):
     return v if isinstance(v, str) and v else None
+
+
+def _origin(url):
+    p = urllib.parse.urlsplit(url)
+    try:
+        port = p.port
+    except ValueError:
+        return None
+    if port is None:
+        port = {"http": 80, "https": 443}.get(p.scheme)
+    return p.scheme.lower(), (p.hostname or "").lower(), port
+
+
+class _SameOriginRedirect(urllib.request.HTTPRedirectHandler):
+    """Plan 154: follow a 3xx only to the same scheme, host and port; robots.txt
+    was read for that origin alone, so another origin is refused (HTTPError)
+    before any request is sent there."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if _origin(newurl) != _origin(req.full_url):
+            raise urllib.error.HTTPError(req.full_url, code,
+                                         f"cross-origin redirect refused: {msg}", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_SAME_ORIGIN = urllib.request.build_opener(_SameOriginRedirect)
+
+
+def same_origin_open(req, timeout):
+    """urlopen for robots-gated fetchers: redirects stay on the request's origin."""
+    return _SAME_ORIGIN.open(req, timeout=timeout)
+
+
+def same_origin_fetch(url, timeout):
+    """default_fetch (validators, Retry-After) through same_origin_open."""
+    return default_fetch(url, timeout, opener=same_origin_open)
 
 
 def fetch_result(url, timeout, headers=None, opener=None):
