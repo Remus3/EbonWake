@@ -20,3 +20,22 @@ and (if app/ changed) npm test green; ASCII / LF; the audit doc row for each
 source ID is updated to FIXED with this plan number.
 
 Depends on: 141.
+
+## As-built deviations
+
+- No Origin header keeps `Access-Control-Allow-Origin: *` (slice 1 "stays
+  unchanged"). A header-less request is never a cross-origin browser read, so
+  `*` exposes nothing. Alternatives: omit the header. Why: plan text, zero
+  change for curl / same-origin / Electron. Reverses if: a browser path is found
+  that reads cross-origin without sending Origin.
+- Allowlist = `null` plus `http://<h>:<port>` for every LOOPBACK_HOSTS name
+  (127.0.0.1, localhost, [::1]) on the server's own bound port; a loopback origin
+  on another port is refused. Alternatives: any loopback port. Why: other local
+  servers are other apps. Reverses if: the dashboard moves to an http origin on
+  another port.
+- `Origin: null` is also what a sandboxed iframe on any page sends; accepted
+  residual risk because the Electron dashboard and overlay both use loadFile
+  (app/main.js) and need it. No app/ change. Reverses if: the dashboard is
+  served over http from the EW port (then drop `null`).
+- Audit's live-app check not run in this lane (headless, no Electron); covered
+  by the `null` echo test.
