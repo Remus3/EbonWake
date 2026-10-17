@@ -66,4 +66,39 @@ Depends on: none.
 
 ## Proposed ROADMAP rows
 
-(filled by the lane)
+Ranked in research 0029 "Ranking" (135, 136, 137, 138, 140, 139).
+
+| 135 | Server watchdog: the app health-polls and auto-restarts a dead EW server (plan doc docs/plans/135-server-watchdog.md) | [ ] open (priority) |
+| 136 | Loop status card: last tick age, lanes, stuck items, halt and backoff on the dashboard (plan doc docs/plans/136-loop-status-card.md) | [ ] open (priority) |
+| 137 | Stalled-lane flag: a lane silent for twice its ETA shows stalled in the loop checklist (plan doc docs/plans/137-stalled-lane-flag.md) | [ ] open (priority) |
+| 138 | Control ledger rotation: cap timings, usage, claims and finished lane status files (plan doc docs/plans/138-control-ledger-rotation.md) | [ ] open (priority) |
+| 139 | Upstream fetch politeness: conditional GET (ETag / Last-Modified) and Retry-After backoff (plan doc docs/plans/139-upstream-fetch-politeness.md) | [ ] open (priority) |
+| 140 | Weekly silver goal: target, pace and projection from session and sales ledgers (plan doc docs/plans/140-weekly-silver-goal.md) | [ ] open (priority) |
+
+## As-built
+
+`docs/research/0029-deep-dive-autonomy-efficiency.md` (findings A1-A7,
+B1-B8, C1-C3 with evidence, severity, verdict and ranking), plans 135-140,
+guard `tests/test_plan134_deep_dive.py`.
+
+## As-built deviations
+
+1. Evidence is code-cited, not measured from the runtime ledgers. Decision:
+   cite file:line and constants; plans 136 and 138 open with a read-only
+   "measure" slice on the main checkout. Alternatives: block the row until a
+   session reads `headless_usage.jsonl` / `timings.jsonl`; guess numbers.
+   Why: the lane's linked worktree permission set denied every read and
+   write under the main checkout's `ops/loop/control/`, and the plan forbids
+   waiting. Reverses if: a lane run can read the main checkout's control
+   files (then the measured numbers replace the citations).
+2. Progress file written in the lane worktree
+   (`ops/loop/control/progress/p134-build.json`, gitignored), not the main
+   checkout. Alternatives: no progress file. Why: the main-checkout write was
+   denied; the loop's `blocked_marker` already reads the worktree copy first,
+   and plan 137 makes the stall check read both. Reverses if: the lane
+   permission set allows the main-checkout progress path.
+3. No public web source was read (scope A / B are tree-internal; scope C was
+   answered from the tree's own plan coverage). Alternatives: re-run the
+   daily patch-note sweep. Why: research 0028 did that sweep the same day;
+   repeating it would only duplicate. Reverses if: a scope C idea needs an
+   external fact (plan 139 slice 0 does its own dated GET).
