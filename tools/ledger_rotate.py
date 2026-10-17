@@ -44,20 +44,23 @@ PROGRESS_NEVER = ("loop.json",)
 
 
 def _epoch(value):
-    """Epoch seconds of a number or an ISO string (naive = local), else None."""
+    """Epoch seconds of a number or an ISO string (naive = local), else None.
+    Plan 149 TOOLS-06: a time the archive month cannot be taken of (non-finite,
+    out of range) is None, so that row stays like a timestamp-less one."""
     if isinstance(value, bool):
         return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if not isinstance(value, str):
-        return None
     try:
-        dt = _dt.datetime.fromisoformat(value)
-    except ValueError:
+        if isinstance(value, (int, float)):
+            e = float(value)
+        elif isinstance(value, str):
+            dt = _dt.datetime.fromisoformat(value)
+            e = (dt.astimezone() if dt.tzinfo is None else dt).timestamp()
+        else:
+            return None
+        _dt.datetime.fromtimestamp(e)  # the archive bucket must be computable
+    except (ValueError, OverflowError, OSError):
         return None
-    if dt.tzinfo is None:
-        dt = dt.astimezone()
-    return dt.timestamp()
+    return e
 
 
 def _parse(raw):

@@ -34,11 +34,11 @@ def _epoch(ts):
         return None
     try:
         dt = _dt.datetime.fromisoformat(ts)
-    except ValueError:
+        if dt.tzinfo is None:
+            dt = dt.astimezone()
+        return dt.timestamp()
+    except (ValueError, OverflowError, OSError):  # plan 149 TOOLS-06: out of range
         return None
-    if dt.tzinfo is None:
-        dt = dt.astimezone()
-    return dt.timestamp()
 
 
 def _rows(path):

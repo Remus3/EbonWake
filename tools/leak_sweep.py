@@ -62,7 +62,10 @@ def load_needles(config=CONFIG, environ=None):
         needles = [n.strip() for n in raw.split(";") if n.strip()]
     elif Path(config).is_file():
         doc = json.loads(Path(config).read_text(encoding="utf-8"))
-        needles = [n.strip() for n in doc.get("needles", []) if isinstance(n, str) and n.strip()]
+        raw_list = doc.get("needles") if isinstance(doc, dict) else None
+        if not isinstance(raw_list, list):  # plan 149 TOOLS-05: FAULT, not a traceback
+            raise ValueError("needle config is not {\"needles\": [...]}")
+        needles = [n.strip() for n in raw_list if isinstance(n, str) and n.strip()]
         if not needles:
             raise ValueError("needle config present but holds no usable needle")
     else:
@@ -133,12 +136,40 @@ def scan_tree(needles_rx, cwd=ROOT):
     return findings, len(files)
 
 
+_C_ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13,
+              '"': 34, "\\": 92}
+
+
+def _unquote_path(text):
+    """A git C-quoted path (`"b/caf\\303\\251.md"`, core.quotePath) as text."""
+    body, out, i = text[1:-1], bytearray(), 0
+    while i < len(body):
+        c = body[i]
+        if c == "\\" and i + 1 < len(body):
+            nxt, octal = body[i + 1], body[i + 1:i + 4]
+            if len(octal) == 3 and all(ch in "01234567" for ch in octal):
+                out.append(int(octal, 8) & 0xFF)
+                i += 4
+                continue
+            out.append(_C_ESCAPES.get(nxt, ord(nxt) if ord(nxt) < 128 else 63))
+            i += 2
+            continue
+        out += c.encode("utf-8")
+        i += 1
+    return out.decode("utf-8", "replace")
+
+
 def _added_lines(diff_text):
-    """{path: text of added lines} from a unified diff."""
+    """{path: text of added lines} from a unified diff. Plan 149 TOOLS-04: a
+    C-quoted header path (non-ASCII or special bytes) is unquoted, so its
+    added lines are scanned like any other file's."""
     out, cur = {}, None
     for line in diff_text.splitlines():
         if line.startswith("+++ "):
-            cur = line[6:] if line.startswith("+++ b/") else None
+            head = line[4:]
+            if head.startswith('"') and head.endswith('"') and len(head) >= 2:
+                head = _unquote_path(head)
+            cur = head[2:] if head.startswith("b/") else None
             if cur is not None:
                 out.setdefault(cur, [])
         elif cur is not None and line.startswith("+") and not line.startswith("+++"):

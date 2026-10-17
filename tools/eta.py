@@ -13,6 +13,7 @@ m under 120 m, h beyond.
 """
 
 import json
+import math
 import shutil
 import statistics
 import subprocess
@@ -53,6 +54,10 @@ def fmt(seconds):
 def record(kind, seconds, ok=True, log=LOG, clock=time.time):
     if not kind or any(c.isspace() for c in kind):
         raise ValueError("kind must be a non-empty token")
+    seconds = float(seconds)
+    if not math.isfinite(seconds):
+        raise ValueError("seconds must be finite")
+    seconds = max(seconds, 0.0)  # a wall-clock step back never records a negative run
     log = Path(log)
     log.parent.mkdir(parents=True, exist_ok=True)
     row = {"kind": kind, "seconds": round(float(seconds), 3), "ok": bool(ok),
@@ -73,8 +78,14 @@ def history(kind, log=None):
             row = json.loads(line)
         except ValueError:
             continue  # a torn line is skipped, never fatal
-        if row.get("kind") == kind and row.get("ok") is True:
-            rows.append(float(row["seconds"]))
+        if not isinstance(row, dict) or row.get("kind") != kind or row.get("ok") is not True:
+            continue
+        s = row.get("seconds")
+        # plan 149 TOOLS-01: a non-numeric or non-finite row is skipped, so one
+        # bad line never poisons the median (fmt cannot round NaN)
+        if isinstance(s, (int, float)) and not isinstance(s, bool) and math.isfinite(s) \
+                and s >= 0:
+            rows.append(float(s))
     return rows
 
 
@@ -103,7 +114,13 @@ def main(argv=None):
         record(a[1], float(a[2]), ok=ok)
         return 0
     if len(a) >= 2 and a[0] == "estimate":
-        default = float(a[a.index("--default") + 1]) if "--default" in a else None
+        default = None
+        if "--default" in a:
+            try:
+                default = float(a[a.index("--default") + 1])
+            except (IndexError, ValueError):
+                print(__doc__, file=sys.stderr)
+                return 64
         print(fmt(estimate(a[1], default)))
         return 0
     if len(a) >= 4 and a[0] == "run" and a[2] == "--":

@@ -52,4 +52,23 @@ Depends on: 135, 136, 137, 138, 139, 140.
 
 ## Proposed ROADMAP rows
 
-(filled by the lane if any finding is FILED)
+None: every finding was FIXED or NOT-A-BUG (docs/audit/20261017-tools.md).
+
+## As-built deviations
+
+1. Slice limited to tools/*.py. Decision: the tools/*.ps1 OCR helpers
+   (ocr.ps1, ocr_bench.ps1, ocr_ink.ps1, ocr_prep.ps1) were not audited.
+   Alternatives: audit them here too. Why: the plan's Files section names
+   `tools/*.py` only and the slice was sized on those lines. Reverses if:
+   a later slice plan names the .ps1 helpers.
+2. eta.record clamps a negative duration to 0 instead of refusing it
+   (TOOLS-01). Alternatives: refuse negatives like NaN. Why: callers
+   (`ew_lane.run_lane`'s finally, `eta.py run`) compute wall-clock deltas,
+   and a refusal there would raise out of a finally and mask the run's
+   result after a clock step back. Reverses if: callers move to a
+   monotonic clock.
+3. Progress file written in the lane worktree's
+   ops/loop/control/progress/p149-build.json, not the main checkout's:
+   this run's permissions denied the main-checkout write. The loop reads
+   the worktree copy first (`Tick.lane_progress`). Reverses if: lane runs
+   get a write grant on the main progress dir.

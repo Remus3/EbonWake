@@ -191,7 +191,7 @@ def epoch_of(text):
     """Epoch seconds of an ISO timestamp (a naive one is local time), or None."""
     try:
         return _dt.datetime.fromisoformat(str(text)).timestamp()
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError, OSError):  # plan 149 TOOLS-06: out of range
         return None
 
 
@@ -199,24 +199,42 @@ def eta_label(seconds):
     return eta.fmt(seconds)[1:-1]  # "[~45m]" -> "~45m"
 
 
+def _cfg_int(loop, key, default, minimum=0):
+    """Plan 149 TOOLS-02: an int config value at or above minimum, else the
+    default, so a typo in config/local.json never stops every tick."""
+    v = loop.get(key, default)
+    if isinstance(v, bool):
+        return default
+    try:
+        v = int(v)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return v if v >= minimum else default
+
+
 def load_config(root):
-    doc = read_json(Path(root) / "config" / "local.json", {}) or {}
+    doc = read_json(Path(root) / "config" / "local.json", {})
+    doc = doc if isinstance(doc, dict) else {}
     loop = doc.get("loop") if isinstance(doc.get("loop"), dict) else {}
     # Fleet convention: MAIN byte-copies notes into <root>/moon_sync_inbox
     # (gitignored); replies go to <root>/moon_sync_outbox. Config overrides.
-    return {"inbox_dir": loop.get("inbox_dir") or str(Path(root) / INBOX_REL),
-            "outbox_dir": loop.get("outbox_dir") or str(Path(root) / OUTBOX_REL),
+    def path_or(key, rel):
+        v = loop.get(key)
+        return v if isinstance(v, str) and v else str(Path(root) / rel)
+
+    return {"inbox_dir": path_or("inbox_dir", INBOX_REL),
+            "outbox_dir": path_or("outbox_dir", OUTBOX_REL),
             # plan 093: where a reply to <CODE> is copied (per-host, gitignored)
             "dest_inboxes": {str(k).upper(): str(v) for k, v in
                              (loop.get("dest_inboxes") or {}).items()
                              if v} if isinstance(loop.get("dest_inboxes"), dict) else {},
-            "roster": loop.get("roster") or None,
-            "max_new_plans_per_day": int(loop.get("max_new_plans_per_day",
-                                                  DEFAULT_MAX_PLANS)),
-            "max_notes_per_day": min(int(loop.get("max_notes_per_day", DEFAULT_MAX_NOTES)),
+            "roster": loop.get("roster") if isinstance(loop.get("roster"), str) else None,
+            "max_new_plans_per_day": _cfg_int(loop, "max_new_plans_per_day",
+                                              DEFAULT_MAX_PLANS),
+            "max_notes_per_day": min(_cfg_int(loop, "max_notes_per_day", DEFAULT_MAX_NOTES),
                                      DEFAULT_MAX_NOTES),
-            "lane_timeout_s": int(loop.get("lane_timeout_s", LANE_TIMEOUT_S)),
-            "tick_s": int(loop.get("tick_s", TICK_S)),
+            "lane_timeout_s": _cfg_int(loop, "lane_timeout_s", LANE_TIMEOUT_S, minimum=1),
+            "tick_s": _cfg_int(loop, "tick_s", TICK_S, minimum=1),
             "routes": load_routes(loop.get("routes"))}
 
 
