@@ -45,6 +45,15 @@ def test_weights_bad_file_falls_back(tmp_path):
     assert whatnow.load_weights(p) == whatnow.DEFAULT_WEIGHTS
 
 
+def test_weights_non_finite_row_falls_back(tmp_path):
+    # Plan 144 SERVER-D-03: json reads Infinity / NaN; int(inf) raised OverflowError.
+    p = tmp_path / "w.json"
+    p.write_text('{"boss": {"weight": 1, "horizon_s": Infinity, "nominal_s": 60},'
+                 ' "reset": {"weight": Infinity, "horizon_s": 60, "nominal_s": 60}}',
+                 encoding="ascii")
+    assert whatnow.load_weights(p) == whatnow.DEFAULT_WEIGHTS
+
+
 # --- ranking ----------------------------------------------------------------------
 
 def cand(source, left_s, text=None):

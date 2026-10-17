@@ -74,6 +74,26 @@ def rig(tmp_path):
     return Rig(tmp_path)
 
 
+# --- plan 144 SERVER-D-02: a stored stamp before 1970 ----------------------------
+
+def test_stamp_before_1970_reads_as_none():
+    assert playsession._ts("1969-12-31T23:59:59+00:00") is None
+    assert playsession._ts("1970-01-01T00:00:00+00:00") == 0.0
+
+
+def test_open_session_before_1970_never_breaks_the_poll(rig):
+    old = "1969-12-31T00:00:00+00:00"
+    rig.store.put("playsession", {
+        "open": {"id": "p1", "start": old, "spot": None, "auto": True, "grind_started": None,
+                 "seen": old, "left_at": None, "down_since": None},
+        "last": None, "suppressed": False, "next_id": 2, "history": []})
+    rig.go("logged_in", T10)  # the corrupt open row is dropped; a fresh one opens
+    assert rig.ps.view()["open"]["id"] == "p2"
+    rig.go("not_running", T10 + 30 * MIN)
+    rig.tick(T10 + 33 * MIN)
+    assert rig.ps.view()["last"]["id"] == "p2"
+
+
 # --- acceptance ------------------------------------------------------------------
 
 def test_acceptance_login_to_exit_one_closed_session_no_prompt(rig):
