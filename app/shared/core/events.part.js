@@ -140,7 +140,7 @@
 
   // Open claim windows, one per notice (url, else title), soonest first.
   function claimRows(items, fetchedMs, now) {
-    const seen = {};
+    const seen = Object.create(null);  // a notice title like 'constructor' is just a key
     return eventRows(items, fetchedMs, now).filter(function (r) {
       if (r.claim_open !== true) return false;
       const k = typeof r.url === 'string' ? r.url : r.title;

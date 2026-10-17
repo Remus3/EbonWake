@@ -481,7 +481,8 @@
   // land in the existing loot inputs. A row without a count or an item the
   // list no longer has is reported, never invented.
   function lootImportCounts(rows, itemNames) {
-    const byLower = {};
+    // No prototype: an OCR-read 'constructor' is not a list item.
+    const byLower = Object.create(null);
     (Array.isArray(itemNames) ? itemNames : []).forEach(function (n) {
       if (typeof n === 'string') byLower[n.toLowerCase()] = n;
     });

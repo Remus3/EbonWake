@@ -428,7 +428,7 @@
       keys.push(k);
       return true;
     });
-    const count = {};
+    const count = Object.create(null);  // a typed name like 'constructor' is just a key
     out.forEach(function (r) { const n = squash(nameOf(r)); count[n] = (count[n] || 0) + 1; });
     return out.map(function (r) {
       const n = nameOf(r);
