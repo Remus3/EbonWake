@@ -12,13 +12,13 @@ arsha `/search` and `/category` were Imperva-blocked (research 0004 section
 """
 
 import json
+import re
 import threading
 import time
 import urllib.parse
 from pathlib import Path
 
-from .httpcache import (BACKOFF_BASE_S, BACKOFF_MAX_S, PENDING_RETRY_S, CachedClient,
-                        Pending, read_json)
+from .httpcache import PENDING_RETRY_S, CachedClient, Pending, backoff_wait, read_json
 from .store import atomic_write_json
 
 SEED_PATH = Path(__file__).resolve().parent / "data" / "market_items.json"
@@ -32,6 +32,7 @@ SCAN_EVERY_S = 30
 MAX_ID = 2 ** 31 - 1
 _BO_KEY = "utildb"
 _PREC = {"seed": 0, "db": 1, "cache": 2}
+_DIGITS = re.compile(r"[0-9]{1,10}")  # plan 142: str.isdigit() also passes chr(0xB2)
 
 
 def _is_int(v):
@@ -107,7 +108,7 @@ class UtilDb(CachedClient):
                                             "error": str(e), "pending": True})
                 return out or None
             except Exception as e:  # noqa: BLE001 - HTTP, timeout, bad json, arsha code
-                wait = min(BACKOFF_BASE_S * 2 ** n, BACKOFF_MAX_S)
+                wait = backoff_wait(n)
                 self._set_backoff(_BO_KEY, {"n": n + 1, "until": now + wait,
                                             "error": f"{type(e).__name__}: {e}"[:200]})
                 return out or None
@@ -130,7 +131,7 @@ class NameIndex:
         db, cache = doc.get("db"), doc.get("cache")
         self.db = {}     # "id" -> {"name": str|None, "fetched_at": epoch}
         for k, v in (db.items() if isinstance(db, dict) else ()):
-            if (k.isdigit() and isinstance(v, dict) and isinstance(v.get("fetched_at"), (int, float))
+            if (_DIGITS.fullmatch(k) and isinstance(v, dict) and isinstance(v.get("fetched_at"), (int, float))
                     and (v.get("name") is None or isinstance(v.get("name"), str))):
                 self.db[k] = {"name": v.get("name"), "fetched_at": v["fetched_at"]}
         self.cache = {k: v for k, v in (cache.items() if isinstance(cache, dict) else ())
@@ -197,7 +198,7 @@ class NameIndex:
                 best[key] = (_PREC[src], name)
         for k, name in self.cache.items():
             i, _, sid = k.partition(":")
-            if i.isdigit() and sid.isdigit():
+            if _DIGITS.fullmatch(i) and _DIGITS.fullmatch(sid):
                 put((int(i), int(sid)), name, "cache")
         for k, rec in self.db.items():
             if rec.get("name"):

@@ -20,6 +20,7 @@ validators to the fetch through a per-thread context, so every caller's
 import datetime as _dt
 import email.utils
 import json
+import math
 import threading
 import time
 import urllib.error
@@ -33,6 +34,18 @@ from .store import atomic_write_json
 BACKOFF_BASE_S = 30
 BACKOFF_MAX_S = 1800
 PENDING_RETRY_S = 60
+BACKOFF_N_MAX = 16  # 30 * 2 ** 6 already passes BACKOFF_MAX_S; caps the bigint (plan 142)
+
+
+def backoff_wait(n):
+    """Generic backoff after the n-th consecutive failure (n clamped to
+    0..BACKOFF_N_MAX, so a corrupt huge n never builds a giant int)."""
+    n = max(0, min(int(n), BACKOFF_N_MAX))
+    return min(BACKOFF_BASE_S * 2 ** n, BACKOFF_MAX_S)
+
+
+def _finite(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
 class UpstreamError(Exception):
@@ -136,7 +149,7 @@ def retry_after_s(value, now):
     if not isinstance(value, str) or not value.strip():
         return None
     v = value.strip()
-    if v.isdigit():
+    if v.isascii() and v.isdigit():  # plan 142: "\xb2" (latin-1) isdigit() but int() raises
         return int(v)
     try:
         when = email.utils.parsedate_to_datetime(v)
@@ -165,6 +178,10 @@ def _daemon(fn):
 
 
 class CachedClient:
+    # Plan 142: the longest backoff this client ever sets; a stored `until`
+    # further out than this from now was written before the clock moved back.
+    backoff_horizon_s = max(BACKOFF_MAX_S, PENDING_RETRY_S)
+
     def __init__(self, fetch=None, clock=time.time, cache_dir=None):
         if cache_dir is None:
             raise ValueError("cache_dir is required")
@@ -201,8 +218,12 @@ class CachedClient:
     def key_backoff(self, key):
         bo = self._backoffs().get(key, {})
         if not (isinstance(bo, dict) and isinstance(bo.get("n", 0), int)
-                and isinstance(bo.get("until", 0), (int, float))):
+                and not isinstance(bo.get("n", 0), bool) and _finite(bo.get("until", 0))):
             return {}  # corrupt entry = no backoff, never a 500
+        if bo:
+            bo = dict(bo, n=max(0, min(bo.get("n", 0), BACKOFF_N_MAX)))
+            if bo.get("until", 0) > self.clock() + self.backoff_horizon_s:
+                bo["until"] = 0  # set before the clock moved back: expired (plan 142)
         return bo
 
     def _set_backoff(self, key, entry):
@@ -218,10 +239,15 @@ class CachedClient:
     def _cached(self, key):
         cached = read_json(self._cache_path(key))
         if not (isinstance(cached, dict) and "data" in cached
-                and isinstance(cached.get("fetched_at"), (int, float))
-                and not isinstance(cached.get("fetched_at"), bool)):
+                and _finite(cached.get("fetched_at"))):
             return None  # corrupt cache = no cache
         return cached
+
+    @staticmethod
+    def _fresh(cached, now, ttl):
+        """A stamp from the future (the clock moved back) is stale, not fresh
+        until the clock catches up (plan 142)."""
+        return bool(cached) and 0 <= now - cached["fetched_at"] < ttl
 
     # -- core -------------------------------------------------------------
     def cached_get(self, key, ttl, download):
@@ -231,7 +257,7 @@ class CachedClient:
         with self._keylock(key):
             now = self.clock()
             cached = self._cached(key)
-            if cached and now - cached["fetched_at"] < ttl:
+            if self._fresh(cached, now, ttl):
                 return self._result(cached, now, ttl, False, None)
             bo = self.key_backoff(key)
             if bo and now < bo.get("until", 0):
@@ -256,7 +282,7 @@ class CachedClient:
                         self._set_backoff(key, None)
                     self._count("hits_304")
                     return self._result(entry, now, ttl, False, None)
-                wait = BACKOFF_BASE_S * 2 ** n
+                wait = backoff_wait(n)
                 ra = retry_after_s(cond.retry_after, now)
                 if ra is not None:
                     wait = max(wait, ra)
@@ -286,7 +312,7 @@ class CachedClient:
         flight for `key` or the cache is fresh. Returns True when one started.
         `spawn(fn)` is injectable (tests); default is a daemon thread."""
         cached = self._cached(key)
-        if cached and self.clock() - cached["fetched_at"] < ttl:
+        if self._fresh(cached, self.clock(), ttl):
             return False
         with self._lock:
             if key in self._inflight:
@@ -324,7 +350,7 @@ class CachedClient:
         bo = self.key_backoff(key)
         if not cached and not bo:
             return None
-        stale = not cached or now - cached["fetched_at"] >= ttl
+        stale = not self._fresh(cached, now, ttl)
         return self._result(cached, now, ttl, stale, bo.get("error") if bo else None)
 
     @staticmethod
@@ -333,5 +359,5 @@ class CachedClient:
             return {"data": None, "fetched_at": None, "age_s": None, "ttl_s": ttl,
                     "stale": True, "error": error}
         return {"data": entry["data"], "fetched_at": iso(entry["fetched_at"]),
-                "age_s": int(now - entry["fetched_at"]), "ttl_s": ttl, "stale": stale,
+                "age_s": max(0, int(now - entry["fetched_at"])), "ttl_s": ttl, "stale": stale,
                 "error": error}

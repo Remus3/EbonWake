@@ -223,6 +223,8 @@ class ProfileClient(CachedClient):
     operator's own instance) skips the gate. FAIL_LIMIT consecutive failures
     stretch the backoff to FAIL_BACKOFF_S; the last good cache is served."""
 
+    backoff_horizon_s = FAIL_BACKOFF_S  # plan 142: a longer `until` is a clock jump
+
     def __init__(self, family, base_url=None, fetch=None, clock=time.time, cache_dir=None):
         super().__init__(fetch=fetch, clock=clock,
                          cache_dir=cache_dir if cache_dir is not None else _DEFAULT_CACHE)

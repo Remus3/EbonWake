@@ -53,3 +53,22 @@ Depends on: 135, 136, 137, 138, 139, 140.
 ## Proposed ROADMAP rows
 
 (filled by the lane if any finding is FILED)
+
+None: every finding was FIXED or NOT-A-BUG (docs/audit/20261017-server-b.md).
+
+## As-built deviations
+
+- Decision: SERVER-B-02 touches `server/ew/progress.py` (outside the slice)
+  with one class attribute, `ProfileClient.backoff_horizon_s =
+  FAIL_BACKOFF_S`. Alternatives: (a) treat any `until` past BACKOFF_MAX_S as
+  expired - breaks the plan 061 24 h profile backoff
+  (tests/test_profile_gate.py failed); (b) honour the `long` flag progress
+  writes - couples httpcache to one subclass's private field; (c) leave the
+  clock-jump case unfixed. Why: a per-client horizon keeps httpcache generic
+  and states each client's longest legitimate backoff where it is set.
+  Reverses if: a client needs backoffs longer than its horizon (raise its
+  `backoff_horizon_s`).
+- Decision: the xpbooks.py `isdigit()` sibling of SERVER-B-05 is noted in the
+  audit doc, not fixed (outside this slice). Alternatives: fix it here.
+  Why: plan 142 scopes the lane to its files; the slice owning xpbooks.py
+  reads it in full anyway. Reverses if: that slice has already merged.

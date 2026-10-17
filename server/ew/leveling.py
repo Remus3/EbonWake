@@ -402,7 +402,7 @@ def _clean_level_xp(raw):
     My Info reads; a bad row is dropped."""
     out = {}
     for k, r in (raw if isinstance(raw, dict) else {}).items():
-        lv = int(k) if isinstance(k, str) and k.isdigit() else None
+        lv = int(k) if isinstance(k, str) and re.fullmatch(r"[0-9]{1,3}", k) else None
         if lv is None or not _ok_int(lv, *LEVEL_RANGE) or not isinstance(r, dict) \
                 or not _ok_int(r.get("total"), 1, 2 * MAX_XP) or _parse_iso(r.get("ts")) is None:
             continue
@@ -1070,6 +1070,10 @@ class LevelingService:
             until = _parse_iso(arg["until"]) if isinstance(arg["until"], str) else None
             if until is None or until <= now:
                 raise ValueError("until must be a future ISO UTC time")
+            try:
+                _iso(until)
+            except (OverflowError, ValueError):  # plan 142: out of range = 400, not 500
+                raise ValueError("until must be a future ISO UTC time") from None
         else:
             until = self._default_until(now)
         with self._lock:
