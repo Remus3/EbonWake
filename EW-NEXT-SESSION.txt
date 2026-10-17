@@ -1,6 +1,6 @@
 EW NEXT SESSION
 ---------------
-SESSION: 35
+SESSION: 36
 
 Next action: monitor the loop (\EbonwakeOps\LaneLoop, progress/loop.json,
 loop_items/*.json); any item left in adjudicate / merge-conflict / gave-up
@@ -9,7 +9,7 @@ Context). After the operator's next logon, read back MAIN ORDER N1af105
 step 5 (OPERATOR bullet below) and record it. Answer any MAIN reply to the
 2026-10-12 notes (kit v17 ANSWER, SF-deny + commit-msg temp-path
 INFORMATION) and to the 2026-10-15 N301812 ANSWER (none as of session
-34). Otherwise work the top ROADMAP open row, or let the idle deep-dive
+35). Otherwise work the top ROADMAP open row, or let the idle deep-dive
 seed new rows.
 
 Carried forward (not acted on yet):
@@ -40,7 +40,7 @@ Carried forward (not acted on yet):
   worktree list` and fleet_lanes.worktree_path(i) for i=0..2, remove HALT,
   flip ROADMAP row 106 to [x]. Reverses if MAIN orders trees to set it
   themselves.
-  Read 2026-10-16 session 34: UNSET.
+  Read 2026-10-17 session 35: UNSET.
 - MAIN to record EW's port block 8940-8959 in the machine-wide registry and
   add EW to the roster / lane widget (roster INFO 0230 says EW is a member;
   Hbd1ed4).
@@ -176,12 +176,13 @@ Carried forward (not acted on yet):
   docs/research/0014 line 19 (ProgramData kit path); the vendored kit uses
   the same name, so it stays.
 
-Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew, task Ready, last
-result 0, fire 1031 (read session 34), HALT absent, no lane locks, no stuck
-items; totals 147 merged, 18 no-change, 1 failed (N7416e2, known, fixed by
-hand). Logon task \Ebonwake args end in --hidden, delay PT1M, enabled (read
-back session 31). FLEET_SIDECAR_ROOT absent in HKCU Environment (read
-2026-10-16 session 34; row 106 stays MAIN-gated).
+Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew, armed, last tick
+2026-10-17 07:49 result 0, fire 1101 idle (read session 35), HALT absent,
+no lanes in flight, no stuck items; totals 148 merged, 18 no-change, 1
+failed (N7416e2, known, fixed by hand). Inbox: nothing new since
+2026-10-15 19:41. Logon task \Ebonwake args end in --hidden, delay
+PT1M, enabled (read back session 31). FLEET_SIDECAR_ROOT absent in HKCU Environment (read
+2026-10-17 session 35; row 106 stays MAIN-gated).
 ROADMAP open: none (row 106 [>] MAIN-gated). State: ops/loop/control/
 loop_items/*.json, progress/loop.json, progress/lane-<i>.json,
 inbox_status.json. Merge-stuck items are fixed by a session agent (merge
@@ -199,8 +200,9 @@ merge-conflict / gave-up / failed-dirty; any MAIN reply to the 2026-10-12
 notes or the N301812 ANSWER answered (or acked by ledger line); new
 deep-dive rows built by the loop.
 
-Do NOT redo: session 34 (2026-10-16): loop checklist header reads the
-SESSION number from this file (loop item H7e6e46, merge 5c7b9b3) - done.
+Do NOT redo: session 35 (2026-10-17): monitoring only, no code changes;
+loop merged idle deep-dive 20261017 (1d991c8). Session 34 (2026-10-16):
+loop checklist header reads the SESSION number from this file (loop item H7e6e46, merge 5c7b9b3) - done.
 Optional Conventional Commits commit-msg check (N301812) RULED closed, no
 change: subjects already pinned by tests/test_ew_loop.py; alternative (a
 commit-msg hook check) rejected because it could block kit / operator
@@ -214,10 +216,13 @@ log.
 
 In flight: none. Loop armed, no lane running, no session agents.
 
-Status: session 34 made no code commits; main at f35dd07 = origin before
-this hand-off; ci + codeql success on f35dd07; server health ok on :8940.
-/done gates (session 34): gated pytest green rc 0 (103 s), gated node 785
-pass 0 fail (npm.cmd), leak sweep ARMED (19). /done commits only this
-hand-off on top of f35dd07. Session jsonl < 10 MB (largest 2.0 MB).
+Status: session 35 made no code commits; main at 1d991c8 = origin before
+this hand-off. /done gates (session 35, run fresh): gated pytest rc 0
+(90 s), gated node rc 0 (npm.cmd), leak sweep ARMED (19). /done commits
+only this hand-off on top of 1d991c8. ci.yml paths-ignore covers docs/**
+and this file, so 1f7e1ba..1d991c8 and this push fire no CI; last ci +
+codeql success on f35dd07 (runs 38859112484 / 38859112548), code
+unchanged since. Server health ok on :8940. Session jsonl < 10 MB
+(largest 2.0 MB).
 
 Start with: read this file, then CLAUDE.md, docs/plans/ROADMAP.md, git log -10.
