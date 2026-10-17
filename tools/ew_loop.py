@@ -296,6 +296,8 @@ def _gates(cwd, run=_run_gate):
     if not cmds:
         return False, f"no gate command in {CI_WORKFLOW_REL.as_posix()}: gates fail closed"
     for cmd in cmds:
+        if not cmd.strip():  # plan 149 TOOLS-11: `run: ""` names no command
+            return False, f"empty gate command in {CI_WORKFLOW_REL.as_posix()}: fail closed"
         op = _shell_operator(cmd)
         if op is not None:
             return False, f"{cmd}: shell operator {op!r} unsupported by loop gates: fail closed"
@@ -1322,8 +1324,7 @@ class Tick(InboxMixin, MergeMixin):
                                 task_eta_s=None, next_tick=now + self.cfg["tick_s"])
         except OSError:
             pass
-        prev = read_json(self.root / self.d.kit.PROGRESS_REL / f"{PROGRESS_TASK}.json", {}) or {}
-        fire = int(prev.get("fire", 0) or 0) + 1 if isinstance(prev, dict) else 1
+        fire = fire_count(read_json(self.root / self.d.kit.PROGRESS_REL / f"{PROGRESS_TASK}.json"))
         took = round(max(now - started, 0), 1)
         if took > TICK_TARGET_S:  # plan 098: the tick target is under 60 s
             self.step(f"tick took {int(took)}s, target {TICK_TARGET_S}s")
@@ -1381,6 +1382,23 @@ class Tick(InboxMixin, MergeMixin):
         return self.write(state, task, lines, started)
 
 
+def _fire_of(doc):
+    """A loop.json doc's fire count; 0 for a malformed doc or value (plan 149
+    TOOLS-08: a bad loop.json never stops the tick write or the checklist)."""
+    v = doc.get("fire") if isinstance(doc, dict) else None
+    if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+        return 0
+    try:
+        return max(int(v), 0)
+    except (ValueError, OverflowError):
+        return 0
+
+
+def fire_count(prev):
+    """This tick's fire number: the previous loop.json's plus one."""
+    return _fire_of(prev) + 1
+
+
 def handoff_session(text):
     """The `SESSION: <n>` counter of a hand-off file (CLAUDE.md loop rule 5), or None."""
     m = re.search(r"^SESSION:\s*(\d+)\s*$", text or "", re.M)
@@ -1393,8 +1411,9 @@ def render_checklist(doc, session=None):
     n is the hand-off session counter when given (interactive session, FLEET
     item 13 a), else the tick's fire count (a headless fire uses its run count)."""
     cl = ew_lane._load("fleet_checklist", "ops/fleet_kit/fleet_checklist.py")
-    rows = [r for r in (doc.get("checklist") or []) if isinstance(r, dict)]
-    n = session if session is not None else int(doc.get("fire", 0) or 0)
+    rows = doc.get("checklist") if isinstance(doc, dict) else None
+    rows = [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+    n = session if session is not None else _fire_of(doc)
     return cl.render(n, rows)
 
 

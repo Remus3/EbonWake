@@ -167,7 +167,8 @@ def main(argv=None):
         return 0
     print(f"{a.lane}: rc={line.get('rc')} error={line.get('error')} "
           f"worktree={line.get('worktree')}")
-    return 0 if line.get("rc") == 0 else 1
+    # plan 149 TOOLS-07: the same success test run_lane records (rc 0, no error)
+    return 0 if line.get("rc") == 0 and not line.get("error") else 1
 
 
 if __name__ == "__main__":

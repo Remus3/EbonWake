@@ -45,9 +45,12 @@ def facts():
 def edit_guard():
     try:
         payload = json.load(sys.stdin)
-        path = Path(payload.get("tool_input", {}).get("file_path", ""))
+        raw = payload.get("tool_input", {}).get("file_path", "")
     except (ValueError, AttributeError):
         return 0
+    if not isinstance(raw, str) or not raw:  # plan 149 TOOLS-10: never a hook traceback
+        return 0
+    path = Path(raw)
     if not path.is_file():
         return 0
     problems = []

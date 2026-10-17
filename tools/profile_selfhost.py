@@ -74,7 +74,7 @@ def instance_up(base, connect):
 def _age_s(at, clock):
     try:
         return clock() - _dt.datetime.fromisoformat(at).timestamp()
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError, OSError):  # plan 149 TOOLS-06
         return None
 
 

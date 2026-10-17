@@ -61,8 +61,25 @@ def order_prompt(order):
 
 
 def queued_orders(root):
-    doc = read_json(Path(root) / ORDERS_REL, {}) or {}
-    return [o for o in doc.get("orders", []) if isinstance(o, dict) and o.get("id")]
+    doc = read_json(Path(root) / ORDERS_REL, {})
+    orders = doc.get("orders") if isinstance(doc, dict) else None  # plan 149 TOOLS-03
+    return [o for o in (orders if isinstance(orders, list) else [])
+            if isinstance(o, dict) and o.get("id")]
+
+
+def inbox_names(inbox):
+    """Note names in inbox, oldest mtime first (FLEET item 7); dot files are
+    never notes. Plan 149 TOOLS-09: a note removed while it is listed (MAIN
+    moving a copy) is skipped, never a tick crash."""
+    stamped = []
+    for p in Path(inbox).iterdir():
+        if p.name.startswith(".") or not p.is_file():
+            continue
+        try:
+            stamped.append((p.stat().st_mtime, p.name))
+        except OSError:
+            continue
+    return [name for _, name in sorted(stamped)]
 
 
 # The kit fleet_inbox seen ledger (fleet_inbox.SEEN_REL). A note named there
@@ -138,8 +155,7 @@ class InboxMixin:
         inbox, outbox = Path(inbox), Path(outbox)
 
         def fetch():
-            files = [p for p in inbox.iterdir() if p.is_file() and not p.name.startswith(".")]
-            return [p.name for p in sorted(files, key=lambda p: (p.stat().st_mtime, p.name))]
+            return inbox_names(inbox)
 
         state = self.d.watch.WatchState(self.root / WATCH_REL)
         if self.dry:
@@ -263,7 +279,8 @@ class InboxMixin:
             return Path(self.cfg["dest_inboxes"][to])
         roster = self.cfg.get("roster") or self.d.roster_path
         doc = read_json(Path(roster), {}) if roster else {}
-        for r in (doc or {}).get("repos") or []:
+        repos = doc.get("repos") if isinstance(doc, dict) else None  # plan 149 TOOLS-03
+        for r in repos if isinstance(repos, list) else []:
             if isinstance(r, dict) and str(r.get("code", "")).upper() == to:
                 if r.get("inbox"):
                     return Path(r["inbox"])
