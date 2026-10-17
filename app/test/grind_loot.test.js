@@ -126,6 +126,19 @@ test('ocrLootView: Loot (OCR) row text and the per-row details', () => {
   assert.deepStrictEqual(odd.rows, [{ text: 'X x1 - 5', source: '' }]);
 });
 
+// Audit APP-DASH-A-03: a logged session clears the typed marks with the
+// counts, so the next session's screenshot prefill fills those boxes again.
+test('grind.js: every successful log resets S.lootTyped with the counts', () => {
+  const src = read('dashboard/grind.js');
+  for (const fn of ['stop', 'stopAtExit', 'logManual']) {
+    const at = src.indexOf('function ' + fn + '()');
+    assert.ok(at >= 0, fn);
+    const body = src.slice(at, src.indexOf('\n  }\n', at));
+    assert.match(body, /S\.lootCounts = \{\};/, fn + ' clears counts');
+    assert.match(body, /S\.lootTyped = \{\};/, fn + ' clears typed marks');
+  }
+});
+
 test('Grind tab renders the Loot (OCR) row and its details', () => {
   const src = read('dashboard/grind.js');
   assert.ok(src.includes('C.ocrLootView(s)'));

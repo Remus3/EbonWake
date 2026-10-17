@@ -288,3 +288,12 @@ test('deadeye.js: debounced localStorage autosave, restore bar, Ctrl+S, unload g
   assert.match(src, /'Restore'/);
   assert.match(src, /'Discard'/);
 });
+
+// Audit APP-DASH-A-02: a step done tick the server refused (busy, failed, no
+// bridge) flips back, so the plan never shows a state that was not saved.
+test('deadeye.js: a refused step done tick reverts its checkbox', () => {
+  const src = read('dashboard/deadeye.js');
+  const at = src.indexOf('function planRow(');
+  const body = src.slice(at, src.indexOf('lab.appendChild(box);', at));
+  assert.match(body, /send\(\{ step_done: [^\n]*\n?[^\n]*\.then\(function \(ok\) \{ if \(!ok\) box\.checked = !box\.checked; \}\)/);
+});

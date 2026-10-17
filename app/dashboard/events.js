@@ -146,7 +146,9 @@
     box.checked = r.done === true;
     box.title = label;
     box.addEventListener('change', function () {
-      send({ done: { id: r.id, done: box.checked } }, box.checked ? label : 'reopened');
+      // A refused write (busy, failed, no bridge) flips back: never show unsaved.
+      send({ done: { id: r.id, done: box.checked } }, box.checked ? label : 'reopened')
+        .then(function (ok) { if (!ok) box.checked = !box.checked; });
     });
     lab.appendChild(box);
     lab.appendChild(el('span', 'ew-muted', label));

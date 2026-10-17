@@ -336,7 +336,9 @@
     box.checked = r.done === true;
     box.title = 'done';
     box.addEventListener('change', function () {
-      send({ step_done: { id: r.id, done: box.checked } }, box.checked ? 'done' : 'reopened');
+      // A refused write (busy, failed, no bridge) flips back: never show unsaved.
+      send({ step_done: { id: r.id, done: box.checked } }, box.checked ? 'done' : 'reopened')
+        .then(function (ok) { if (!ok) box.checked = !box.checked; });
     });
     lab.appendChild(box);
     const name = el('span', 'ew-mname', r.item);

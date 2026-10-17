@@ -53,3 +53,19 @@ Depends on: 135, 136, 137, 138, 139, 140.
 ## Proposed ROADMAP rows
 
 (filled by the lane if any finding is FILED)
+
+None: every finding was FIXED or NOT-A-BUG (`docs/audit/20261017-app-dash-a.md`).
+
+## As-built deviations
+
+- Progress file not written. Decision: the lane ran without
+  `ops/loop/control/progress/p145-build.json`; the harness refused both the
+  write outside the worktree and running a helper script. Alternatives: stop
+  and wait for a grant (forbidden: never wait), or write it inside the
+  worktree (wrong path, nothing reads it). Why: the audit itself is short and
+  ran inline; the loop sees the result on the finished tree. Reverses if: the
+  lane permission set allows the main-checkout progress path again.
+- The fixes are pinned by static source tests (the slice's existing test
+  style for DOM modules; no DOM harness in `node --test`). Alternatives: add
+  a fake-DOM harness (a refactor without a defect, out of scope). Reverses
+  if: a later plan adds a DOM harness for app/dashboard/.

@@ -200,6 +200,15 @@ test('events.js: safe DOM, POST via the bridge only, uses the shared helpers', (
   assert.match(src, /window\.EWEvents\s*=/);
 });
 
+// Audit APP-DASH-A-01: a done tick the server refused (busy, failed, no
+// bridge) flips back, so the box never shows a state that was not saved.
+test('events.js: a refused done tick reverts its checkbox', () => {
+  const src = read('dashboard/events.js');
+  const at = src.indexOf('function doneBox(');
+  const body = src.slice(at, src.indexOf('function delBtn(', at));
+  assert.match(body, /send\(\{ done: [^\n]*\n?[^\n]*\.then\(function \(ok\) \{ if \(!ok\) box\.checked = !box\.checked; \}\)/);
+});
+
 test('suggestedRows: valid candidates only, known codes and duplicates dropped, upper-cased', () => {
   const sug = { status: 'ok', candidates: [
     { code: 'AUTUMN-2026-GIFT', title: 'Autumn coupon', url: 'https://www.naeu.playblackdesert.com/en-US/News/Detail?groupContentNo=1', date: '2026-10-03' },
