@@ -10,6 +10,7 @@ import pytest
 
 from server.ew import eventcurrency as ec
 from server.ew import maintdigest, whatnow
+from ew_testkit import offline_market
 from server.ew.store import Store
 
 UTC = dt.timezone.utc
@@ -372,7 +373,9 @@ def test_routes(tmp_path):
     from server.ew import app as ewapp
     clk = Clock("2026-10-21T10:00:00Z")
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
-                          sse_interval=0.05, market_seed=[], events_clock=clk, today_clock=clk)
+                          sse_interval=0.05, market_seed=[], events_clock=clk, today_clock=clk,
+                          profile_cfg={}, config_path=tmp_path / "local.json",
+                          market_client=offline_market(tmp_path))
     s.store.put("logindays", {"dates": DATES, "marked": [], "open": None, "seen": None,
                               "since": "2026-10-01", "backfilled": True})
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)

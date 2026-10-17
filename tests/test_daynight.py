@@ -14,6 +14,7 @@ import pytest
 from server.ew import app as ewapp
 from server.ew import daynight as dn
 from server.ew import grind, ocr, ocrauto, overrides
+from ew_testkit import offline_market
 from server.ew.store import Store
 
 T0 = 1_790_000_000.0
@@ -392,7 +393,9 @@ def test_unwired_grind_keeps_the_plain_toggle(tmp_path):
 @pytest.fixture()
 def srv(tmp_path):
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
-                          market_seed=[], profile_cfg={}, grind_clock=Clock())
+                          market_seed=[], profile_cfg={}, grind_clock=Clock(),
+                          config_path=tmp_path / "local.json",
+                          market_client=offline_market(tmp_path))
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     yield s

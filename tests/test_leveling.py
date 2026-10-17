@@ -15,6 +15,7 @@ import pytest
 from server.ew import app as ewapp
 from server.ew import events as ewevents
 from server.ew import grind, knownissues, leveling, levels
+from ew_testkit import offline_market
 from server.ew.store import Store
 
 UTC = dt.timezone.utc
@@ -511,7 +512,9 @@ def lsrv(tmp_path, clock, monkeypatch):
     _no_tracked_rows(monkeypatch)
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
                           sse_interval=0.05, market_seed=[], grind_clock=clock,
-                          leveling_clock=clock, profile_cfg={})
+                          leveling_clock=clock, profile_cfg={},
+                          config_path=tmp_path / "local.json",
+                          market_client=offline_market(tmp_path))
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     yield s
@@ -833,7 +836,9 @@ def test_route_deadline_ops_and_events(tmp_path, clock, monkeypatch):
     _no_tracked_rows(monkeypatch)  # the tracked deadlines are meant; epochs / issues are not
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
                           sse_interval=0.05, market_seed=[], grind_clock=clock,
-                          leveling_clock=clock, events_clock=clock, profile_cfg={})
+                          leveling_clock=clock, events_clock=clock, profile_cfg={},
+                          config_path=tmp_path / "local.json",
+                          market_client=offline_market(tmp_path))
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     try:

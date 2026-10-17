@@ -14,6 +14,7 @@ import pytest
 
 from server.ew import app as ewapp
 from server.ew import knownissues, leveling
+from ew_testkit import offline_market
 from server.ew.store import Store
 
 UTC = dt.timezone.utc
@@ -178,7 +179,8 @@ def ksrv(tmp_path):
     when = _at("2026-10-16T00:00:00+00:00").timestamp()
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
                           sse_interval=0.05, market_seed=[], leveling_clock=lambda: when,
-                          profile_cfg={})
+                          profile_cfg={}, config_path=tmp_path / "local.json",
+                          market_client=offline_market(tmp_path))
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     yield s

@@ -11,6 +11,7 @@ import pytest
 
 from server.ew import app as ewapp
 from server.ew import loopstatus as ls
+from ew_testkit import offline_market
 
 NOW = 1_790_000_000.0
 
@@ -195,7 +196,8 @@ def test_cache_holds_for_ttl():
 @pytest.fixture
 def srv(tmp_path):
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
-                          market_seed=[], profile_cfg={})
+                          market_seed=[], profile_cfg={}, config_path=tmp_path / "local.json",
+                          market_client=offline_market(tmp_path))
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     yield s

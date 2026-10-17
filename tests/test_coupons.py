@@ -323,7 +323,7 @@ def srv(tmp_path):
                           sse_interval=0.05, market_seed=[], profile_cfg={},
                           market_client=market.ArshaClient(fetch=_no_network,
                                                            cache_dir=tmp_path / "mcache"),
-                          events_clock=clock,
+                          events_clock=clock, config_path=tmp_path / "local.json",
                           coupon_client=_client(tmp_path, net, clock), coupon_spawn=_sync)
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
@@ -371,7 +371,7 @@ def test_state_sources_coupons(srv):
 
 def test_default_make_server_has_coupons_disabled(tmp_path):
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", market_seed=[],
-                          profile_cfg={},
+                          profile_cfg={}, config_path=tmp_path / "local.json",
                           market_client=market.ArshaClient(fetch=_no_network,
                                                            cache_dir=tmp_path / "mcache"))
     try:

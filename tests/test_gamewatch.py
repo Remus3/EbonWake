@@ -17,6 +17,7 @@ import pytest
 from server.ew import app as ewapp
 from server.ew import gamewatch, market
 from server.ew.store import Store
+from ew_testkit import offline_market
 
 T0 = 1_800_000_000.0  # injected clock base (epoch seconds)
 
@@ -653,7 +654,7 @@ def gsrv(tmp_path, dirs):
                           sse_interval=0.05, market_seed=[],
                           market_client=market.ArshaClient(fetch=_no_network,
                                                            cache_dir=tmp_path / "cache"),
-                          profile_cfg={}, game_watch=w)
+                          profile_cfg={}, game_watch=w, config_path=tmp_path / "local.json")
     t = threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     t.start()
     yield s, w, clk
@@ -711,7 +712,8 @@ def test_route_sse_pushes_game_event_on_change(gsrv, dirs):
 def test_server_poll_thread_disabled_by_default(tmp_path, dirs):
     w = _watch(dirs)
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", market_seed=[],
-                          profile_cfg={}, game_watch=w)
+                          profile_cfg={}, game_watch=w, config_path=tmp_path / "local.json",
+                          market_client=offline_market(tmp_path))
     try:
         assert not w.running() and w.tasklist.calls == 0
     finally:
@@ -721,7 +723,8 @@ def test_server_poll_thread_disabled_by_default(tmp_path, dirs):
 def test_server_game_poll_starts_and_close_stops(tmp_path, dirs):
     w = _watch(dirs)
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", market_seed=[],
-                          profile_cfg={}, game_watch=w, game_poll=True)
+                          profile_cfg={}, game_watch=w, game_poll=True,
+                          config_path=tmp_path / "local.json", market_client=offline_market(tmp_path))
     try:
         assert _wait(lambda: w.tasklist.calls >= 1) and w.running()
     finally:
@@ -731,7 +734,8 @@ def test_server_game_poll_starts_and_close_stops(tmp_path, dirs):
 
 def test_server_game_cfg_injection_never_reads_real_config(tmp_path):
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", market_seed=[],
-                          profile_cfg={}, game_cfg={})
+                          profile_cfg={}, game_cfg={}, config_path=tmp_path / "local.json",
+                          market_client=offline_market(tmp_path))
     try:
         assert s.game.view()["state"] == "unconfigured"
     finally:
@@ -742,7 +746,8 @@ def test_bare_make_server_never_reads_real_config(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(gamewatch, "config_bdo", lambda root: calls.append(root) or {})
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", market_seed=[],
-                          profile_cfg={})
+                          profile_cfg={}, config_path=tmp_path / "local.json",
+                          market_client=offline_market(tmp_path))
     try:
         assert calls == [] and s.game.view()["state"] == "unconfigured"
     finally:
@@ -869,7 +874,8 @@ def test_dice_never_auto_ticks_today(tmp_path):
     # the session across the reset and earned only 1 die (flaky).
     noon = datetime.datetime(2026, 10, 7, 12, tzinfo=datetime.timezone.utc).timestamp()
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
-                          market_seed=[], profile_cfg={}, today_clock=lambda: noon)
+                          market_seed=[], profile_cfg={}, today_clock=lambda: noon,
+                          config_path=tmp_path / "local.json", market_client=offline_market(tmp_path))
     try:
         assert s.dice.on_game in s.game.listeners
         assert s.dice.grants == [0, 30, 60] and s.dice.rule == FIVE
