@@ -117,12 +117,13 @@
   // render(row) builds a fresh node; only the container's own methods are used.
   function reconcile(container, rows, key, render) {
     const out = { added: 0, updated: 0, moved: 0, removed: 0 };
-    const old = {};
+    // No prototype: a key like 'constructor' (a typed buff name) is just a key.
+    const old = Object.create(null);
     Array.prototype.slice.call(container.children).forEach(function (n) {
       if (n.ewKey !== undefined && !(n.ewKey in old)) old[n.ewKey] = n;
     });
     const want = [];
-    const seen = {};
+    const seen = Object.create(null);
     (rows || []).forEach(function (row) {
       const k = String(key(row));
       if (seen[k]) return;

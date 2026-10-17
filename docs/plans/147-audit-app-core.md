@@ -52,4 +52,27 @@ Depends on: 135, 136, 137, 138, 139, 140.
 
 ## Proposed ROADMAP rows
 
-(filled by the lane if any finding is FILED)
+None: every finding was FIXED or NOT-A-BUG (`docs/audit/20261017-app-core.md`).
+
+## As-built deviations
+
+1. Test files read. Decision: this lane read in full the core test files no
+   sibling audit covered (ewcore, ewcore_split, bus, notify, ocr, shell); the
+   other tests that exercise these parts were read in full by plans 145 / 146
+   and their audit docs list them. Alternatives: re-read all ~90 app/test
+   files (over the lane budget). Why: "matching" tests overlap the dashboard
+   slices; coverage stays checkable through the three audit docs together.
+   Reverses if: a reviewer finds a core-part test listed in no audit doc.
+2. Progress file. Decision: `ops/loop/control/progress/p147-build.json` in the
+   main checkout was not written; this lane's permission mode refused every
+   write outside the worktree (Write tool and a Python helper both asked for
+   approval that a headless run cannot give). Alternatives: write it inside
+   the worktree (the lane widget would never read it there, FLEET item 12).
+   Why: the work itself was not blocked; the loop reads the lane's own
+   lane-<i>.json. Reverses if: the lane's settings grant that one path.
+3. Fix shape. Decision: only internal lookup maps became
+   `Object.create(null)`; maps returned to callers stay plain objects.
+   Alternatives: own-property checks at every lookup, or null-prototype
+   outputs too. Why: the smallest change at the root, and the output shapes
+   are pinned by deepStrictEqual tests (a null prototype would fail them).
+   Reverses if: an output map is found keyed by untrusted text.
