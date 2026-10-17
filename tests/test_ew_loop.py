@@ -1084,6 +1084,108 @@ def test_exhausted_attempts_become_gave_up_with_the_error(tmp_path):
     assert "012" not in d.seen["launch"]
 
 
+# ---------------------------------------------------------------- plan 137 stalls
+
+def _prog(now, ago, eta_s=300, status="running"):
+    return {"task": "p012-build", "pct": 40, "step": "s", "eta_s": eta_s, "status": status,
+            "updated": ew_loop.iso(now - ago)}
+
+
+def test_stall_of_is_twice_eta_with_a_floor_and_unknown_is_not_stalled():
+    now = 1_790_000_000.0
+    assert ew_loop.stall_of(_prog(now, 1500), now) == 1500  # 2 x 300 < floor 600 < 1500
+    assert ew_loop.stall_of(_prog(now, 500), now) is None  # under the 600 s floor
+    assert ew_loop.stall_of(_prog(now, 1500, eta_s=900), now) is None  # under 2 x eta
+    assert ew_loop.stall_of(_prog(now, 1900, eta_s=900), now) == 1900
+    assert ew_loop.stall_of(_prog(now, 700), now, floor_s=0) == 700
+    assert ew_loop.stall_of(_prog(now, 1500, eta_s=None), now) == 1500
+    for status in ("done", "failed", "blocked"):
+        assert ew_loop.stall_of(_prog(now, 9999, status=status), now) is None
+    assert ew_loop.stall_of(dict(_prog(now, 9999), updated="garbage"), now) is None
+    assert ew_loop.stall_of({k: v for k, v in _prog(now, 9999).items() if k != "updated"},
+                            now) is None
+    assert ew_loop.stall_of(None, now) is None
+    assert ew_loop.stall_of(dict(_prog(now, 9999), eta_s="x"), now) == 9999
+
+
+def _stall_world(tmp_path, ago=1500):
+    root = make_root(tmp_path, roadmap=ROADMAP.replace("| 013 | Season pass tracker | [ ] open |\n", ""),
+                     handoff="")
+    wt = tmp_path / "wt0"
+    d = deps(root, lane_state=lambda: [{"index": 0, "state": "RUNNING", "lane": "data"},
+                                       {"index": 1, "state": "FREE", "lane": None},
+                                       {"index": 2, "state": "FREE", "lane": None}],
+             lane_worktree=lambda i: tmp_path / f"wt{i}")
+    now = d.clock()
+    _dispatched(root, pid=4242, title="Grind spot recommender",
+                dispatched=ew_loop.iso(now - 3600))
+    return root, wt, d, now
+
+
+def _write_prog(tree, doc):
+    p = Path(tree) / "ops/loop/control/progress/p012-build.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(doc))
+
+
+def test_silent_lane_shows_stalled_never_killed_and_records_one_stall_row(tmp_path):
+    root, wt, d, now = _stall_world(tmp_path)
+    _write_prog(wt, _prog(now, 1500))
+    doc = ew_loop.tick(deps=d, no_push=True)
+    row = next(r for r in doc["checklist"] if r["id"] == "012")
+    assert row["state"] == "stalled, 25m silent" and row["eta_s"] is None
+    assert "012: stalled 25m" in doc["log"]
+    rec = ew_loop.Items(root).get("012")
+    assert rec["state"] == "dispatched" and rec["stalled_s"] == 1500
+    assert d.seen["record"].count("lane-stall") == 1  # 1500 s > 3 x 300
+    assert "012" not in d.seen["launch"]
+    ew_loop.tick(deps=d, no_push=True)
+    assert d.seen["record"].count("lane-stall") == 1  # once per stall
+    assert ew_loop.Items(root).get("012")["state"] == "dispatched"
+    block = ew_loop.render_checklist(progress(root))
+    assert "012: Grind spot recommender (stalled, 25m silent)" in block
+
+
+def test_stall_under_three_eta_records_no_stall_row(tmp_path):
+    root, wt, d, now = _stall_world(tmp_path)
+    _write_prog(wt, _prog(now, 700))
+    doc = ew_loop.tick(deps=d, no_push=True)
+    assert next(r for r in doc["checklist"] if r["id"] == "012")["state"] == "stalled, 11m silent"
+    assert "lane-stall" not in d.seen["record"]
+
+
+def test_no_progress_file_shows_nothing_and_fresh_progress_clears_the_flag(tmp_path):
+    root, wt, d, now = _stall_world(tmp_path)
+    doc = ew_loop.tick(deps=d, no_push=True)
+    assert next(r for r in doc["checklist"] if r["id"] == "012")["state"] == "dispatched"
+    assert not any(": stalled" in s for s in doc["log"])
+    _write_prog(wt, _prog(now, 1500))
+    ew_loop.tick(deps=d, no_push=True)
+    assert ew_loop.Items(root).get("012")["stalled_s"] == 1500
+    _write_prog(wt, _prog(now, 10))
+    doc = ew_loop.tick(deps=d, no_push=True)
+    assert "stalled_s" not in ew_loop.Items(root).get("012")
+    assert next(r for r in doc["checklist"] if r["id"] == "012")["state"] == "dispatched"
+
+
+def test_lane_progress_worktree_then_main_newest_wins_stale_ignored(tmp_path):
+    root, wt, d, now = _stall_world(tmp_path)
+    t = ew_loop.Tick(d)
+    rec = ew_loop.Items(root).get("012")
+    assert t.lane_progress(rec) is None
+    _write_prog(root, _prog(now, 1500))  # main checkout only (lane could not write wt)
+    assert t.lane_progress(rec)["updated"] == ew_loop.iso(now - 1500)
+    _write_prog(wt, _prog(now, 2000))
+    assert t.lane_progress(rec)["updated"] == ew_loop.iso(now - 1500)  # newest wins
+    _write_prog(wt, _prog(now, 100))
+    assert t.lane_progress(rec)["updated"] == ew_loop.iso(now - 100)
+    _write_prog(wt, _prog(now, 7200))  # before this run's dispatch: stale
+    _write_prog(root, dict(_prog(now, 9000)))
+    assert t.lane_progress(rec) is None
+    _write_prog(root, dict(_prog(now, 50), updated="nope"))
+    assert t.lane_progress(rec) is None
+
+
 def test_launch_exception_marks_lost_and_frees_the_lane(tmp_path):
     root = make_root(tmp_path, handoff="")
     calls = []

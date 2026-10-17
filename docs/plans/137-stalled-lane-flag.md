@@ -39,6 +39,32 @@ write the worktree copy instead.
   `stalled` in loop.json; one with no progress file shows nothing.
 - No lane is killed by this plan.
 
+## As-built deviations
+
+- Slice 4 skipped: plan 136 (`loopstatus.summary`) has not landed in this
+  tree. Alternatives: build a stub summary here. Why: 136 owns that module;
+  a stub would collide with its lane. Reverses if: 136 lands - then its
+  `stuck` list reads `rec["stalled_s"]` (state `dispatched` + `stalled_s`).
+- The lane worktree is found from the RUNNING lane-lock row whose lane name
+  matches the record (`lane_state` + `lane_worktree`): a `dispatched` record
+  carries no `worktree` yet. Alternatives: store the worktree at dispatch.
+  Why: the kit claims the index only when the worker runs. Reverses if:
+  dispatch starts recording the claimed worktree.
+- The stall phase re-reads the record just before writing and skips it unless
+  still `dispatched`, so a lane worker finishing mid-tick is never clobbered.
+  The one-time `lane-stall` row is keyed on the record's `dispatched` stamp
+  (`stall_recorded`), so a re-dispatch can record again. Alternatives: a
+  separate stall ledger file. Why: no new control file. Reverses if: records
+  gain a compare-and-swap put.
+- A stalled checklist row carries `eta_s` null so it renders exactly
+  `(stalled, <n>m silent)`. Alternatives: keep the remaining-ETA suffix. Why:
+  the plan's row text; a negative / zero ETA on a hung lane misleads.
+- The new tests use fake Deps, but `tests/test_ew_loop.py` is module-marked
+  `git` (plan 097: the tick probes hooksPath), so they run in the whole suite,
+  not the fast tier. Reverses if: the module's tests are split by tier.
+- `refute-rounds: 0/3` (no verifier round in this lane; the loop's review
+  worker runs it).
+
 ## Game ToS
 
 Loop tooling only; nothing reaches the game client.

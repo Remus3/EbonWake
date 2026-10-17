@@ -448,6 +448,29 @@ def spawn_block(root, budget, now):
     return None
 
 
+# ---------------------------------------------------------------- plan 137 stalls
+
+STALL_FLOOR_S = 600  # a progress file is never stalled under 10 min of silence
+
+
+def stall_of(doc, now, floor_s=STALL_FLOOR_S):
+    """Seconds a running lane's progress doc has been silent when that exceeds
+    max(2 x its eta_s, floor_s) (FLEET item 12), else None. A finished,
+    failed or blocked doc never stalls; a missing doc or `updated` is unknown,
+    and unknown is not stalled."""
+    if not isinstance(doc, dict) or doc.get("status") != "running":
+        return None
+    updated = epoch_of(doc.get("updated"))
+    if updated is None:
+        return None
+    try:
+        eta_s = float(doc.get("eta_s") or 0)
+    except (TypeError, ValueError):
+        eta_s = 0.0
+    silent = now - updated
+    return int(silent) if silent > max(2 * eta_s, floor_s) else None
+
+
 # ---------------------------------------------------------------- the tick
 
 class Tick(InboxMixin, MergeMixin):
@@ -540,6 +563,57 @@ class Tick(InboxMixin, MergeMixin):
                                  f"{', '.join(rec.get('needs') or [])}")
                 self.items.put(rec)
                 self.step(f"{rec['id']}: gave up: {rec['error']}")
+
+    def lane_progress(self, rec):
+        """Plan 137: this run's `p<id>-build.json` from the lane worktree, then
+        the main checkout (a lane may be unable to write the main copy); the
+        newest parsable `updated` wins and a doc older than the dispatch is a
+        previous run's, ignored."""
+        since = epoch_of(rec.get("dispatched"))
+        if since is None:
+            return None
+        trees = [self.d.lane_worktree(r["index"]) for r in self.d.lane_state()
+                 if r.get("state") == "RUNNING" and r.get("lane") == rec.get("lane")]
+        best, best_t = None, None
+        for tree in trees + [self.d.main_tree]:
+            doc = read_json(Path(tree) / self.d.kit.PROGRESS_REL / f"p{rec['id']}-build.json")
+            t = epoch_of(doc.get("updated")) if isinstance(doc, dict) else None
+            if t is not None and t >= since and (best_t is None or t > best_t):
+                best, best_t = doc, t
+        return best
+
+    def stalls(self):
+        """Plan 137: flag (never kill, CLAUDE.md loop rule 1) a live dispatched
+        lane whose progress went silent; the record carries `stalled_s` for the
+        checklist. One `lane-stall` timing row once a stall passes 3 x ETA."""
+        if self.dry:
+            return
+        now = self.d.clock()
+        for rec in self.items.all().values():
+            if rec.get("state") != "dispatched" or not rec.get("pid") or \
+                    not self.d.pid_alive(rec["pid"]):
+                continue
+            doc = self.lane_progress(rec)
+            silent = stall_of(doc, now)
+            if silent is None and "stalled_s" not in rec:
+                continue
+            cur = self.items.get(rec["id"])  # the lane worker may have just finished
+            if not isinstance(cur, dict) or cur.get("state") != "dispatched":
+                continue
+            if silent is None:
+                cur.pop("stalled_s", None)
+                self.items.put(cur)
+                continue
+            cur["stalled_s"] = silent
+            self.step(f"{rec['id']}: stalled {silent // 60}m")
+            try:
+                eta_s = float(doc.get("eta_s") or 0)
+            except (TypeError, ValueError):
+                eta_s = 0.0
+            if silent > 3 * eta_s and cur.get("stall_recorded") != cur.get("dispatched"):
+                self.d.record("lane-stall", silent)
+                cur["stall_recorded"] = cur.get("dispatched")
+            self.items.put(cur)
 
     # -- d. finished worktrees
     def finished(self):
@@ -1198,6 +1272,12 @@ class Tick(InboxMixin, MergeMixin):
                 return "reviewing"
             return state
 
+        def stalled(rec):
+            """Plan 137: a silent dispatched lane reads `stalled, <n>m silent`."""
+            if rec.get("state") == "dispatched" and rec.get("stalled_s"):
+                return f"stalled, {int(rec['stalled_s']) // 60}m silent"
+            return None
+
         for item in work:
             rec = recs.get(item["id"]) or {}
             state = rec.get("state", "open")
@@ -1206,6 +1286,9 @@ class Tick(InboxMixin, MergeMixin):
                 continue
             if state == "blocked":
                 add(item["id"], item["title"], blocked_on(rec), None)
+                continue
+            if stalled(rec):
+                add(item["id"], item["title"], stalled(rec), None)
                 continue
             e = 0 if state in ATTENTION_STATES else est(rec)
             add(item["id"], item["title"], None if state == "open" else shown(rec, state), e)
@@ -1219,6 +1302,9 @@ class Tick(InboxMixin, MergeMixin):
             if iid not in listed and rec.get("state") not in DONE_STATES:
                 if rec.get("state") == "blocked":
                     add(iid, rec.get("title", ""), blocked_on(rec), None)
+                    continue
+                if stalled(rec):
+                    add(iid, rec.get("title", ""), stalled(rec), None)
                     continue
                 add(iid, rec.get("title", ""), shown(rec, rec.get("state")),
                     0 if rec.get("state") in ATTENTION_STATES else est(rec))
@@ -1257,6 +1343,7 @@ class Tick(InboxMixin, MergeMixin):
             if n:
                 self.step(f"usage rows backfilled kind build: {n}")
         self.reap_lost()
+        self.stalls()
         if not self.blocked():
             self.inbox()
         else:
