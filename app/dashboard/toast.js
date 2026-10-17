@@ -27,6 +27,7 @@
   const last = {};
   let prev = null;
   let timer = null;
+  let inflight = null;
 
   function bridge() {
     const b = window.ewApi;
@@ -108,7 +109,17 @@
     }, function () { /* keep last */ });
   }
 
+  // Plan 146: one round at a time - a hung server never piles up GETs every
+  // 5 s, and a slow round never lands after (and rewinds) a newer `prev`.
   function round() {
+    if (inflight) return inflight;
+    inflight = runRound().catch(function () { /* a rule error never wedges the loop */ }).then(function () {
+      inflight = null;
+    });
+    return inflight;
+  }
+
+  function runRound() {
     const now = Date.now();
     const jobs = [fetchInto('game', '/api/game'), fetchInto('prompts', '/api/prompts')];
     SOURCES.forEach(function (s) {

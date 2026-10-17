@@ -52,4 +52,21 @@ Depends on: 135, 136, 137, 138, 139, 140.
 
 ## Proposed ROADMAP rows
 
-(filled by the lane if any finding is FILED)
+None: every finding was FIXED or NOT-A-BUG (`docs/audit/20261017-app-dash-b.md`).
+
+## As-built deviations
+
+1. Regression tests for the three fixes live in one new file,
+   `app/test/dash_b_hardening.test.js`, which runs toast.js, pets.js and
+   progress.js in a vm against a minimal fake DOM (same approach as
+   overlay_context.test.js). Alternatives: add a test to each module's own
+   test file (pets.test.js, progress.test.js; toast.js has none) and
+   duplicate the fake DOM three times. Why: the existing per-module files are
+   pure-helper / static tests with "No DOM" in their headers; one shared rig
+   keeps them unchanged. Reverses if: a shared app/test DOM helper is added,
+   then these tests move next to their modules.
+2. The progress file `ops/loop/control/progress/p146-build.json` in the main
+   checkout could not be written: the write was denied by the permission
+   layer in this run. Alternatives: write it through a shell or kit helper
+   (would bypass the denial). Why: a denied write is not retried by another
+   path. Reverses if: the lane's permission profile allows that path.

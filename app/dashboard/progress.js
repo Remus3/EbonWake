@@ -422,7 +422,9 @@
 
   function claim(t, o, btn) {
     btn.disabled = true;
-    send({ claim: { track: t.id, objective: o.id, claimed: !o.claimed_at } }, 'addMsg', o.claimed_at ? 'unclaimed' : 'claimed');
+    // Plan 146: a failed save does not redraw, so the button is re-enabled here.
+    send({ claim: { track: t.id, objective: o.id, claimed: !o.claimed_at } }, 'addMsg', o.claimed_at ? 'unclaimed' : 'claimed')
+      .then(function (ok) { if (!ok) btn.disabled = false; });
   }
 
   function removeObjective(t, o, btn) {
