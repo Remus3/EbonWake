@@ -137,6 +137,18 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 138 | Control ledger rotation: cap timings, usage, claims and finished lane status files (plan doc docs/plans/138-control-ledger-rotation.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
 | 139 | Upstream fetch politeness: conditional GET (ETag / Last-Modified) and Retry-After backoff (plan doc docs/plans/139-upstream-fetch-politeness.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
 | 140 | Weekly silver goal: target, pace and projection from session and sales ledgers (plan doc docs/plans/140-weekly-silver-goal.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
+| 141 | Hardening audit server-a: server/ew/ __init__, __main__, app.py through eventcurrency.py (alphabetical; about 7.1k lines) - findings fixed TDD, record docs/audit/20261017-server-a.md (plan doc docs/plans/141-audit-server-a.md) | [ ] open |
+| 142 | Hardening audit server-b: server/ew/ eventnotices.py through levels.py (about 7.2k lines) - findings fixed TDD, record docs/audit/20261017-server-b.md (plan doc docs/plans/142-audit-server-b.md) | [ ] open |
+| 143 | Hardening audit server-c: server/ew/ logindays.py through ocrinfer.py (about 5.9k lines) - findings fixed TDD, record docs/audit/20261017-server-c.md (plan doc docs/plans/143-audit-server-c.md) | [ ] open |
+| 144 | Hardening audit server-d: server/ew/ onboarding.py through zoneinfo.py plus server/ew/data/*.json (about 7.9k lines) - findings fixed TDD, record docs/audit/20261017-server-d.md (plan doc docs/plans/144-audit-server-d.md) | [ ] open |
+| 145 | Hardening audit app-dash-a: app/dashboard/ bosses.js through grind.js plus their app/test files - findings fixed TDD, record docs/audit/20261017-app-dash-a.md (plan doc docs/plans/145-audit-app-dash-a.md) | [ ] open |
+| 146 | Hardening audit app-dash-b: app/dashboard/ home.js through today.js plus their app/test files - findings fixed TDD, record docs/audit/20261017-app-dash-b.md (plan doc docs/plans/146-audit-app-dash-b.md) | [ ] open |
+| 147 | Hardening audit app-core: app/shared/core/*.part.js and app/shared/ewcore.js plus their app/test files - findings fixed TDD, record docs/audit/20261017-app-core.md (plan doc docs/plans/147-audit-app-core.md) | [ ] open |
+| 148 | Hardening audit app-shell: Electron shell: main.js, preloads, overlay, selftest, tray, ew.css - findings fixed TDD, record docs/audit/20261017-app-shell.md (plan doc docs/plans/148-audit-app-shell.md) | [ ] open |
+| 149 | Hardening audit tools: tools/*.py (loop, lanes, launch, leak sweep, eta, hooks installers) - findings fixed TDD, record docs/audit/20261017-tools.md (plan doc docs/plans/149-audit-tools.md) | [ ] open |
+| 150 | Hardening audit tests-a: tests/test_[a-l]*.py plus tests/conftest.py (test hygiene and coverage gaps) - findings fixed TDD, record docs/audit/20261017-tests-a.md (plan doc docs/plans/150-audit-tests-a.md) | [ ] open |
+| 151 | Hardening audit tests-b: tests/test_[m-z]*.py (test hygiene and coverage gaps) - findings fixed TDD, record docs/audit/20261017-tests-b.md (plan doc docs/plans/151-audit-tests-b.md) | [ ] open |
+| 152 | Hardening audit ops-ci-config: ops/ non-kit files, .github/, config templates, root files - findings fixed TDD, record docs/audit/20261017-ops-ci-config.md (plan doc docs/plans/152-audit-ops-ci-config.md) | [ ] open |
 
 Ranking rationale per deep dive / audit and the closed channel-order
 sections: `docs/plans/ROADMAP-history.md` (moved verbatim 2026-10-09, plan
@@ -151,6 +163,10 @@ any 132 follow-up).
 Ranking 20261017 targeted deep-dive (plan 134, research 0029): 135 > 136 >
 137 > 138 > 140 > 139 (unattended recovery first, then visibility, then
 upkeep and politeness).
+
+Audit 20261017 (operator order, session 36): plans 141-152, one file-by-file
+hardening slice each (about 7k lines, lane timeout 5400 s); queued after the
+0029 rows merged; findings in docs/audit/20261017-<slice>.md.
 
 Rules: refute rounds capped at 3 per item; every plan lands via a lane worktree
 and one push; ETA log updated by every run.
