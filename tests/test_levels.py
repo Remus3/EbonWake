@@ -360,9 +360,13 @@ def test_grind_presets_and_hint_wait_for_the_epoch(store, clock):
 
 
 def test_route_grind_presets_follow_leveling_epoch(srv, clock):
+    # the tracked epoch is meant here; its start is read, never hard-coded
+    # (plan 156, TESTS-A-16: an earlier tracked row must not break the test)
+    first = dt.datetime.fromisoformat(levels.sort_epochs(levels.load_epochs())[0]["starts_utc"])
+    clock.set(first - dt.timedelta(hours=1))
     code, body = _req(srv, "GET", "/api/grind")
-    assert code == 200 and body["xp_presets"][0]["patched"] is False  # T0 is pre-patch
-    clock.set(EPOCH_AT + dt.timedelta(hours=1))
+    assert code == 200 and body["xp_presets"][0]["patched"] is False  # pre-patch
+    clock.set(first + dt.timedelta(hours=1))
     code, body = _req(srv, "GET", "/api/grind")
     assert body["xp_presets"][0]["patched"] is True and body["xp_presets"][0]["xp_pct"] == 100
 

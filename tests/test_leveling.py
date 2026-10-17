@@ -14,7 +14,7 @@ import pytest
 
 from server.ew import app as ewapp
 from server.ew import events as ewevents
-from server.ew import grind, leveling, levels
+from server.ew import grind, knownissues, leveling, levels
 from server.ew.store import Store
 
 UTC = dt.timezone.utc
@@ -47,9 +47,33 @@ def store(tmp_path):
     return Store(tmp_path / "store")
 
 
+def _lsvc(store, clock, **kw):
+    """Plan 156, TESTS-A-16: no tracked epoch / known-issue rows unless injected."""
+    kw.setdefault("epochs", [])
+    kw.setdefault("issues", [])
+    return leveling.LevelingService(store, clock=clock, **kw)
+
+
 @pytest.fixture()
 def svc(store, clock):
-    return leveling.LevelingService(store, clock=clock)
+    return _lsvc(store, clock)
+
+
+def _refuse(*a, **k):
+    raise AssertionError("a leveling fixture read the tracked data file")
+
+
+@pytest.mark.server  # getfixturevalue("lsrv"): the auto-marker cannot see it
+def test_fixtures_never_read_tracked_epoch_or_issue_rows(monkeypatch, request, tmp_path):
+    """Plan 156, TESTS-A-16: the fixtures passed only while every tracked
+    xp_epochs / known_issues row started after T0; they now inject none."""
+    monkeypatch.setattr(levels, "load_epochs", _refuse)
+    monkeypatch.setattr(knownissues, "load", _refuse)
+    s = request.getfixturevalue("svc")
+    assert s.tracked_epochs == [] and s.issues == [] and s.view()["epochs"] == []
+    assert _lsvc(Store(tmp_path / "other"), Clock()).view()["epoch_error"] is None
+    doc = _req(request.getfixturevalue("lsrv"), "GET", "/api/leveling")[1]
+    assert doc["epochs"] == [] and doc["epoch_error"] is None
 
 
 # --- rate math ---------------------------------------------------------------
@@ -200,9 +224,9 @@ def test_seed_milestones_and_empty(svc):
 
 
 def test_seed_not_reapplied(store, clock):
-    a = leveling.LevelingService(store, clock=clock)
+    a = _lsvc(store, clock)
     a.set_milestones([55])
-    b = leveling.LevelingService(store, clock=clock)
+    b = _lsvc(store, clock)
     assert b.view()["milestones"] == [55] and b.view()["milestones_seed"] is False
 
 
@@ -293,7 +317,7 @@ def test_typed_hot_window_without_end_gets_the_next_maintenance_end(store, clock
     """Plan 081: a typed recurring window carries an end; omitted, it is the
     next maintenance end, and no occurrence starts at / after it."""
     maint = T0 + dt.timedelta(days=2, hours=-1)  # Wed 11:00 UTC
-    svc = leveling.LevelingService(store, clock=clock, maint_end=lambda now: maint)
+    svc = _lsvc(store, clock, maint_end=lambda now: maint)
     doc = svc.hot_add({"days": [0, 2], "start": "11:00", "end": "13:00", "label": "Hot",
                        "pct": 50})
     assert doc["hot_windows"][0]["until"] == maint.isoformat()
@@ -310,7 +334,7 @@ def test_typed_hot_window_without_end_gets_the_next_maintenance_end(store, clock
         svc.hot_add({"days": [3], "start": "10:00", "end": "11:00", "label": "x", "pct": 1,
                      "until": "2026-10-01T00:00:00+00:00"})
     # a broken maintenance source falls back to 8 days
-    bad = leveling.LevelingService(store, clock=clock,
+    bad = _lsvc(store, clock,
                                    maint_end=lambda now: (_ for _ in ()).throw(RuntimeError()))
     doc = bad.hot_add({"days": [4], "start": "10:00", "end": "11:00", "label": "y", "pct": 1})
     assert doc["hot_windows"][-1]["until"] == (maint + dt.timedelta(days=8)).isoformat()
@@ -350,7 +374,7 @@ def test_pre_081_window_without_until_still_loads(store, clock):
     store.put("leveling", {"samples": [], "milestones": [60], "next_id": 2,
                            "hot_windows": [{"id": "h1", "days": [0], "start": "11:00",
                                             "end": "13:00", "label": "old", "pct": 5}]})
-    doc = leveling.LevelingService(store, clock=clock).view()
+    doc = _lsvc(store, clock).view()
     assert doc["hot_windows"][0]["until"] is None and doc["hot"]["active"][0]["id"] == "h1"
 
 
@@ -406,7 +430,7 @@ def test_corrupt_entries_skipped(store, clock):
                                             "label": "a", "pct": 1},
                                            _w("h2", [0], "11:00", "13:00"), "junk"],
                            "milestones": [50, "x", 99, 56], "next_id": "bad"})
-    s = leveling.LevelingService(store, clock=clock)
+    s = _lsvc(store, clock)
     doc = s.view()
     assert [x["pct"] for x in doc["samples"]] == [10.5]
     assert [w["id"] for w in doc["hot_windows"]] == ["h2"]
@@ -417,7 +441,7 @@ def test_corrupt_entries_skipped(store, clock):
 
 def test_xp_stack_counts_grind_buffs(store, clock):
     g = grind.GrindService(store, clock=clock)
-    s = leveling.LevelingService(store, clock=clock, buffs=lambda: g.view()["buffs"])
+    s = _lsvc(store, clock, buffs=lambda: g.view()["buffs"])
     g.buff({"name": "XP scroll", "minutes": 30, "xp_pct": 100})
     s.hot_add({"days": [0], "start": "11:00", "end": "13:00", "label": "Hot Time", "pct": 50})
     doc = s.view()
@@ -476,8 +500,15 @@ def test_grind_old_store_without_xp_pct_loads(store, clock):
 
 # --- routes ------------------------------------------------------------------
 
+def _no_tracked_rows(monkeypatch):
+    """TESTS-A-16: the server's LevelingService loads no tracked epoch / issue row."""
+    monkeypatch.setattr(levels, "load_epochs", lambda *a, **k: [])
+    monkeypatch.setattr(knownissues, "load", lambda *a, **k: [])
+
+
 @pytest.fixture()
-def lsrv(tmp_path, clock):
+def lsrv(tmp_path, clock, monkeypatch):
+    _no_tracked_rows(monkeypatch)
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
                           sse_interval=0.05, market_seed=[], grind_clock=clock,
                           leveling_clock=clock, profile_cfg={})
@@ -586,7 +617,7 @@ def test_refute_r1_missing_milestones_keeps_samples(tmp_path):
     st = store_mod.Store(tmp_path)
     st.put("leveling", {"samples": [{"ts": "2026-10-05T10:00:00+00:00", "level": 52,
                                      "pct": 10.0}], "hot_windows": [], "next_id": 1})
-    leveling.LevelingService(st, clock=lambda: 1791190000.0)
+    _lsvc(st, lambda: 1791190000.0)
     doc = st.get("leveling")
     assert doc["milestones"] == list(leveling.SEED_MILESTONES)
     assert len(doc["samples"]) == 1
@@ -594,7 +625,7 @@ def test_refute_r1_missing_milestones_keeps_samples(tmp_path):
 
 def _svc_for_refute(tmp_path):
     from server.ew import store as store_mod
-    return leveling.LevelingService(store_mod.Store(tmp_path), clock=lambda: 1791190000.0)
+    return _lsvc(store_mod.Store(tmp_path), lambda: 1791190000.0)
 
 
 # --- plan 024: level-gated deadlines -------------------------------------------
@@ -605,7 +636,7 @@ DL = {"id": "olvia-test", "label": "Olvia Academy", "needs_level": 60,
 
 
 def _dsvc(store, clock, deadlines=None, epochs=()):
-    return leveling.LevelingService(store, clock=clock, epochs=list(epochs),
+    return _lsvc(store, clock, epochs=list(epochs),
                                     deadlines=[dict(DL)] if deadlines is None else deadlines)
 
 
@@ -715,7 +746,7 @@ def test_bad_tracked_deadlines_file_degrades(tmp_path, store, clock, monkeypatch
     bad = tmp_path / "deadlines.json"
     bad.write_text("{", encoding="ascii")
     monkeypatch.setattr(levels.load_deadlines, "__defaults__", (bad,))
-    v = leveling.LevelingService(store, clock=clock, epochs=[]).view()
+    v = _lsvc(store, clock, epochs=[]).view()
     assert v["deadlines"] == [] and "unreadable" in v["deadline_error"]
 
 
@@ -798,7 +829,8 @@ def test_events_lists_deadline_within_14_days(store, clock):
     assert ewevents.EventsService(store, clock=clock).view()["deadlines"] == []
 
 
-def test_route_deadline_ops_and_events(tmp_path, clock):
+def test_route_deadline_ops_and_events(tmp_path, clock, monkeypatch):
+    _no_tracked_rows(monkeypatch)  # the tracked deadlines are meant; epochs / issues are not
     s = ewapp.make_server(port=0, store_root=tmp_path / "store", commit="a" * 40,
                           sse_interval=0.05, market_seed=[], grind_clock=clock,
                           leveling_clock=clock, events_clock=clock, profile_cfg={})
@@ -854,10 +886,10 @@ def test_marker_between_typed_leaves_rate_and_eta(store, clock):
     assert leveling._points(with_m) == leveling._points(plain)
     clock.advance(3 * 3600)
     store.put("leveling", {"samples": plain, "milestones": [70]})
-    a = leveling.LevelingService(store, clock=clock).view()
+    a = _lsvc(store, clock).view()
     store.put("leveling", {"samples": [plain[0], _m(30, 60), plain[1], plain[2]],
                            "milestones": [70]})
-    b = leveling.LevelingService(store, clock=clock).view()
+    b = _lsvc(store, clock).view()
     for k in ("level", "pct", "rate_pct_h", "eta_next_s"):
         assert a[k] == b[k], k
     assert b["level_source"] == "typed" and len(b["samples"]) == 4
@@ -867,7 +899,7 @@ def test_view_higher_marker_level_wins_pct_null(store, clock):
     store.put("leveling", {"samples": [_s(0, 60, 10), _s(60, 60, 14), _m(90, 61)],
                            "milestones": [61, 70]})
     clock.advance(2 * 3600)
-    svc = leveling.LevelingService(store, clock=clock)
+    svc = _lsvc(store, clock)
     v = svc.view()
     assert v["level"] == 61 and v["pct"] is None and v["level_source"] == "profile"
     assert v["rate_pct_h"] == pytest.approx(4.0)  # from the typed samples
@@ -879,12 +911,12 @@ def test_view_higher_marker_level_wins_pct_null(store, clock):
 
 def test_view_lower_marker_level_keeps_typed(store, clock):
     store.put("leveling", {"samples": [_m(0, 59), _s(60, 60, 14)], "milestones": [70]})
-    v = leveling.LevelingService(store, clock=clock).view()
+    v = _lsvc(store, clock).view()
     assert v["level"] == 60 and v["pct"] == 14 and v["level_source"] == "typed"
 
 
 def test_view_marker_only_and_empty(store, clock):
-    svc = leveling.LevelingService(store, clock=clock)
+    svc = _lsvc(store, clock)
     v = svc.view()
     assert v["level"] is None and v["level_source"] is None
     store.put("leveling", dict(store.get("leveling"), samples=[_m(0, 61)]))

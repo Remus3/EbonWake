@@ -9,7 +9,7 @@ import pytest
 from server.ew import app as ewapp
 from server.ew import detect, gamewatch, market, onboarding, settings
 from server.ew.store import Store
-from tests.test_server import _get, _no_network, _post
+from ew_testkit import _get, _no_network, _post
 
 T0 = 1_790_000_000.0
 HOME = "/fake/home"

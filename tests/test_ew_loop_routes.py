@@ -15,7 +15,13 @@ sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "tests"))
 import ew_lane  # noqa: E402
 import ew_loop  # noqa: E402
-import test_ew_loop as L  # noqa: E402
+import ew_loopkit as L  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _isolated_git(monkeypatch):
+    L.isolate_git(monkeypatch)  # plan 156, TESTS-A-19
+
 
 EXPECTED = {
     "plan": ("opus", "medium"),

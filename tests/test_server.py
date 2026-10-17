@@ -5,14 +5,11 @@ import json
 import threading
 
 import pytest
+from ew_testkit import _get, _no_network, _post
 
 from server.ew import app as ewapp
 from server.ew import market
 from server.ew.store import Store
-
-
-def _no_network(url, timeout):
-    raise AssertionError("test touched the network")
 
 
 @pytest.fixture()
@@ -27,17 +24,6 @@ def srv(tmp_path):
     yield s
     s.shutdown()
     s.server_close()
-
-
-def _get(s, path, host=None):
-    port = s.server_address[1]
-    c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    headers = {"Host": host} if host else {}
-    c.request("GET", path, headers=headers)
-    r = c.getresponse()
-    body = r.read()
-    c.close()
-    return r.status, r.getheader("Content-Type"), body
 
 
 def test_health(srv):
@@ -162,21 +148,6 @@ def test_sse_no_domain_event_after_failed_post(srv):
     seen = _sse_events(r, {"market"})
     c.close()
     assert "today" not in seen and "market" in seen
-
-
-def _post(s, path, body, ctype="application/json", host=None, extra=None):
-    port = s.server_address[1]
-    c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    headers = {"Content-Type": ctype} if ctype else {}
-    if host:
-        headers["Host"] = host
-    headers.update(extra or {})
-    data = body if isinstance(body, bytes) else json.dumps(body).encode()
-    c.request("POST", path, body=data, headers=headers)
-    r = c.getresponse()
-    out = r.read()
-    c.close()
-    return r.status, (json.loads(out) if out else None)
 
 
 def test_post_watch_add_remove(srv):

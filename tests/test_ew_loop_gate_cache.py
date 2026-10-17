@@ -14,9 +14,14 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "tests"))
 import ew_loop  # noqa: E402
-import test_ew_loop as L  # noqa: E402
+import ew_loopkit as L  # noqa: E402
 
 pytestmark = pytest.mark.git  # plan 097: real git worlds under tmp_path
+
+
+@pytest.fixture(autouse=True)
+def _isolated_git(monkeypatch):
+    L.isolate_git(monkeypatch)  # plan 156, TESTS-A-19
 
 NOW = 1_790_000_000.0
 

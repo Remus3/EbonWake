@@ -8,7 +8,7 @@ import pytest
 
 from server.ew import app as ewapp
 from server.ew import market, settings
-from tests.test_server import _get, _no_network, _post
+from ew_testkit import _get, _no_network, _post
 
 EXAMPLE = Path(__file__).resolve().parents[1] / "config" / "local.example.json"
 

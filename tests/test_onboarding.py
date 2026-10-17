@@ -10,7 +10,7 @@ import pytest
 from server.ew import app as ewapp
 from server.ew import market, onboarding
 from server.ew.store import Store
-from tests.test_server import _get, _no_network, _post
+from ew_testkit import _get, _no_network, _post
 
 IDS = ["family", "log", "screenshots", "overlay", "watch", "daily", "leveling"]
 T0 = 1791201600.0  # 2026-10-05T12:00:00Z

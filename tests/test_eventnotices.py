@@ -27,9 +27,21 @@ SLOT = {"weekday": "thu", "start_utc": "07:00", "duration_min": 180}
 NO_DATES = b"<html><body><div class='contents_area'><p>No window here.</p></div></body></html>"
 
 
+# Plan 156, TESTS-A-25: the Detail fixtures are listed, so a deleted one fails
+# (FileNotFoundError) instead of silently becoming NO_DATES; any other notice
+# id on the list page has no window.
+DETAIL_FIXTURES = (10545, 10647, 10656)
+
+
 def _detail(n):
-    p = FIX / f"detail_{n}.html"
-    return p.read_bytes() if p.exists() else NO_DATES
+    if n in DETAIL_FIXTURES:
+        return (FIX / f"detail_{n}.html").read_bytes()
+    return NO_DATES
+
+
+def test_detail_fixture_list_matches_the_folder():
+    on_disk = sorted(int(p.stem.split("_", 1)[1]) for p in FIX.glob("detail_*.html"))
+    assert on_disk == sorted(DETAIL_FIXTURES)
 
 
 class Clock:

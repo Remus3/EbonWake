@@ -10,7 +10,7 @@ import pytest
 
 from server.ew import app as ewapp
 from server.ew import gamewatch
-from tests.test_portraits import bmp
+from ew_testkit import bmp
 
 CHAR = "12345678901234567"
 

@@ -17,90 +17,19 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import ew_loop  # noqa: E402
 
-# Plan 097: most tests here build a real git world under tmp_path; the
-# module is one git unit (--dist loadfile keeps it on one worker). Tests over
-# about 1.5 s are also marked slow.
-pytestmark = pytest.mark.git
-GIT_TIMEOUT_S = 60  # plan 150: a git stuck on a lock / prompt fails, never hangs
+from ew_loopkit import (  # noqa: E402 (plan 156: shared with the sibling loop tests)
+    GIT_TIMEOUT_S, HANDOFF, ROADMAP, FakeSpawn, _inbox_root, deps, git, git_world,
+    isolate_git, make_root, real_git)
 
-ROADMAP = """# Ebonwake roadmap
-
-| # | Plan | Status |
-|---|---|---|
-| 001 | Skeleton | [x] done 2026-10-04 |
-| 012 | Grind spot recommender | [ ] open |
-| 013 | Season pass tracker | [ ] open |
-"""
-
-HANDOFF = """EW NEXT SESSION
----------------
-Next action: x
-
-Carried forward (not acted on yet):
-- OPERATOR (physical): press Ctrl+Alt+E and confirm the overlay toggles.
-- OPERATOR: set profile.family in config.
-- MAIN to record EW's port block in the registry.
-- NOTE: OCR residual accepted.
-- NOTE (new, operator 2026-10-06): one character, no alts.
-- Fix the OCR cache key so a same-second rewrite is
-  re-read.
-
-Context: CLAUDE.md
-"""
+# Plan 097 / 156 (TESTS-A-18): only the tests that build a real git world under
+# tmp_path are marked git, one by one, so the fast tier runs the pure ones; the
+# module stays one git unit (--dist loadfile keeps it on one worker). Tests
+# over about 1.5 s are also marked slow.
 
 
-class FakeSpawn:
-    def __init__(self, results=None):
-        self.calls = []
-        self.results = list(results or [])
-
-    def __call__(self, root, code, prompt, **kw):
-        self.calls.append(dict(kw, prompt=prompt, code=code))
-        if self.results:
-            r = self.results.pop(0)
-            return r(kw) if callable(r) else r
-        return {"rc": 0, "error": None, "result": "ok"}
-
-
-def make_root(tmp_path, roadmap=ROADMAP, handoff=HANDOFF, local=None):
-    root = tmp_path / "repo"
-    (root / "docs" / "plans").mkdir(parents=True)
-    (root / "docs" / "research").mkdir(parents=True)
-    (root / "docs" / "plans" / "ROADMAP.md").write_text(roadmap, newline="\n")
-    (root / "docs" / "plans" / "012-grind-spots.md").write_text(
-        "# Plan 012 - Grind spot recommender by AP/DP\n", newline="\n")
-    (root / "EW-NEXT-SESSION.txt").write_text(handoff, newline="\n")
-    if local is not None:
-        (root / "config").mkdir()
-        (root / "config" / "local.json").write_text(json.dumps(local))
-    return root
-
-
-def deps(root, **over):
-    seen = {"launch": [], "record": []}
-    base = dict(
-        spawn=FakeSpawn(),
-        lane_state=lambda: [{"index": i, "state": "FREE", "lane": None} for i in range(3)],
-        pid_alive=lambda pid: True,
-        main_tree=root,
-        launch=lambda iid: seen["launch"].append(iid) or 4242,
-        gates=lambda cwd: (True, "green"),
-        leak_pre_push=lambda cwd, line: True,
-        estimate=lambda kind, default=None: 2700.0,
-        record=lambda kind, s, ok=True: seen["record"].append(kind),
-        clock=lambda: 1_790_000_000.0,
-        roster_path=None,  # plan 093: never the machine roster from FLEET_ROSTER
-    )
-    base.update(over)
-    d = ew_loop.Deps(root, **base)
-    d.seen = seen
-    # plan 098: the detached review / push workers run inline in tests (same
-    # process, same deps), so a tick's observable end state is unchanged
-    if "launch_review" not in over:
-        d.launch_review = lambda iid: ew_loop.review_worker(iid, deps=d) or 4243
-    if "launch_push" not in over:
-        d.launch_push = lambda: ew_loop.push_worker(deps=d) or 4244
-    return d
+@pytest.fixture(autouse=True)
+def _isolated_git(monkeypatch):
+    isolate_git(monkeypatch)  # TESTS-A-19
 
 
 def progress(root):
@@ -168,6 +97,7 @@ def test_busy_lock_exits_quietly(tmp_path):
     assert not (root / "ops/loop/control/progress/loop.json").exists()
 
 
+@pytest.mark.git
 def test_inbox_unconfigured_logged(tmp_path):
     root = make_root(tmp_path)
     d = deps(root)
@@ -175,6 +105,7 @@ def test_inbox_unconfigured_logged(tmp_path):
     assert "inbox unconfigured" in progress(root)["log"]
 
 
+@pytest.mark.git
 def test_tick_rotates_control_ledgers_once_a_day_after_reap(tmp_path):
     """Plan 138: one step line when the daily rotation ran, none otherwise;
     a dry-run tick never rotates."""
@@ -200,6 +131,7 @@ def test_inbox_defaults_to_fleet_moon_sync_dirs(tmp_path):
 
 # ---------------------------------------------------------------- inbox
 
+@pytest.mark.git
 def test_inbox_baseline_then_one_answer_per_note(tmp_path):
     inbox, outbox = tmp_path / "in", tmp_path / "out"
     inbox.mkdir()
@@ -233,6 +165,7 @@ def test_inbox_baseline_then_one_answer_per_note(tmp_path):
     assert "n1-from-MAIN-QUESTION-y.md" in seen and "n3-from-MAIN-INFORMATION-w.md" in seen
 
 
+@pytest.mark.git
 def test_inbox_failed_answer_is_reoffered(tmp_path):
     inbox, outbox = tmp_path / "in", tmp_path / "out"
     inbox.mkdir()
@@ -250,6 +183,7 @@ def test_inbox_failed_answer_is_reoffered(tmp_path):
     assert len(list(outbox.iterdir())) == 1
 
 
+@pytest.mark.git
 def test_triage_noreply_or_ack_writes_no_note(tmp_path):
     inbox, outbox = tmp_path / "in", tmp_path / "out"
     inbox.mkdir()
@@ -268,16 +202,7 @@ def test_triage_noreply_or_ack_writes_no_note(tmp_path):
     assert len(sp.calls) == 2
 
 
-def _inbox_root(tmp_path, roadmap="", local_extra=None):
-    inbox, outbox = tmp_path / "in", tmp_path / "out"
-    inbox.mkdir()
-    outbox.mkdir()
-    loop = {"inbox_dir": str(inbox), "outbox_dir": str(outbox)}
-    loop.update(local_extra or {})
-    root = make_root(tmp_path, roadmap=roadmap, handoff="", local={"loop": loop})
-    return root, inbox, outbox
-
-
+@pytest.mark.git
 def test_order_note_escalates_to_lane_item_then_answers_after_merge(tmp_path):
     root, inbox, outbox = _inbox_root(tmp_path, roadmap=ROADMAP)
     sp = FakeSpawn([{"rc": 0, "error": None, "result": "# From EW - ANSWER\ndone"}])
@@ -307,6 +232,7 @@ def test_order_note_escalates_to_lane_item_then_answers_after_merge(tmp_path):
     assert len([c for c in sp.calls if c.get("note") == name]) == 1
 
 
+@pytest.mark.git
 def test_daily_note_cap_defers_answers(tmp_path):
     root, inbox, outbox = _inbox_root(tmp_path, local_extra={"max_notes_per_day": 1})
     sp = FakeSpawn([{"rc": 0, "error": None, "result": "VERDICT: ANSWER\nok"}] * 3)
@@ -321,6 +247,7 @@ def test_daily_note_cap_defers_answers(tmp_path):
     assert not any("deliver-failed" in s for s in doc["log"])
 
 
+@pytest.mark.git
 def test_answers_to_one_destination_batch_into_one_note(tmp_path):
     root, inbox, outbox = _inbox_root(tmp_path)
     sp = FakeSpawn([{"rc": 0, "error": None, "result": "VERDICT: ANSWER\nfirst"},
@@ -350,6 +277,7 @@ def _deliveries(root):
             (root / "ops/loop/control/delivery.jsonl").read_text().splitlines()]
 
 
+@pytest.mark.git
 def test_batch_reply_lands_in_destination_inbox_with_matching_hash(tmp_path):
     dest = tmp_path / "main_inbox"
     dest.mkdir()
@@ -373,6 +301,7 @@ def test_batch_reply_lands_in_destination_inbox_with_matching_hash(tmp_path):
     assert len(_deliveries(root)) == 1 and len(list(dest.iterdir())) == 1
 
 
+@pytest.mark.git
 def test_order_answer_uses_dashed_stamp_and_lands_in_sender_inbox(tmp_path):
     dest = tmp_path / "main_inbox"
     dest.mkdir()
@@ -394,6 +323,7 @@ def test_order_answer_uses_dashed_stamp_and_lands_in_sender_inbox(tmp_path):
     assert copy.name == out.name and _sha(copy) == _sha(out)
 
 
+@pytest.mark.git
 def test_roster_resolves_destination_inbox(tmp_path):
     main_root = tmp_path / "mainrepo"
     (main_root / "moon_sync_inbox").mkdir(parents=True)
@@ -410,6 +340,7 @@ def test_roster_resolves_destination_inbox(tmp_path):
     assert _sha(copy) == _sha(out)
 
 
+@pytest.mark.git
 def test_unresolved_destination_is_recorded_0_of_1_then_retried(tmp_path):
     root, inbox, outbox = _inbox_root(tmp_path)
     sp = FakeSpawn([{"rc": 0, "error": None, "result": "VERDICT: ANSWER\nyes"}])
@@ -456,6 +387,7 @@ def test_max_notes_default_is_kit_cap_and_config_cannot_raise_it(tmp_path):
     assert ew_loop.load_config(root2)["max_notes_per_day"] == 2
 
 
+@pytest.mark.git
 def test_order_answer_respects_slot_held_by_a_batch(tmp_path):
     # verifier r1 finding 2: the order answer must not take the slot a batch holds
     root, inbox, outbox = _inbox_root(tmp_path, roadmap=ROADMAP,
@@ -477,6 +409,7 @@ def test_order_answer_respects_slot_held_by_a_batch(tmp_path):
     assert [c.get("note") for c in sp.calls] == ["a-from-MAIN-QUESTION-q.md"]
 
 
+@pytest.mark.git
 def test_ack_class_and_hop_limit_are_ledger_lines_not_notes(tmp_path):
     root, inbox, outbox = _inbox_root(tmp_path)
     sp = FakeSpawn()
@@ -492,6 +425,7 @@ def test_ack_class_and_hop_limit_are_ledger_lines_not_notes(tmp_path):
     assert [json.loads(x)["action"] for x in seen] == ["ack"] * 3
 
 
+@pytest.mark.git
 def test_ack_quoting_an_order_name_is_not_escalated(tmp_path):
     # verifier r2: escalation follows classify(), not an -ORDER- token anywhere
     root, inbox, outbox = _inbox_root(tmp_path, roadmap=ROADMAP)
@@ -507,6 +441,7 @@ def test_ack_quoting_an_order_name_is_not_escalated(tmp_path):
     assert sum(s.startswith("inbox ack") for s in doc["log"]) == 2
 
 
+@pytest.mark.git
 def test_note_settled_by_pre_v8_ledger_is_not_retriaged(tmp_path):
     root, inbox, outbox = _inbox_root(tmp_path)
     sp = FakeSpawn()
@@ -519,6 +454,7 @@ def test_note_settled_by_pre_v8_ledger_is_not_retriaged(tmp_path):
     assert sp.calls == []
 
 
+@pytest.mark.git
 def test_note_settled_before_the_seen_ledger_is_backfilled_once(tmp_path):
     # 2026-10-09: 10-04/10-05 notes (legacy ledger or an outbox reply) were
     # handled before inbox_seen.jsonl existed and never appeared in it.
@@ -554,6 +490,7 @@ def test_unlabelled_tick_spawns_are_kind_build(tmp_path):
     assert sp.calls[-1]["kind"] == "build"
 
 
+@pytest.mark.git
 def test_pending_orders_are_not_delivery_failures_and_handled_notes_stay_handled(tmp_path):
     # 2026-10-05: loop.json read "inbox: deliver-failed 2 2 pending" - two ORDERs
     # waiting for their lane items. Pending is by design; the label was wrong,
@@ -574,6 +511,7 @@ def test_pending_orders_are_not_delivery_failures_and_handled_notes_stay_handled
     assert len(triage) == 1  # never re-triaged
 
 
+@pytest.mark.git
 def test_priority_rows_dispatch_first(tmp_path):
     rm = ROADMAP.replace("| 013 | Season pass tracker | [ ] open |",
                          "| 013 | Season pass tracker | [ ] open (priority) |")
@@ -585,6 +523,7 @@ def test_priority_rows_dispatch_first(tmp_path):
 
 # ---------------------------------------------------------------- dispatch
 
+@pytest.mark.git
 def test_dispatch_open_rows_then_handoff_to_free_lanes(tmp_path):
     root = make_root(tmp_path)
     d = deps(root, lane_state=lambda: [
@@ -603,6 +542,7 @@ def test_dispatch_open_rows_then_handoff_to_free_lanes(tmp_path):
     assert d.seen["launch"] == ["012", "013"]
 
 
+@pytest.mark.git
 def test_dead_lane_process_is_redispatched_once(tmp_path):
     root = make_root(tmp_path, roadmap=ROADMAP.replace("| 013 | Season pass tracker | [ ] open |\n", ""),
                      handoff="")
@@ -613,6 +553,7 @@ def test_dead_lane_process_is_redispatched_once(tmp_path):
     assert d.seen["launch"].count("012") == ew_loop.MAX_ATTEMPTS
 
 
+@pytest.mark.git
 def test_runs_cap_headroom_stops_spawning(tmp_path):
     root = make_root(tmp_path)
     d = deps(root)
@@ -637,6 +578,7 @@ def test_backoff_doubles_and_caps(tmp_path):
     assert ew_loop.backoff_until(root) == 0
 
 
+@pytest.mark.git
 def test_usage_limit_result_sets_backoff_and_pauses(tmp_path):
     inbox, outbox = tmp_path / "in", tmp_path / "out"
     inbox.mkdir()
@@ -656,6 +598,7 @@ def test_usage_limit_result_sets_backoff_and_pauses(tmp_path):
     assert doc["state"] == "backoff" and d.seen["launch"] == []
 
 
+@pytest.mark.git
 def test_dry_run_spawns_and_launches_nothing(tmp_path):
     root = make_root(tmp_path)
     d = deps(root)
@@ -666,6 +609,7 @@ def test_dry_run_spawns_and_launches_nothing(tmp_path):
 
 # ---------------------------------------------------------------- checklist
 
+@pytest.mark.git
 def test_checklist_lines(tmp_path):
     # FLEET item 13 d (kit v7/v8): remaining tasks as {id, task, state, eta_s}
     root = make_root(tmp_path)
@@ -710,36 +654,7 @@ def test_checklist_cli_heads_with_handoff_session(tmp_path, monkeypatch, capsys)
 
 # ---------------------------------------------------------------- finish + merge
 
-def git(cwd, *args):
-    r = subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com",
-                        "-c", "core.hooksPath=/dev/null", *args], cwd=str(cwd),
-                       capture_output=True, text=True, timeout=GIT_TIMEOUT_S)
-    assert r.returncode == 0, r.stderr
-    return r.stdout.strip()
-
-
-def real_git(args, cwd, input=None):
-    return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com",
-                           "-c", "core.hooksPath=/dev/null", *args], cwd=str(cwd),
-                          capture_output=True, text=True, input=input, timeout=GIT_TIMEOUT_S)
-
-
-def git_world(tmp_path, kind="plan"):
-    root = make_root(tmp_path, handoff="")
-    git(root, "init", "-q", "-b", "main")
-    (root / ".gitignore").write_text("ops/\n")
-    git(root, "add", "-A")
-    git(root, "commit", "-q", "-m", "init")
-    wt = tmp_path / "ew-worktrees" / "lane-1"
-    git(root, "worktree", "add", "-q", "--detach", str(wt))
-    (wt / "feature.txt").write_text("work\n")
-    rec = {"id": "012", "kind": kind, "title": "Grind spot recommender",
-           "label": "plan 012: Grind spot recommender", "state": "ran",
-           "worktree": str(wt), "rc": 0, "lane": "build", "rounds": 0}
-    ew_loop.Items(root).put(rec)
-    return root, wt
-
-
+@pytest.mark.git
 def test_finished_lane_is_verified_committed_merged_and_flipped(tmp_path):
     root, wt = git_world(tmp_path)
     sp = FakeSpawn([{"rc": 0, "error": None, "result": "fine\nVERDICT: PASS"}])
@@ -761,6 +676,7 @@ def test_finished_lane_is_verified_committed_merged_and_flipped(tmp_path):
     assert (root / "feature.txt").exists()
 
 
+@pytest.mark.git
 def test_refute_rounds_cap_at_three_then_adjudicate_unmerged(tmp_path):
     root, wt = git_world(tmp_path)
     fail = {"rc": 0, "error": None, "result": "VERDICT: FAIL\n1. nit"}
@@ -804,6 +720,7 @@ def review_deps(root, sp, **kw):
                 **kw)
 
 
+@pytest.mark.git
 def test_round3_clean_gets_one_verifier_pass_and_pass_merges(tmp_path):
     root, wt = round3_world(tmp_path)
     sp = FakeSpawn([{"rc": 0, "error": None, "result": "fine\nVERDICT: PASS"}])
@@ -818,6 +735,7 @@ def test_round3_clean_gets_one_verifier_pass_and_pass_merges(tmp_path):
                                     "final": True}
 
 
+@pytest.mark.git
 def test_round3_clean_non_pass_is_adjudicated_without_round_4(tmp_path):
     root, wt = round3_world(tmp_path)
     sp = FakeSpawn([{"rc": 0, "error": None, "result": "VERDICT: FAIL\n1. still off"}])
@@ -833,6 +751,7 @@ def test_round3_clean_non_pass_is_adjudicated_without_round_4(tmp_path):
     assert len(sp.calls) == 1  # parked: nothing more runs
 
 
+@pytest.mark.git
 def test_round3_with_findings_is_adjudicated_without_a_spawn(tmp_path):
     root, wt = round3_world(tmp_path, kind="deep-dive")
     items = ew_loop.Items(root)
@@ -848,6 +767,7 @@ def test_round3_with_findings_is_adjudicated_without_a_spawn(tmp_path):
     assert "missing docs/research/" in last["findings"][0]
 
 
+@pytest.mark.git
 def test_round_log_records_gates_and_caps_findings(tmp_path):
     root, wt = git_world(tmp_path)
     def fix(kw):  # a real fix changes the tree (the gate cache keys on it)
@@ -871,6 +791,7 @@ def test_round_log_records_gates_and_caps_findings(tmp_path):
 
 
 @pytest.mark.slow
+@pytest.mark.git
 def test_red_gates_after_three_rounds_keep_wip_unmerged(tmp_path):
     root, wt = git_world(tmp_path)
     sp = FakeSpawn()
@@ -885,6 +806,7 @@ def test_red_gates_after_three_rounds_keep_wip_unmerged(tmp_path):
     assert len(sp.calls) == 3 and all(c["writes_code"] for c in sp.calls)
 
 
+@pytest.mark.git
 def test_clean_worktree_is_no_change(tmp_path):
     root, wt = git_world(tmp_path)
     (wt / "feature.txt").unlink()
@@ -893,6 +815,7 @@ def test_clean_worktree_is_no_change(tmp_path):
     assert ew_loop.Items(root).get("012")["state"] == "no-change"
 
 
+@pytest.mark.git
 def test_dirty_main_defers_merge(tmp_path):
     root, wt = git_world(tmp_path)
     (root / "stray.txt").write_text("x")
@@ -907,6 +830,7 @@ def test_dirty_main_defers_merge(tmp_path):
 
 # ---------------------------------------------------------------- idle mode
 
+@pytest.mark.git
 def test_idle_dispatches_one_deep_dive_per_day(tmp_path):
     rm = ROADMAP.replace("[ ] open", "[x] done")
     root = make_root(tmp_path, roadmap=rm, handoff="",
@@ -950,6 +874,7 @@ class FakeGit:
         return subprocess.CompletedProcess(args, 0, out, "")
 
 
+@pytest.mark.git
 def test_push_once_when_clean_green_and_leak_clean(tmp_path):
     root = make_root(tmp_path, roadmap="", handoff="")
     g = FakeGit()
@@ -960,6 +885,7 @@ def test_push_once_when_clean_green_and_leak_clean(tmp_path):
     assert leak == ["refs/heads/main abc refs/heads/main abc"]
 
 
+@pytest.mark.git
 def test_push_skipped_no_push_red_gates_leak_or_nothing_ahead(tmp_path):
     root = make_root(tmp_path, roadmap="", handoff="")
     for kw, over in (({"no_push": True}, {}),
@@ -1088,6 +1014,7 @@ def test_dirty_lane_claim_is_flagged_not_dropped(tmp_path):
     assert row["state"] == "lane-dirty" and row["eta_s"] == 0
 
 
+@pytest.mark.git
 def test_exhausted_attempts_become_gave_up_with_the_error(tmp_path):
     root = make_root(tmp_path, roadmap=ROADMAP.replace("| 013 | Season pass tracker | [ ] open |\n", ""),
                      handoff="")
@@ -1146,6 +1073,7 @@ def _write_prog(tree, doc):
     p.write_text(json.dumps(doc))
 
 
+@pytest.mark.git
 def test_silent_lane_shows_stalled_never_killed_and_records_one_stall_row(tmp_path):
     root, wt, d, now = _stall_world(tmp_path)
     _write_prog(wt, _prog(now, 1500))
@@ -1164,6 +1092,7 @@ def test_silent_lane_shows_stalled_never_killed_and_records_one_stall_row(tmp_pa
     assert "012: Grind spot recommender (stalled, 25m silent)" in block
 
 
+@pytest.mark.git
 def test_stall_under_three_eta_records_no_stall_row(tmp_path):
     root, wt, d, now = _stall_world(tmp_path)
     _write_prog(wt, _prog(now, 700))
@@ -1172,6 +1101,7 @@ def test_stall_under_three_eta_records_no_stall_row(tmp_path):
     assert "lane-stall" not in d.seen["record"]
 
 
+@pytest.mark.git
 def test_no_progress_file_shows_nothing_and_fresh_progress_clears_the_flag(tmp_path):
     root, wt, d, now = _stall_world(tmp_path)
     doc = ew_loop.tick(deps=d, no_push=True)
@@ -1204,6 +1134,7 @@ def test_lane_progress_worktree_then_main_newest_wins_stale_ignored(tmp_path):
     assert t.lane_progress(rec) is None
 
 
+@pytest.mark.git
 def test_launch_exception_marks_lost_and_frees_the_lane(tmp_path):
     root = make_root(tmp_path, handoff="")
     calls = []
@@ -1224,6 +1155,7 @@ def test_launch_exception_marks_lost_and_frees_the_lane(tmp_path):
     assert calls.count("012") == ew_loop.MAX_ATTEMPTS
 
 
+@pytest.mark.git
 def test_dispatched_without_pid_is_reaped(tmp_path):
     root = make_root(tmp_path, roadmap="", handoff="")
     _dispatched(root, title="t")  # no pid: a tick died between its two writes
@@ -1240,6 +1172,7 @@ def test_handoff_password_oauth_per_host_items_are_operator_only():
     assert [i["skip"] for i in ew_loop.handoff_items(text)] == ["operator"] * 3 + [None]
 
 
+@pytest.mark.git
 def test_checklist_eta_is_lane_median_less_elapsed(tmp_path):
     root = make_root(tmp_path, roadmap="", handoff="")
     kinds = []
@@ -1252,6 +1185,7 @@ def test_checklist_eta_is_lane_median_less_elapsed(tmp_path):
     assert "lane-data-code" in kinds and "loop-review" not in kinds
 
 
+@pytest.mark.git
 def test_checklist_eta_prefers_item_kind(tmp_path):
     root = make_root(tmp_path, roadmap="", handoff="")
     d = deps(root, estimate=lambda kind, default=None: 900.0 if kind == "item-resolve"
@@ -1280,6 +1214,7 @@ def test_lane_worker_passes_item_eta_kind(tmp_path):
 
 
 @pytest.mark.slow
+@pytest.mark.git
 def test_verifier_crash_is_counted_then_adjudicated(tmp_path):
     root, wt = git_world(tmp_path)
     crash = {"rc": 1, "error": "exit 1", "result": "boom"}
@@ -1458,6 +1393,7 @@ def _two_lane_world(tmp_path, edit_a, edit_b):
     return root
 
 
+@pytest.mark.git
 def test_lane_commit_never_flips_roadmap_merge_does(tmp_path):
     root, wt = git_world(tmp_path)
     sp = FakeSpawn([{"rc": 0, "error": None, "result": "VERDICT: PASS"}])
@@ -1475,6 +1411,7 @@ def test_lane_commit_never_flips_roadmap_merge_does(tmp_path):
 
 
 @pytest.mark.slow
+@pytest.mark.git
 def test_parallel_lanes_flipping_adjacent_rows_both_merge(tmp_path):
     # the Nfa7953 / 013 / 014 shape: two lanes from one base, adjacent ROADMAP rows
     def a(wt):
@@ -1497,6 +1434,7 @@ def test_parallel_lanes_flipping_adjacent_rows_both_merge(tmp_path):
 
 
 @pytest.mark.slow
+@pytest.mark.git
 def test_real_code_conflict_still_aborts_cleanly(tmp_path):
     root = _two_lane_world(tmp_path, lambda wt: (wt / "f.txt").write_text("a\n"),
                            lambda wt: (wt / "f.txt").write_text("b\n"))
@@ -1520,6 +1458,7 @@ def test_lane_prompts_give_scratch_scripts_a_task_unique_name():
     assert "(012_*.py)" in ew_loop.handoff_prompt(item)
 
 
+@pytest.mark.git
 def test_merge_rerun_of_an_already_merged_commit_is_a_no_op(tmp_path):
     root, wt = git_world(tmp_path)
     sp = FakeSpawn([{"rc": 0, "error": None, "result": "VERDICT: PASS"}])
@@ -1584,6 +1523,7 @@ def test_plan_depends_parser():
     assert ew_loop.plan_depends("Depends on: 1234, 12, 05x\n") == []
 
 
+@pytest.mark.git
 def test_work_list_skips_rows_waiting_on_open_dependencies(tmp_path):
     root = dep_root(tmp_path, {"012": "013.", "013": "none.", "014": "001."})
     d = deps(root)
@@ -1598,6 +1538,7 @@ def test_work_list_skips_rows_waiting_on_open_dependencies(tmp_path):
     assert ew_loop.render_checklist(progress(root)).count(" 012: ") == 1
 
 
+@pytest.mark.git
 def test_done_dependency_dispatches_and_priority_stays_first(tmp_path):
     rm = DEP_ROADMAP.replace("| 013 | Season pass tracker | [ ] open |",
                              "| 013 | Season pass tracker | [x] done |")
@@ -1609,6 +1550,7 @@ def test_done_dependency_dispatches_and_priority_stays_first(tmp_path):
     assert d.seen["launch"] == ["014", "012"]
 
 
+@pytest.mark.git
 def test_dependency_cycle_leaves_both_skipped_and_is_logged(tmp_path):
     root = dep_root(tmp_path, {"012": "013.", "013": "012.", "014": "none."})
     d = deps(root)
@@ -1617,6 +1559,7 @@ def test_dependency_cycle_leaves_both_skipped_and_is_logged(tmp_path):
     assert any("dependency cycle" in s for s in doc["log"])
 
 
+@pytest.mark.git
 def test_missing_doc_or_unknown_dependency_fails_open_with_a_step_line(tmp_path):
     root = dep_root(tmp_path, {"012": "077.", "014": "none."})  # 013 has no doc
     d = deps(root)
@@ -1656,6 +1599,7 @@ def finish(root):
     return rec, doc
 
 
+@pytest.mark.git
 def test_fresh_blocked_marker_sets_blocked_not_no_change(tmp_path):
     root, wt = blocked_world(tmp_path)
     marker(wt, ew_loop.iso(T0 - 60))
@@ -1666,6 +1610,7 @@ def test_fresh_blocked_marker_sets_blocked_not_no_change(tmp_path):
     assert row["state"] == "blocked on 013"
 
 
+@pytest.mark.git
 def test_stale_marker_in_a_reused_worktree_is_plain_no_change(tmp_path):
     root, wt = blocked_world(tmp_path)
     marker(wt, ew_loop.iso(T0 - 7200))
@@ -1674,6 +1619,7 @@ def test_stale_marker_in_a_reused_worktree_is_plain_no_change(tmp_path):
     assert "012: stale blocked marker ignored" in doc["log"]
 
 
+@pytest.mark.git
 def test_worktree_marker_is_preferred_over_main_checkout(tmp_path):
     root, wt = blocked_world(tmp_path)
     marker(wt, ew_loop.iso(T0 - 60), needs=("013",))
@@ -1687,6 +1633,7 @@ def test_worktree_marker_is_preferred_over_main_checkout(tmp_path):
 
 
 @pytest.mark.slow
+@pytest.mark.git
 def test_malformed_markers_are_plain_no_change_with_a_step_line(tmp_path):
     cases = [{"updated": ew_loop.iso(T0 - 60), "needs": None},
              {"updated": ew_loop.iso(T0 - 60), "needs": ("13", "abc")},
@@ -1715,6 +1662,7 @@ def test_blocked_dispatchable_only_once_needs_are_done():
     assert "blocked" not in ew_loop.DONE_STATES
 
 
+@pytest.mark.git
 def test_blocked_record_waits_then_redispatches_after_need_flips(tmp_path):
     root = dep_root(tmp_path, {"012": "none."}, roadmap=DEP_ROADMAP.replace(
         "| 014 | Coupon check | [ ] open |\n", ""))
@@ -1735,6 +1683,7 @@ def test_blocked_record_waits_then_redispatches_after_need_flips(tmp_path):
     assert rec["state"] == "dispatched" and rec["blocked_runs"] == 1 and rec["attempts"] == 2
 
 
+@pytest.mark.git
 def test_blocked_runs_cap_becomes_gave_up(tmp_path):
     root = dep_root(tmp_path, {"012": "none."})
     ew_loop.Items(root).put({"id": "012", "kind": "plan", "state": "blocked", "needs": ["013"],
@@ -1766,6 +1715,7 @@ def rearm_world(tmp_path, dep_merged_at, dep_row_done=True, own_deps="013."):
     return root, items
 
 
+@pytest.mark.git
 def test_no_change_rearms_once_when_dependency_flipped_after_dispatch(tmp_path):
     root, items = rearm_world(tmp_path, T0 - 1800)
     d = deps(root)
@@ -1780,6 +1730,7 @@ def test_no_change_rearms_once_when_dependency_flipped_after_dispatch(tmp_path):
     assert d.seen["launch"].count("012") == 1 and items.get("012")["state"] == "no-change"
 
 
+@pytest.mark.git
 def test_no_change_with_dependencies_done_before_dispatch_stays(tmp_path):
     root, items = rearm_world(tmp_path, T0 - 7200)
     d = deps(root)
@@ -1790,6 +1741,7 @@ def test_no_change_with_dependencies_done_before_dispatch_stays(tmp_path):
     assert rec["rearmed"] is False
 
 
+@pytest.mark.git
 def test_no_change_untouched_with_own_row_done_or_no_dependencies(tmp_path):
     root, items = rearm_world(tmp_path / "a", T0 - 1800, own_deps="none.")
     d = deps(root)
@@ -1803,6 +1755,7 @@ def test_no_change_untouched_with_own_row_done_or_no_dependencies(tmp_path):
     assert "012" not in d.seen["launch"] and "rearmed" not in items.get("012")
 
 
+@pytest.mark.git
 def test_no_change_with_dependency_still_open_is_reconsidered_later(tmp_path):
     root, items = rearm_world(tmp_path, None, dep_row_done=False)
     d = deps(root)
@@ -1811,6 +1764,7 @@ def test_no_change_with_dependency_still_open_is_reconsidered_later(tmp_path):
 
 
 @pytest.mark.slow
+@pytest.mark.git
 def test_merge_records_merged_at_only_when_it_flips_and_succeeds(tmp_path):
     root, wt = git_world(tmp_path)
     sp = FakeSpawn([{"rc": 0, "error": None, "result": "VERDICT: PASS"}])
@@ -1837,6 +1791,7 @@ def _git_at(cwd, when, *args):
     return r.stdout.strip()
 
 
+@pytest.mark.git
 def test_flip_time_fallback_finds_the_no_ff_merge_commit(tmp_path):
     root = make_root(tmp_path, roadmap=DEP_ROADMAP, handoff="")
     day = "2026-10-0{}T10:00:00+00:00".format
@@ -1916,6 +1871,7 @@ def finishes_mid_tick(root, wt, rows, state="ran"):
     return lane_state
 
 
+@pytest.mark.git
 def test_item_finishing_mid_tick_keeps_its_lane_busy(tmp_path):
     root = make_root(tmp_path, roadmap=ONE_ROW, handoff="")
     _dispatched(root, iid="013", lane="review", pid=7)
@@ -1930,6 +1886,7 @@ def test_item_finishing_mid_tick_keeps_its_lane_busy(tmp_path):
         assert ew_loop.Items(root).get("012") is None
 
 
+@pytest.mark.git
 def test_held_worktree_at_a_lower_index_blocks_dispatch(tmp_path):
     """The kit picks the lowest non-RUNNING index, not a lane name: a held
     index 0 under a free index 2 would still be claimed and refused."""
@@ -1955,6 +1912,7 @@ def dirty_lane_world(tmp_path, index=0):
     return root, wt
 
 
+@pytest.mark.git
 def test_physically_dirty_lowest_worktree_blocks_dispatch_until_clean(tmp_path):
     root, wt = dirty_lane_world(tmp_path)
     d = deps(root, git=real_git)
@@ -1973,6 +1931,7 @@ def lane_dirty(root, wt, attempts=1):
         "error": f"LaneRefused: lane worktree {wt} is dirty - resolve it by hand"})
 
 
+@pytest.mark.git
 def test_lane_dirty_recovers_once_its_worktree_is_clean_and_unheld(tmp_path):
     root, wt = dirty_lane_world(tmp_path, index=2)
     lane_dirty(root, wt)
@@ -1997,6 +1956,7 @@ def test_lane_dirty_recovers_once_its_worktree_is_clean_and_unheld(tmp_path):
     assert ew_loop.Items(root).get("012")["state"] == "dispatched"
 
 
+@pytest.mark.git
 def test_lane_dirty_out_of_attempts_gives_up_with_the_error(tmp_path):
     root, wt = dirty_lane_world(tmp_path, index=2)
     (wt / "crash.txt").unlink()
@@ -2008,6 +1968,7 @@ def test_lane_dirty_out_of_attempts_gives_up_with_the_error(tmp_path):
     assert "012" not in d.seen["launch"]
 
 
+@pytest.mark.git
 def test_lane_dirty_without_a_worktree_in_its_error_stays(tmp_path):
     root = make_root(tmp_path, roadmap=ONE_ROW, handoff="")
     lane_dirty(root, "x")
@@ -2037,6 +1998,7 @@ def keep_refs(root):
 
 
 @pytest.mark.slow
+@pytest.mark.git
 def test_conflict_keeps_the_lane_commit_under_a_ref(tmp_path):
     root, items = _conflict_world(tmp_path)
     rec = items.get("013")
@@ -2046,6 +2008,7 @@ def test_conflict_keeps_the_lane_commit_under_a_ref(tmp_path):
 
 
 @pytest.mark.slow
+@pytest.mark.git
 def test_roadmap_only_conflict_never_keeps_a_ref(tmp_path):
     def a(wt):
         (wt / "a.txt").write_text("a\n")
@@ -2064,6 +2027,7 @@ def test_roadmap_only_conflict_never_keeps_a_ref(tmp_path):
 
 
 @pytest.mark.slow
+@pytest.mark.git
 def test_next_tick_dispatches_a_resolve_lane_first(tmp_path):
     root, items = _conflict_world(tmp_path)
     rm = root / "docs/plans/ROADMAP.md"
@@ -2118,6 +2082,7 @@ def _review(root, verdicts=1):
 
 
 @pytest.mark.slow
+@pytest.mark.git
 def test_resolve_lane_merges_through_the_normal_path_and_drops_the_ref(tmp_path):
     root, items = _conflict_world(tmp_path)
     kept = items.get("013")["commit"]
@@ -2136,6 +2101,7 @@ def test_resolve_lane_merges_through_the_normal_path_and_drops_the_ref(tmp_path)
 
 
 @pytest.mark.slow
+@pytest.mark.git
 def test_second_conflict_reenters_resolve_then_caps(tmp_path):
     root, items = _conflict_world(tmp_path)
     ew_loop.tick(deps=_free(root, tmp_path), no_push=True)
@@ -2158,6 +2124,7 @@ def test_second_conflict_reenters_resolve_then_caps(tmp_path):
 
 
 @pytest.mark.slow
+@pytest.mark.git
 def test_lost_resolve_lane_is_redispatched_as_resolve(tmp_path):
     root, items = _conflict_world(tmp_path)
     ew_loop.tick(deps=_free(root, tmp_path), no_push=True)
@@ -2170,6 +2137,7 @@ def test_lost_resolve_lane_is_redispatched_as_resolve(tmp_path):
 
 
 @pytest.mark.slow
+@pytest.mark.git
 def test_hand_merged_conflict_settles_as_merged_and_drops_the_ref(tmp_path):
     root, items = _conflict_world(tmp_path)
     git(root, "merge", "-q", "--no-ff", "-X", "theirs", "-m", "by hand",
@@ -2181,6 +2149,7 @@ def test_hand_merged_conflict_settles_as_merged_and_drops_the_ref(tmp_path):
 
 
 @pytest.mark.slow
+@pytest.mark.git
 def test_legacy_conflict_without_a_ref_gets_one(tmp_path):
     root, items = _conflict_world(tmp_path)
     rec = items.get("013")
@@ -2193,6 +2162,7 @@ def test_legacy_conflict_without_a_ref_gets_one(tmp_path):
     assert d.seen["launch"] == ["013"] and items.get("013")["kind"] == "resolve"
 
 
+@pytest.mark.git
 def test_resolve_lane_with_conflict_markers_left_fails_review(tmp_path):
     root, wt = git_world(tmp_path)
     (wt / "feature.txt").write_text("<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> abc\n")
@@ -2234,6 +2204,7 @@ def _passing(n=1):
     return FakeSpawn([{"rc": 0, "error": None, "result": "VERDICT: PASS"}] * n)
 
 
+@pytest.mark.git
 def test_refused_lane_commit_is_salvaged_and_merged_in_main(tmp_path):
     root, wt = git_world(tmp_path)
     d = deps(root, spawn=_passing(), git=_refusing_git(wt, {"on": True}),
@@ -2249,6 +2220,7 @@ def test_refused_lane_commit_is_salvaged_and_merged_in_main(tmp_path):
         root / "docs/plans/ROADMAP.md").read_text()
 
 
+@pytest.mark.git
 def test_main_hook_refused_merge_is_parked_without_resolve_runs(tmp_path):
     # a real leak main's hook refuses no longer burns MAX_ATTEMPTS blind resolve
     # runs: the merge is clean, so a resolve run could only be refused again
@@ -2275,6 +2247,7 @@ def test_main_hook_refused_merge_is_parked_without_resolve_runs(tmp_path):
 
 
 @pytest.mark.slow
+@pytest.mark.git
 def test_pre_fix_failed_dirty_record_is_retried(tmp_path):
     # backfill: the 031 shape - failed-dirty, verdict PASS, work staged, no counters
     root, wt = git_world(tmp_path)
@@ -2292,6 +2265,7 @@ def test_pre_fix_failed_dirty_record_is_retried(tmp_path):
 
 
 @pytest.mark.slow
+@pytest.mark.git
 def test_refused_commit_of_red_work_is_kept_unmerged_and_frees_the_lane(tmp_path):
     root, wt = git_world(tmp_path)
     d = deps(root, git=_refusing_git(wt, {"on": True}), gates=lambda cwd: (False, "red"),
@@ -2310,6 +2284,7 @@ def test_refused_commit_of_red_work_is_kept_unmerged_and_frees_the_lane(tmp_path
 
 
 @pytest.mark.slow
+@pytest.mark.git
 def test_dirty_failed_dirty_lane_zero_no_longer_wedges_dispatch(tmp_path):
     # the stall: lane-0 held a failed-dirty item's staged work, the kit claims
     # the lowest index, so free_lanes() gave 0 slots and every tick read idle
@@ -2374,6 +2349,7 @@ def _session_order(tmp_path):
     return root, outbox, sp, d
 
 
+@pytest.mark.git
 def test_session_order_is_not_dispatched_and_shows_in_checklist(tmp_path):
     root, outbox, sp, d = _session_order(tmp_path)
     doc = ew_loop.tick(deps=d, no_push=True)
@@ -2388,6 +2364,7 @@ def test_session_order_is_not_dispatched_and_shows_in_checklist(tmp_path):
     assert not list(outbox.iterdir())
 
 
+@pytest.mark.git
 def test_session_order_waits_past_adjudicate_then_answers_after_session_done(tmp_path):
     root, outbox, sp, d = _session_order(tmp_path)
     ew_loop.tick(deps=d, no_push=True)
@@ -2417,6 +2394,7 @@ def _settle_by_hand(d, root, name, verdict="ANSWER"):
     d.inbox.mark_seen(root, name, dec, verdict=verdict)
 
 
+@pytest.mark.git
 def test_session_order_settled_in_seen_ledger_leaves_checklist(tmp_path):
     root, outbox, sp, d = _session_order(tmp_path)
     ew_loop.tick(deps=d, no_push=True)
@@ -2445,6 +2423,7 @@ def test_lane_order_settled_in_seen_ledger_is_not_dispatched(tmp_path):
     assert oid not in [w["id"] for w in work] + [h["id"] for h in skipped]
 
 
+@pytest.mark.git
 def test_session_cli_lists_and_refuses_unknown_id(tmp_path, monkeypatch, capsys):
     root, outbox, sp, d = _session_order(tmp_path)
     ew_loop.tick(deps=d, no_push=True)
@@ -2514,6 +2493,7 @@ def _all_running():
             for i, n in enumerate(("build", "data", "review"))]
 
 
+@pytest.mark.git
 def test_tick_launches_a_review_worker_and_runs_no_gate_or_spawn(tmp_path):
     root, wt = git_world(tmp_path)
     seen, gated = {}, []
@@ -2531,6 +2511,7 @@ def test_tick_launches_a_review_worker_and_runs_no_gate_or_spawn(tmp_path):
     assert seen["review"] == ["012"]
 
 
+@pytest.mark.git
 def test_two_finished_items_are_reviewed_in_parallel(tmp_path):
     root, wt = git_world(tmp_path)
     ew_loop.Items(root).put({"id": "013", "kind": "plan", "title": "t", "label": "plan 013: t",
@@ -2542,6 +2523,7 @@ def test_two_finished_items_are_reviewed_in_parallel(tmp_path):
     assert sorted(seen["review"]) == ["012", "013"]
 
 
+@pytest.mark.git
 def test_ran_item_waits_while_spawning_is_blocked(tmp_path):
     root, wt = git_world(tmp_path)
     ew_loop.backoff_hit(root, 1_790_000_000.0, "usage limit")
@@ -2551,6 +2533,7 @@ def test_ran_item_waits_while_spawning_is_blocked(tmp_path):
     assert "review" not in seen and "review_launch" not in ew_loop.Items(root).get("012")
 
 
+@pytest.mark.git
 def test_dead_review_worker_is_relaunched_then_parked_at_the_cap(tmp_path):
     root, wt = git_world(tmp_path)
     items = ew_loop.Items(root)
@@ -2574,6 +2557,7 @@ def test_dead_review_worker_is_relaunched_then_parked_at_the_cap(tmp_path):
     assert "review_launch" not in rec
 
 
+@pytest.mark.git
 def test_review_worker_that_never_started_counts_as_a_crash(tmp_path):
     root, wt = git_world(tmp_path)
     items = ew_loop.Items(root)
@@ -2586,6 +2570,7 @@ def test_review_worker_that_never_started_counts_as_a_crash(tmp_path):
     assert seen["review"] == ["012"] and items.get("012")["review_crashes"] == 1
 
 
+@pytest.mark.git
 def test_review_worker_processes_its_item_and_clears_its_markers(tmp_path):
     root, wt = git_world(tmp_path)
     sp = FakeSpawn([{"rc": 0, "error": None, "result": "VERDICT: PASS"}])
@@ -2599,6 +2584,7 @@ def test_review_worker_processes_its_item_and_clears_its_markers(tmp_path):
     assert len(sp.calls) == 1
 
 
+@pytest.mark.git
 def test_review_worker_refuses_an_item_another_live_worker_holds(tmp_path):
     root, wt = git_world(tmp_path)
     items = ew_loop.Items(root)
@@ -2611,6 +2597,7 @@ def test_review_worker_refuses_an_item_another_live_worker_holds(tmp_path):
     assert sp.calls == [] and items.get("012")["worker_pid"] == os.getpid() + 1
 
 
+@pytest.mark.git
 def test_busy_merge_lock_defers_the_merge(tmp_path):
     root, wt = git_world(tmp_path)
     sp = FakeSpawn([{"rc": 0, "error": None, "result": "VERDICT: PASS"}])
@@ -2711,6 +2698,7 @@ def test_merge_subject_names_the_topic_never_the_lane():
     assert "lane" not in s and "worktree" not in s and "build" not in s
 
 
+@pytest.mark.git
 def test_lane_and_merge_commits_use_the_generated_subjects(tmp_path):
     root, wt = git_world(tmp_path)
     sp = FakeSpawn([{"rc": 0, "error": None, "result": "fine\nVERDICT: PASS"}])
@@ -2726,3 +2714,15 @@ def test_lane_and_merge_commits_use_the_generated_subjects(tmp_path):
         "merge: Grind spot recommender (plan-012)"
     body = git(root, "log", "-1", "--format=%B", rec["commit"])
     assert "loop item: 012" in body and "plan 012: Grind spot recommender" in body
+
+
+@pytest.mark.git
+def test_git_worlds_see_no_host_global_or_system_config(tmp_path):
+    """Plan 156, TESTS-A-19: a host merge.ff=only / signing / hooksPath cannot
+    reach a tmp_path git world; only the repo's own and command-line config."""
+    root, wt = git_world(tmp_path)
+    origins = {line.split("\t", 1)[0].split(":", 1)[0]
+               for line in git(root, "config", "--list", "--show-scope").splitlines()}
+    assert origins <= {"local", "worktree", "command"}, origins
+    assert real_git(["config", "--global", "--list"], root).stdout == ""
+    assert os.environ["GIT_CONFIG_NOSYSTEM"] == "1"

@@ -12,7 +12,7 @@ import pytest
 from server.ew import overrides as ov
 from server.ew import portraits
 from server.ew.store import Store
-from tests.test_portraits import CHAR_A, CHAR_B, T0, Clock, bmp
+from ew_testkit import CHAR_A, CHAR_B, T0, Clock, bmp
 
 
 def iso(t):

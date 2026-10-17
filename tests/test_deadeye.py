@@ -266,8 +266,10 @@ def test_move_step_past_end_is_noop(svc):
 def test_move_step_bad(svc, arg):
     _add(svc, item="A")
     _add(svc, item="B")
+    before = svc.view()
     with pytest.raises(ValueError):
         svc.move_step(arg)
+    assert svc.view() == before  # plan 156, TESTS-A-28: a rejection changes nothing
 
 
 # --- store degradation ----------------------------------------------------------
@@ -472,9 +474,13 @@ def test_fs_count_limits_inclusive(svc):
 def test_fs_bank_row_cap(svc):
     for v in range(1, deadeye.MAX_FS_ROWS + 1):
         svc.fs_add({"kind": "saved", "value": v})
+    before = svc.view()
     with pytest.raises(ValueError, match="at most"):
         svc.fs_add({"kind": "advice", "value": 1})
-    svc.fs_add({"kind": "saved", "value": 1})  # merging into an existing row is fine
+    assert svc.view() == before  # plan 156, TESTS-A-28
+    bank = _stacks(svc.fs_add({"kind": "saved", "value": 1}))["fs_bank"]  # merges: fine
+    assert len(bank) == deadeye.MAX_FS_ROWS
+    assert [r["count"] for r in bank if r["kind"] == "saved" and r["value"] == 1] == [2]
 
 
 def test_agris_set_threshold_and_n_fails(svc):
@@ -499,8 +505,11 @@ def test_agris_set_threshold_and_n_fails(svc):
     {"family": "sovereign\n", "step": "TET", "stacks": 1},
 ])
 def test_agris_set_bad(svc, arg):
+    svc.agris_set({"family": "sovereign", "step": "TET", "stacks": 7})
+    before = svc.view()
     with pytest.raises(ValueError):
         svc.agris_set(arg)
+    assert svc.view() == before  # plan 156, TESTS-A-28
 
 
 def test_crons_set_partial_and_bad(svc):
