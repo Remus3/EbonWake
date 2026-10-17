@@ -80,6 +80,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import eta  # noqa: E402
 import ew_lane  # noqa: E402
+import ledger_rotate  # noqa: E402
 import usage_ledger  # noqa: E402
 # Plan 107: constants + small helpers + item records (loop_base), lane prompts
 # (loop_prompts), the work list (loop_roadmap), the inbox pass (loop_inbox) and
@@ -400,6 +401,7 @@ class Deps:
         self.estimate = eta.estimate
         self.record = eta.record
         self.clock = time.time
+        self.rotate = ledger_rotate.rotate_daily  # plan 138
         # plan 093: the machine fleet roster ({"repos": [{code, root, inbox?}]}),
         # the same FLEET_ROSTER the kit statusline reads; tests pass None.
         self.roster_path = os.environ.get("FLEET_ROSTER") or None
@@ -1343,6 +1345,10 @@ class Tick(InboxMixin, MergeMixin):
             if n:
                 self.step(f"usage rows backfilled kind build: {n}")
         self.reap_lost()
+        if not self.dry:  # plan 138: cap the control ledgers once a local day
+            res = self.d.rotate(self.root, self.d.clock())
+            if res is not None:
+                self.step(ledger_rotate.summary(res))
         self.stalls()
         if not self.blocked():
             self.inbox()

@@ -174,6 +174,23 @@ def test_inbox_unconfigured_logged(tmp_path):
     assert "inbox unconfigured" in progress(root)["log"]
 
 
+def test_tick_rotates_control_ledgers_once_a_day_after_reap(tmp_path):
+    """Plan 138: one step line when the daily rotation ran, none otherwise;
+    a dry-run tick never rotates."""
+    root = make_root(tmp_path)
+    calls = []
+    res = {"headless_usage": 3, "timings": 0, "progress": 1, "skipped": []}
+    d = deps(root, rotate=lambda r, now: calls.append((r, now)) or res)
+    ew_loop.tick(deps=d, no_push=True)
+    assert calls == [(root, 1_790_000_000.0)]
+    assert "ledgers rotated: 3 row(s), 1 progress file(s) archived" in progress(root)["log"]
+    d = deps(root, rotate=lambda r, now: calls.append(r))
+    ew_loop.tick(deps=d, no_push=True)
+    assert not any(s.startswith("ledgers rotated") for s in progress(root)["log"])
+    ew_loop.tick(dry_run=True, deps=d, no_push=True)
+    assert len(calls) == 2
+
+
 def test_inbox_defaults_to_fleet_moon_sync_dirs(tmp_path):
     cfg = ew_loop.load_config(tmp_path)
     assert Path(cfg["inbox_dir"]) == tmp_path / "moon_sync_inbox"
