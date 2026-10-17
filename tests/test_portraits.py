@@ -114,6 +114,33 @@ def test_decode_bmp_rejects_bad(bad):
         portraits.decode_bmp(bad)
 
 
+def _short_bitfields():
+    """Plan 144 SERVER-D-01: a 32-bit BI_BITFIELDS header cut before its masks."""
+    b = bmp(2, 2, bpp=32)
+    return b[:30] + struct.pack("<I", 3) + b[34:54] + b"\x00" * 6
+
+
+def test_decode_bmp_short_bitfields_is_a_value_error():
+    with pytest.raises(ValueError):
+        portraits.decode_bmp(_short_bitfields())
+
+
+def test_png_size_of_a_cut_header_is_none():
+    # Sweep of SERVER-D-01: "or None" held only for 24+ bytes.
+    head = portraits.encode_png(1, 1, b"\x00\x00\x00")
+    assert portraits.png_size(head) == (1, 1)
+    for n in (16, 20, 23):
+        assert portraits.png_size(head[:n]) is None
+
+
+def test_short_bitfields_face_never_breaks_the_poll(env):
+    svc, face, st, clk = env
+    _face(face, CHAR_A, _short_bitfields(), clk.t - 10)
+    svc.poll()  # seen, never archived; the poller keeps running
+    assert svc.scan() == []
+    assert svc._load()["seen"] and svc._load()["index"] == []
+
+
 def test_downscale_sizes_and_box_average():
     w, h, rgb = 4, 2, bytes([10, 20, 30, 30, 40, 50] * 4)
     tw, th, out = portraits.downscale(w, h, rgb, 2, 1)

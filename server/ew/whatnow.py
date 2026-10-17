@@ -19,6 +19,7 @@ countdown so the result only changes when the actions do; clients count
 
 import datetime as _dt
 import json
+import math
 import re
 import threading
 import time
@@ -88,7 +89,7 @@ def _cand(source, text, why, due, now):
 def _clean_weight(row):
     if not isinstance(row, dict) or set(row) != {"weight", "horizon_s", "nominal_s"}:
         return None
-    if not all(_num(row[k]) and row[k] > 0 for k in row):
+    if not all(_num(row[k]) and math.isfinite(row[k]) and row[k] > 0 for k in row):
         return None
     return {"weight": float(row["weight"]), "horizon_s": int(row["horizon_s"]),
             "nominal_s": int(row["nominal_s"])}

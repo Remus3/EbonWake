@@ -159,7 +159,10 @@ def decode_bmp(data):
         raise ValueError("unsupported BMP header")
     if comp == 3 and bpp == 32:  # BI_BITFIELDS: only the standard BGRA masks
         # The masks sit at byte 54 either way: right after a 40-byte header or
-        # inside a V4 / V5 header.
+        # inside a V4 / V5 header. Cut before them = truncated (plan 144: a
+        # struct.error here escaped the poller's ValueError guard).
+        if len(data) < 66:
+            raise ValueError("truncated BMP")
         if struct.unpack_from("<III", data, 54) != (0xFF0000, 0xFF00, 0xFF):
             raise ValueError("unsupported BMP masks")
     elif comp != 0:
@@ -196,7 +199,8 @@ def encode_png(w, h, rgb):
 
 def png_size(data):
     """(w, h) of PNG bytes, or None."""
-    if not isinstance(data, bytes) or data[:8] != _PNG_SIG or data[12:16] != b"IHDR":
+    if not isinstance(data, bytes) or len(data) < 24 or data[:8] != _PNG_SIG \
+            or data[12:16] != b"IHDR":
         return None
     return struct.unpack(">II", data[16:24])
 

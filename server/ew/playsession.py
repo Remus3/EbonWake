@@ -40,7 +40,10 @@ def grace_of(v):
 
 
 def _ts(v):
-    return _parse(v) if isinstance(v, str) else None
+    """Epoch of a stored stamp; one before 1970 reads as none (plan 144: _iso of
+    it raised OSError on Windows at every save)."""
+    t = _parse(v) if isinstance(v, str) else None
+    return t if t is not None and t >= 0 else None
 
 
 def _clean_open(o):

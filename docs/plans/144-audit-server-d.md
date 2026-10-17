@@ -53,3 +53,17 @@ Depends on: 135, 136, 137, 138, 139, 140.
 ## Proposed ROADMAP rows
 
 (filled by the lane if any finding is FILED)
+
+None: four findings FIXED, four NOT-A-BUG (`docs/audit/20261017-server-d.md`).
+
+## As-built deviations
+
+1. Progress file not written. Decision: the lane ran without the
+   `ops/loop/control/progress/p144-build.json` checklist updates. Alternatives:
+   write it with the Write tool, a heredoc, or a scratch script
+   (`ops/runtime/p144-build_progress.py`, gitignored) - each was refused by
+   this run's permission policy (the main checkout is outside the worktree).
+   Why: the work itself was in-worktree and short (one run); the loop reads
+   the lane result regardless. Reverses if: the lane permission set grants
+   the main-checkout progress path, as FLEET item 12 intends (report to the
+   session; not a kit defect - a lane settings gap).
