@@ -248,6 +248,10 @@
         dv.appendChild(dl);
         sh.appendChild(dv);
         p.appendChild(sh);
+        // Plan 136: the loop tick's status, read from /api/loop (read-only).
+        const lp = el('div', 'ew-sig');
+        lp.id = 'sys-loop';
+        p.appendChild(card('Loop', lp));
         if (window.EWGame) window.EWGame.mount(p);
       } else {
         p.appendChild(card(t.title, el('p', 'ew-muted', 'Arrives in plan ' + (t.plan || '?') + '.')));
@@ -357,6 +361,34 @@
       if (drift) fr.appendChild(el('div', 'ew-drift', drift.text + ' (see World bosses)'));
     }
     paintVerdicts();
+    paintLoop();
+  }
+
+  // Plan 136: the Loop card, rebuilt only when the /api/loop body changes.
+  function paintLoop() {
+    const box = document.getElementById('sys-loop');
+    if (!box || !window.EWLoop) return;
+    const v = window.EWLoop.card(H.loop);
+    const sig = [v.pill.cls, v.pill.text, v.tick, v.more].concat(v.halt, v.inflight,
+      v.stuck.map(function (s) { return s.text + s.title; })).join('|');
+    if (box.dataset.sig === sig) return;
+    box.dataset.sig = sig;
+    box.textContent = '';
+    const top = el('div', 'ew-sigrow');
+    top.appendChild(el('span', 'ew-pill ' + v.pill.cls, v.pill.text));
+    top.appendChild(el('span', 'ew-muted', v.tick));
+    box.appendChild(top);
+    v.halt.forEach(function (t) { box.appendChild(el('div', 'ew-sigline', t)); });
+    v.inflight.forEach(function (t) { box.appendChild(el('div', 'ew-muted ew-sigline', t)); });
+    v.stuck.forEach(function (s) {
+      const row = el('div', 'ew-sigrow');
+      row.appendChild(el('span', 'ew-pill warn', 'stuck'));
+      const t = el('span', 'ew-muted', s.text);
+      if (s.title) t.title = s.title;
+      row.appendChild(t);
+      box.appendChild(row);
+    });
+    if (v.more) box.appendChild(el('div', 'ew-muted ew-sigline', v.more));
   }
 
   // Plan 110: the Data checks list, rebuilt only when the verdicts body changes
@@ -399,7 +431,8 @@
         getJSON('/api/health').then(function (h) { H.health = h; }, function () { H.health = null; }),
         getJSON('/api/state').then(function (s) { H.sources = s && s.sources; }, function () { /* keep last */ }),
         getJSON('/api/signals').then(function (s) { H.signals = s; }, function () { H.signals = null; }),
-        getJSON('/api/data/verdicts').then(function (d) { H.verdicts = d; }, function () { H.verdicts = null; }) // plan 110
+        getJSON('/api/data/verdicts').then(function (d) { H.verdicts = d; }, function () { H.verdicts = null; }), // plan 110
+        getJSON('/api/loop').then(function (d) { H.loop = d; }, function () { H.loop = null; }) // plan 136
       ]);
     }, function () { H.health = null; }).then(function () { paintPill(); paintSystem(); });
   }
