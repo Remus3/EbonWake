@@ -133,28 +133,32 @@ def read_commit(root=REPO_ROOT):
     return sha if out.returncode == 0 and len(sha) == 40 else None
 
 
-def config_hash(root=REPO_ROOT):
-    p = Path(root) / "config" / "local.json"
+def _config_file(root, path):
+    """Plan 155: an explicit config file wins over <root>/config/local.json."""
+    return Path(path) if path is not None else Path(root) / "config" / "local.json"
+
+
+def config_hash(root=REPO_ROOT, path=None):
     try:
-        return hashlib.sha256(p.read_bytes()).hexdigest()
+        return hashlib.sha256(_config_file(root, path).read_bytes()).hexdigest()
     except OSError:
         return None
 
 
-def config_market_watch(root=REPO_ROOT):
+def config_market_watch(root=REPO_ROOT, path=None):
     """`market_watch` ids from gitignored config/local.json, or []."""
     try:
-        doc = json.loads((Path(root) / "config" / "local.json").read_text(encoding="utf-8"))
+        doc = json.loads(_config_file(root, path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
     ids = doc.get("market_watch") if isinstance(doc, dict) else None
     return ids if isinstance(ids, list) else []
 
 
-def config_market(root=REPO_ROOT):
+def config_market(root=REPO_ROOT, path=None):
     """`market` {vp, fame_pct} from gitignored config/local.json (plan 027)."""
     try:
-        doc = json.loads((Path(root) / "config" / "local.json").read_text(encoding="utf-8"))
+        doc = json.loads(_config_file(root, path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         doc = None
     return market.settings_from(doc)
@@ -179,7 +183,8 @@ class EWServer(ThreadingHTTPServer):
         detected = detector.paths if detector is not None else None
         self.started = _now_iso()
         self.commit = commit
-        self.cfg_hash = config_hash()
+        # Plan 155: an injected config_path is the only config file read here.
+        self.cfg_hash = config_hash(path=config_path)
         self.store = Store(store_root or RUNTIME / "store")
         # Plan 030: the only writer of config/local.json (allowlisted keys only).
         self.settings = settings.Settings(config_path or CONFIG_PATH, detected=detected)
@@ -189,10 +194,10 @@ class EWServer(ThreadingHTTPServer):
                                                   maint_end=self._maint_end_after)
         self.sse_interval = sse_interval
         self.bus = DomainBus()
-        seed = config_market_watch() if market_seed is None else market_seed
+        seed = config_market_watch(path=config_path) if market_seed is None else market_seed
         self.market = market.MarketService(market_client or market.ArshaClient(),
                                            market.Watchlist(self.store, seed=seed),
-                                           settings=config_market())
+                                           settings=config_market(path=config_path))
         self.market.effective = self.tax
         # Plan 028: name index over the seed, util/db and this client's cache;
         # util/db rides the market client's fetch so a test client stays offline.
@@ -206,7 +211,8 @@ class EWServer(ThreadingHTTPServer):
         self.today = today.TodayService(self.store, clock=today_clock or time.time)
         cfg = profile_cfg
         if cfg is None:  # an injected client (tests) never reads config/local.json
-            cfg = progress.config_profile(REPO_ROOT) if profile_client is None else {}
+            cfg = (progress.config_profile(REPO_ROOT, path=config_path)
+                   if profile_client is None else {})
         if profile_client is None:
             family = progress.family_from_config(cfg)
             if family is not None:

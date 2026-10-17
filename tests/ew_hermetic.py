@@ -36,10 +36,10 @@ def offline_urlopen(real):
 
 def rooted(fn, real_root, host):
     """fn(root) reading `host` whenever the caller meant the repo root."""
-    def wrapped(root=None):
+    def wrapped(root=None, path=None):
         if root is None or Path(root) == Path(real_root):
             root = host
-        return fn(root)
+        return fn(root, path=path)
     wrapped.__wrapped__ = fn
     return wrapped
 

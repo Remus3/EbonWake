@@ -153,10 +153,12 @@ def family_from_config(cfg):
     return fam if isinstance(fam, str) and FAMILY_RE.match(fam) else None
 
 
-def config_profile(root):
-    """`profile` object from gitignored config/local.json, or {}."""
+def config_profile(root, path=None):
+    """`profile` object from gitignored config/local.json (or an explicit
+    config file, plan 155), or {}."""
+    f = Path(path) if path is not None else Path(root) / "config" / "local.json"
     try:
-        doc = json.loads((Path(root) / "config" / "local.json").read_text(encoding="utf-8"))
+        doc = json.loads(f.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     p = doc.get("profile") if isinstance(doc, dict) else None

@@ -13,6 +13,7 @@ title, updated, lane?, needs?, error?}."""
 
 import datetime as _dt
 import json
+import os
 import threading
 import time
 from pathlib import Path
@@ -80,6 +81,8 @@ def main_root(root):
     if not head.startswith("gitdir:"):
         return root
     gitdir = Path(head[len("gitdir:"):].strip())
+    if not gitdir.is_absolute():  # worktree.useRelativePaths: relative to the .git file
+        gitdir = Path(os.path.normpath(root / gitdir))
     if gitdir.parent.name == "worktrees" and gitdir.parent.parent.name == ".git":
         return gitdir.parent.parent.parent
     return root
