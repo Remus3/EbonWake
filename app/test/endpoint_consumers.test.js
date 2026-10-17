@@ -50,7 +50,7 @@ function consumed(src, route) {
 test('the GET route scan finds the server routes', () => {
   const routes = getRoutes();
   assert.ok(routes.length >= 30, 'found ' + routes.length);
-  ['/api/health', '/api/events/currency', '/api/zones/xp', '/api/data/verdicts'].forEach(function (r) {
+  ['/api/health', '/api/events/currency', '/api/zones/xp', '/api/data/verdicts', '/api/loop'].forEach(function (r) {
     assert.ok(routes.indexOf(r) >= 0, r);
   });
 });

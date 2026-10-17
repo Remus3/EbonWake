@@ -24,7 +24,7 @@
   const SOURCES = { today: '/api/today', grind: '/api/grind', leveling: '/api/leveling',
     events: '/api/events', market: '/api/market/watch', bosses: '/api/bosses', summary: '/api/summary',
     onboarding: '/api/onboarding', whatnow: '/api/whatnow', signals: '/api/signals',
-    maint: '/api/maint/digest' };
+    maint: '/api/maint/digest', loop: '/api/loop' };
   const S = { snap: { at: {} }, err: {}, last: null, timer: null, panel: null, shape: null, vals: [],
     pending: {}, msg: '', obMsg: '', mdMsg: '' };
 
@@ -171,7 +171,23 @@
       return [c.id, c.title, c.meta, c.empty, c.rows.map(function (r) { return [r.label, r.note, r.cls, r.tick, r.ack]; })];
     })) + '|' + JSON.stringify(out.quiet) + '|' + JSON.stringify(S.err) + '|' + Object.keys(S.pending).join(',') +
       '|' + S.msg + '|' + S.obMsg + '|' + S.mdMsg + '|' + JSON.stringify(C.signalPill(S.snap.signals)) +
-      '|' + JSON.stringify(C.overridePill(S.snap.signals));
+      '|' + JSON.stringify(C.overridePill(S.snap.signals)) + '|' + JSON.stringify(loopLine());
+  }
+
+  // Plan 136: one quiet line only while the loop is stale, halted or has stuck
+  // items; it opens System (the Loop card).
+  function loopLine() {
+    return window.EWLoop ? window.EWLoop.homeLine(S.snap.loop) : null;
+  }
+
+  function loopNode() {
+    const l = loopLine();
+    if (!l) return null;
+    const b = el('button', 'ew-pill ew-hsig ' + l.cls, l.text);
+    b.type = 'button';
+    b.title = l.title;
+    b.addEventListener('click', function () { openTab(l.tab); });
+    return b;
   }
 
   // Plan 079: `N overrides` on the status line while any override is in force.
@@ -320,6 +336,8 @@
     if (q) p.appendChild(q);
     const e = errNode();
     if (e && p.firstChild) p.firstChild.querySelector('.ew-cbody').appendChild(e);
+    const lp = loopNode();
+    if (lp) p.insertBefore(lp, p.firstChild);
     const ovr = overrideNode();
     if (ovr) p.insertBefore(ovr, p.firstChild);
     const sig = signalNode();

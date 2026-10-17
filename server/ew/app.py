@@ -18,6 +18,7 @@ block), /api/settings (plan 030), /api/pets
 /api/whatnow (plan 069; SSE `whatnow` carries the full view on change),
 /api/signals (plan 073, GET only; plan 079 adds its `overrides` section; plan 085 a `data` row),
 /api/data/verdicts (plan 085, GET only: hinted data rows vs the cached patch notes),
+/api/loop (plan 136, GET only: loop tick age, lanes, stuck items, halt / backoff),
 /api/overrides (plan 079, GET only; POST /api/settings {"clear": key} retires one),
 /api/portraits + /api/portraits/img/<id> (plan 082; SSE `portraits`; plan 083 adds
 ?cls= gallery, screenshot ids and POST pick / clear / bind), /api/prompts (plan 070: quiet gate, alert ladder,
@@ -47,7 +48,7 @@ from urllib.parse import parse_qs
 from . import (__version__, autotick, autowatch, bossdrift, bosses, context, coupons, crafting,
                dataverdicts, daynight, deadeye, fameauto,
                derived, detect, enhance, eventcurrency, eventnotices, events, gamewatch, grind, imperial, inventory, itemnames,
-               knownissues, leveling, logindays, maint, maintdigest, market, mounts, ocr, ocrauto, onboarding, overrides,
+               knownissues, leveling, logindays, loopstatus, maint, maintdigest, market, mounts, ocr, ocrauto, onboarding, overrides,
                pets,
                ports,
                playsession, portraits, progress, prompts, settings, shopping, signals, single,
@@ -169,7 +170,7 @@ class EWServer(ThreadingHTTPServer):
                  coupon_client=None, coupon_spawn=None, bosses_clock=None,
                  config_path=None, notice_client=None, notice_spawn=None, detector=None,
                  context_clock=None, drift_client=None, drift_spawn=None,
-                 verdicts_path=None, verdict_data_dir=None):
+                 verdicts_path=None, verdict_data_dir=None, loop_root=None):
         super().__init__(addr, Handler)
         # Plan 065: read-only BDO folder auto-detect; only main() passes one, so
         # no test ever probes the real disk or registry.
@@ -476,6 +477,10 @@ class EWServer(ThreadingHTTPServer):
             "logins": lambda: self.login_days(self.events.view()["items"]),  # plan 075
             "currency": self.currency.view},  # plan 095
             clock=today_clock or time.time)
+        # Plan 136: the loop tick's own control files, read-only (MAIN checkout;
+        # a test store root reads its parent, never the real tree).
+        self.loopstatus = loopstatus.LoopStatus(
+            loop_root or (Path(store_root).parent if store_root else loopstatus.main_root(REPO_ROOT)))
         # Plan 073: per-signal liveness over local state only (never fetches or polls).
         self.signals = signals.SignalService({
             "session_log": self._sig_session_log, "screenshots": self._sig_screenshots,
@@ -1123,6 +1128,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, self.server.signals.view())
         if path == "/api/data/verdicts":
             return self._send(200, self.server.verdicts.view())
+        if path == "/api/loop":  # plan 136: read-only loop status, cached 10 s
+            return self._send(200, self.server.loopstatus.view())
         if path == "/api/overrides":
             return self._send(200, self.server.overrides_view())
         if path == "/api/portraits":  # plan 083: ?cls=<cls> adds that class's gallery
@@ -1535,7 +1542,7 @@ def make_server(port=ports.SERVER, store_root=None, commit=None, sse_interval=15
                 coupon_client=None, coupon_spawn=None, bosses_clock=None,
                 config_path=None, notice_client=None, notice_spawn=None, detector=None,
                 context_clock=None, drift_client=None, drift_spawn=None,
-                verdicts_path=None, verdict_data_dir=None):
+                verdicts_path=None, verdict_data_dir=None, loop_root=None):
     return EWServer(("127.0.0.1", port), store_root=store_root, commit=commit,
                     sse_interval=sse_interval, market_client=market_client,
                     market_seed=market_seed, today_clock=today_clock,
@@ -1549,7 +1556,8 @@ def make_server(port=ports.SERVER, store_root=None, commit=None, sse_interval=15
                     notice_client=notice_client, notice_spawn=notice_spawn,
                     detector=detector, context_clock=context_clock,
                     drift_client=drift_client, drift_spawn=drift_spawn,
-                    verdicts_path=verdicts_path, verdict_data_dir=verdict_data_dir)
+                    verdicts_path=verdicts_path, verdict_data_dir=verdict_data_dir,
+                    loop_root=loop_root)
 
 
 def _drift_client():
