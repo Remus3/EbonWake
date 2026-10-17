@@ -179,7 +179,11 @@
     const r = C.parseGrindForm('stop', { silver: f.silver.value, trash: f.trash.value, loot: lootRows() });
     if (!r.ok) { msg(r.error); return; }
     send(r.body, 'logged').then(function (ok) {
-      if (ok) { f.silver.value = ''; f.trash.value = ''; S.lootCounts = {}; S.lootLow = {}; loadLoot(true); loadSummary(); }
+      if (ok) {
+        f.silver.value = ''; f.trash.value = ''; S.lootCounts = {}; S.lootLow = {}; S.lootTyped = {};
+        loadLoot(true);
+        loadSummary();
+      }
     });
   }
 
@@ -191,7 +195,7 @@
     r.body.stop.at_exit = true;
     send(r.body, 'logged at the exit time').then(function (ok) {
       if (ok) {
-        f.silver.value = ''; f.trash.value = ''; S.lootCounts = {}; S.lootLow = {};
+        f.silver.value = ''; f.trash.value = ''; S.lootCounts = {}; S.lootLow = {}; S.lootTyped = {};
         loadLoot(true);
         loadSummary();
       }
@@ -205,7 +209,11 @@
     const r = C.parseGrindForm('log', { spot: f.spot.value, minutes: f.minutes.value, silver: f.silver.value, trash: f.trash.value, loot: lootRows() });
     if (!r.ok) { msg(r.error); return; }
     send(r.body, 'logged').then(function (ok) {
-      if (ok) { f.minutes.value = ''; f.silver.value = ''; f.trash.value = ''; S.lootCounts = {}; S.lootLow = {}; loadLoot(true); }
+      if (ok) {
+        f.minutes.value = ''; f.silver.value = ''; f.trash.value = '';
+        S.lootCounts = {}; S.lootLow = {}; S.lootTyped = {};
+        loadLoot(true);
+      }
     });
   }
 
