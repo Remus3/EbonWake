@@ -238,6 +238,11 @@ def _stamps(raw):
     return out
 
 
+def _tick_list(raw):
+    """A stored tick list's ISO strings (a corrupt non-list = none)."""
+    return [s for s in (raw if isinstance(raw, list) else ()) if isinstance(s, str)]
+
+
 def _periods(src, rule):
     """Weekly periods [(lo, hi)] of a source, clipped to its open span."""
     lo, hi = _span(src, rule)
@@ -421,7 +426,8 @@ class CurrencyService:
 
     def _wish_doc(self):
         doc = self.store.get(DOMAIN)
-        items = [w for w in doc.get("items") or () if isinstance(w, dict)]
+        raw = doc.get("items")
+        items = [w for w in (raw if isinstance(raw, list) else ()) if isinstance(w, dict)]
         bal = doc.get("balances") if isinstance(doc.get("balances"), dict) else {}
         read = doc.get("ocr") if isinstance(doc.get("ocr"), dict) else {}
         return {"items": items[:MAX_WISH], "balances": dict(bal), "ocr": dict(read)}
@@ -565,7 +571,7 @@ class CurrencyService:
             doc = self.store.get(TICKS_DOMAIN)
             ticks = doc.get("ticks") if isinstance(doc.get("ticks"), dict) else {}
             ev = ticks.get(no) if isinstance(ticks.get(no), dict) else {}
-            have = [s for s in ev.get(src["id"]) or () if isinstance(s, str)]
+            have = _tick_list(ev.get(src["id"]))
             if not any(a <= t < b for t in _stamps(have)):
                 ev[src["id"]] = (have + [_iso(at)])[-MAX_TICKS:]
                 ticks[no] = ev
@@ -581,8 +587,8 @@ class CurrencyService:
             doc = self.store.get(TICKS_DOMAIN)
             ticks = doc.get("ticks") if isinstance(doc.get("ticks"), dict) else {}
             ev = ticks.get(no) if isinstance(ticks.get(no), dict) else {}
-            have = [s for s in ev.get(src["id"]) or () if isinstance(s, str)]
-            keep = [s for s in have if not (_today._parse_iso(s) is not None
+            have = _tick_list(ev.get(src["id"]))
+            keep =[s for s in have if not (_today._parse_iso(s) is not None
                                             and a <= _today._parse_iso(s) < b)]
             if keep != have:
                 ev[src["id"]] = keep

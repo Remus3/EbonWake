@@ -357,8 +357,9 @@ class CouponClient(CachedClient):
         return {"candidates": extract(_decode(raw))}
 
     def due(self):
-        at = self.attempt()["at"]
-        return at is None or self.clock() - at >= MIN_INTERVAL_S
+        """A stamp in the future (clock set back, corrupt file) is no floor."""
+        at, now = self.attempt()["at"], self.clock()
+        return at is None or at > now or now - at >= MIN_INTERVAL_S
 
     def refresh(self, spawn=None):
         """Background refresh when due; never blocks the caller."""

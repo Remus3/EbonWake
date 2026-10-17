@@ -52,4 +52,19 @@ Depends on: 135, 136, 137, 138, 139, 140.
 
 ## Proposed ROADMAP rows
 
-(filled by the lane if any finding is FILED)
+| NNN | CORS: answer GET / SSE only for the dashboard origins (file:// `null`, the server's own) instead of `*` (SERVER-A-05; live-app check needed) | [ ] open |
+| NNN | Robots-gated fetchers refuse cross-host redirects (bossdrift, coupons, eventnotices `default_fetch`; SERVER-A-06; loopback server test) | [ ] open |
+
+## As-built deviations
+
+1. SERVER-A-05 (CORS `*`) and SERVER-A-06 (cross-host redirects) are FILED,
+   not fixed. Alternatives: fix CORS now with an Origin allowlist; fix the
+   redirect handler now. Why: the CORS change can break every dashboard fetch
+   (file:// Origin behaviour must be confirmed in the real Electron app) and
+   the redirect fix needs a live loopback server test; both exceed a safe
+   in-lane change. Reverses if: a session confirms the dashboard Origin and
+   takes the proposed rows.
+2. eventnotices.py:977 carries the SERVER-A-02 pattern but is outside this
+   slice; it is recorded in the audit doc for the slice that owns it, not
+   edited here. Why: parallel audit lanes edit their own files only.
+   Reverses if: that slice's lane does not pick it up.

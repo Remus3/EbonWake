@@ -271,7 +271,8 @@ class Detector:
         if state != "unconfigured":
             return
         with self._lock:
-            due = self._at is None or at - self._at >= self.interval
+            # A clock set back (at < the last stamp) re-detects instead of stalling.
+            due = self._at is None or at < self._at or at - self._at >= self.interval
         if due:
             self.refresh(at)
             self.apply()
