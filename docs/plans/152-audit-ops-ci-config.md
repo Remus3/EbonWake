@@ -52,4 +52,20 @@ Depends on: 135, 136, 137, 138, 139, 140.
 
 ## Proposed ROADMAP rows
 
-(filled by the lane if any finding is FILED)
+None. The four FILED findings (OPS-CI-CONFIG-07..10) are all in the
+byte-pinned shared `ops/loop/slots.py` and go to MAIN as kit defects
+(`docs/audit/20261017-ops-ci-config.md`, "Kit defects for MAIN"), not to an
+EW row.
+
+## As-built deviations
+
+1. Slice widened to ci/requirements-*.{in,txt}, NOTICE, SECURITY.md,
+   CONTRIBUTING.md and conftest.py. Alternatives: README only as the sole
+   named root file. Why: the plan says "root files" and the workflow installs
+   the ci/ pins, so they are CI config. Reverses if: a later slice owns them.
+2. Progress file `ops/loop/control/progress/p152-build.json` not written: the
+   lane's permission set denied the write to the main checkout and the run of
+   a helper script (both refused at the tool layer). Alternatives: write it
+   in the worktree (wrong location per FLEET item 12). Why: no permitted path;
+   the loop's own lane progress covers the run. Reverses if: the lane
+   settings grant that one path.

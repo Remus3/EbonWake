@@ -148,7 +148,7 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 149 | Hardening audit tools: tools/*.py (loop, lanes, launch, leak sweep, eta, hooks installers) - findings fixed TDD, record docs/audit/20261017-tools.md (plan doc docs/plans/149-audit-tools.md) | [x] done 2026-10-17 (loop build, session merge after leak-sweep refusal; refute 0/3 PASS) |
 | 150 | Hardening audit tests-a: tests/test_[a-l]*.py plus tests/conftest.py (test hygiene and coverage gaps) - findings fixed TDD, record docs/audit/20261017-tests-a.md (plan doc docs/plans/150-audit-tests-a.md) | [ ] open |
 | 151 | Hardening audit tests-b: tests/test_[m-z]*.py (test hygiene and coverage gaps) - findings fixed TDD, record docs/audit/20261017-tests-b.md (plan doc docs/plans/151-audit-tests-b.md) | [ ] open |
-| 152 | Hardening audit ops-ci-config: ops/ non-kit files, .github/, config templates, root files - findings fixed TDD, record docs/audit/20261017-ops-ci-config.md (plan doc docs/plans/152-audit-ops-ci-config.md) | [ ] open |
+| 152 | Hardening audit ops-ci-config: ops/ non-kit files, .github/, config templates, root files - findings fixed TDD, record docs/audit/20261017-ops-ci-config.md (plan doc docs/plans/152-audit-ops-ci-config.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
 
 Ranking rationale per deep dive / audit and the closed channel-order
 sections: `docs/plans/ROADMAP-history.md` (moved verbatim 2026-10-09, plan
