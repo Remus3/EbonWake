@@ -151,7 +151,7 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 152 | Hardening audit ops-ci-config: ops/ non-kit files, .github/, config templates, root files - findings fixed TDD, record docs/audit/20261017-ops-ci-config.md (plan doc docs/plans/152-audit-ops-ci-config.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
 | 153 | CORS: answer GET / SSE only for the dashboard origins (audit follow-on SERVER-A-05; plan doc docs/plans/153-cors-dashboard-origins.md) | [ ] open |
 | 154 | Robots-gated fetchers refuse cross-host redirects (audit follow-on SERVER-A-06; plan doc docs/plans/154-robots-fetch-no-cross-host-redirect.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
-| 155 | Server config readers honour the injected config_path (audit follow-on TESTS-A-01, TESTS-A-15; plan doc docs/plans/155-config-path-injection.md) | [ ] open |
+| 155 | Server config readers honour the injected config_path (audit follow-on TESTS-A-01, TESTS-A-15; plan doc docs/plans/155-config-path-injection.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
 | 156 | Test hygiene follow-ups from the 20261017 audit (audit follow-on TESTS-A-16, -17, -18, -19, -25, -26, -27, -28; plan doc docs/plans/156-test-hygiene-followups.md) | [ ] open |
 | 157 | Extend the test-isolation guard to tests/test_[a-l]*.py (audit follow-on TESTS-B-07; plan doc docs/plans/157-test-isolation-guard-a-l.md) | [ ] open |
 
