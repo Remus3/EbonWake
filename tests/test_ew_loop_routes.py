@@ -108,19 +108,11 @@ def test_data_deep_dive_and_handoff_routes(tmp_path):
 
 
 def test_resolve_lane_runs_sonnet(tmp_path):
-    root = L.make_root(tmp_path)
-    items = ew_loop.Items(root)
-    items.put({"id": "012", "kind": "resolve", "base_kind": "plan", "state": "dispatched",
-               "lane": "build", "prompt": "p", "title": "t", "label": "l", "attempts": 1,
-               "keep_ref": "refs/ew/keep/012", "resolve_runs": 1})
-    seen = []
-
-    def run_lane(lane, prompt, **kw):
-        seen.append(kw)
-        return {"rc": 0, "error": None, "worktree": "wt"}
-
-    ew_loop.lane_worker("012", deps=L.deps(root), run_lane=run_lane)
-    assert (seen[0]["model"], seen[0]["effort"]) == ("sonnet", "medium")
+    # plan 150: through _worker, so the lane_worker exit code is asserted too
+    kw, rec = _worker(tmp_path, "resolve", base_kind="plan",
+                      keep_ref="refs/ew/keep/012", resolve_runs=1)
+    assert (kw["model"], kw["effort"]) == ("sonnet", "medium")
+    assert rec["route"] == {"model": "sonnet", "effort": "medium"}
 
 
 @pytest.mark.git  # real git world via test_ew_loop (plan 097 tier guard)

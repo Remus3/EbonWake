@@ -21,6 +21,7 @@ import ew_loop  # noqa: E402
 # module is one git unit (--dist loadfile keeps it on one worker). Tests over
 # about 1.5 s are also marked slow.
 pytestmark = pytest.mark.git
+GIT_TIMEOUT_S = 60  # plan 150: a git stuck on a lock / prompt fails, never hangs
 
 ROADMAP = """# Ebonwake roadmap
 
@@ -712,7 +713,7 @@ def test_checklist_cli_heads_with_handoff_session(tmp_path, monkeypatch, capsys)
 def git(cwd, *args):
     r = subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com",
                         "-c", "core.hooksPath=/dev/null", *args], cwd=str(cwd),
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, timeout=GIT_TIMEOUT_S)
     assert r.returncode == 0, r.stderr
     return r.stdout.strip()
 
@@ -720,7 +721,7 @@ def git(cwd, *args):
 def real_git(args, cwd, input=None):
     return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com",
                            "-c", "core.hooksPath=/dev/null", *args], cwd=str(cwd),
-                          capture_output=True, text=True, input=input)
+                          capture_output=True, text=True, input=input, timeout=GIT_TIMEOUT_S)
 
 
 def git_world(tmp_path, kind="plan"):
@@ -1831,7 +1832,7 @@ def _git_at(cwd, when, *args):
     env = dict(os.environ, GIT_COMMITTER_DATE=when, GIT_AUTHOR_DATE=when)
     r = subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com",
                         "-c", "core.hooksPath=/dev/null", *args], cwd=str(cwd),
-                       capture_output=True, text=True, env=env)
+                       capture_output=True, text=True, env=env, timeout=GIT_TIMEOUT_S)
     assert r.returncode == 0, r.stderr
     return r.stdout.strip()
 
@@ -2209,7 +2210,10 @@ def test_paused_resolve_gives_its_run_back(tmp_path):
                         keep_ref="refs/ew/keep/012")
     (root / "ops/loop/control").mkdir(parents=True, exist_ok=True)
     (root / "ops/loop/control/HALT").write_text("")
-    assert ew_loop.lane_worker("012", deps=deps(root)) == 0
+
+    def ran_past_halt(*a, **k):  # plan 150: never the real ew_lane.run_lane
+        pytest.fail("lane_worker ran a lane past HALT")
+    assert ew_loop.lane_worker("012", deps=deps(root), run_lane=ran_past_halt) == 0
     rec = items.get("012")
     assert rec["state"] == "paused" and rec["resolve_runs"] == 0
 

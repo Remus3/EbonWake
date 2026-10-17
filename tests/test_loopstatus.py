@@ -167,6 +167,17 @@ def test_main_root_follows_worktree_gitdir_file(tmp_path):
     assert ls.main_root(tmp_path / "plain") == tmp_path / "plain"
 
 
+def test_main_root_other_gitdir_shapes_are_their_own_root(tmp_path):
+    # plan 150 coverage: a gitdir that is not <x>/.git/worktrees/<n> (a submodule)
+    # and a .git file without the gitdir: prefix both keep the root
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    (wt / ".git").write_text("gitdir: " + str(tmp_path / "m" / ".git" / "modules" / "x") + "\n")
+    assert ls.main_root(wt) == wt
+    (wt / ".git").write_text("junk\n")
+    assert ls.main_root(wt) == wt
+
+
 def test_cache_holds_for_ttl():
     calls = []
     clock = [NOW]

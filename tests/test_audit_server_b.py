@@ -48,6 +48,7 @@ def test_b01_future_fetched_at_refresh_async_starts(tmp_path):
     atomic_write_json(c.cache_dir / "k.json", {"fetched_at": clock.t + 3600, "data": "old"})
     ran = []
     assert c.refresh_async("k", 600, lambda: "new", spawn=lambda fn: ran.append(fn)) is True
+    assert len(ran) == 1  # plan 150: the refresh really was handed to spawn
     peek = c.peek("k", 600)
     assert peek["stale"] is True and peek["age_s"] >= 0
 

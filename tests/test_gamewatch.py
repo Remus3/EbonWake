@@ -524,7 +524,8 @@ def test_tasklist_failure_is_unknown():
 
 
 def test_module_never_touches_game_process():
-    src = open(gamewatch.__file__, encoding="utf-8").read()
+    with open(gamewatch.__file__, encoding="utf-8") as f:  # plan 150: closed
+        src = f.read()
     for banned in ("OpenProcess", "ReadProcessMemory", "ctypes", "psutil", "SendInput",
                    "keybd_event", "PostMessage", "win32api", "shell=True"):
         assert banned not in src, banned

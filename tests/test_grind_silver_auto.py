@@ -290,7 +290,9 @@ def test_ocr_commit_notifier_refills_then_bumps(rig):
             raise RuntimeError("boom")
 
     Fake.grind = Broken()
+    Fake.bus.bumped.clear()  # plan 150: the bump after a failing fill is asserted
     ewapp.EWServer._ocr_auto_changed(Fake())
+    assert "grind" in Fake.bus.bumped
     assert s["id"] == rig.gs.view()["sessions"][0]["id"]
 
 

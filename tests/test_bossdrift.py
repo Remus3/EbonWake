@@ -327,9 +327,12 @@ def srv(tmp_path):
 
 def _get(s, path):
     c = http.client.HTTPConnection("127.0.0.1", s.server_address[1], timeout=5)
-    c.request("GET", path)
-    r = c.getresponse()
-    return r.status, json.loads(r.read())
+    try:  # plan 150: the connection is always closed
+        c.request("GET", path)
+        r = c.getresponse()
+        return r.status, json.loads(r.read())
+    finally:
+        c.close()
 
 
 def test_get_bosses_carries_drift(srv):
