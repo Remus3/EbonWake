@@ -183,7 +183,8 @@ def test_rate_ignores_samples_before_since():
     pre = EPOCH_AT - dt.timedelta(hours=2)
     s = [_at(pre, 58, 0.0), _at(pre + dt.timedelta(hours=1), 58, 50.0),  # 50 %/h pre-patch
          _at(EPOCH_AT, 58, 60.0), _at(EPOCH_AT + dt.timedelta(hours=2), 58, 62.0)]
-    assert leveling.rate_pct_h(s) == pytest.approx(6.0, abs=50)  # mixed, sanity only
+    # plan 150: was approx(6.0, abs=50), which the filtered 1.0 also met
+    assert leveling.rate_pct_h(s) > 1.5  # unfiltered: the pre-patch climb counts
     assert leveling.rate_pct_h(s, EPOCH_AT) == pytest.approx(1.0)
     assert leveling.rate_pct_h(s[:2] + s[2:3], EPOCH_AT) is None  # one post sample
 

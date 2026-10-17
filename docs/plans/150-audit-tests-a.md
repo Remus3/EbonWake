@@ -52,4 +52,29 @@ Depends on: 135, 136, 137, 138, 139, 140.
 
 ## Proposed ROADMAP rows
 
-(filled by the lane if any finding is FILED)
+| NNN | Server config defaults follow the injected path: `config_market` / `config_market_watch` / `config_hash` honour `config_path` (server/ew/app.py:136-195), `loopstatus.main_root` resolves a relative gitdir (TESTS-A-01 root cause, TESTS-A-15) | [ ] open |
+| NNN | Test hygiene follow-ups from plan 150: leveling fixtures off tracked epoch / issue data (TESTS-A-16), shared HTTP helper module instead of `from tests.test_x` (A-17), per-test git marks in test_ew_loop (A-18), git global config isolation (A-19), eventnotices fixture list (A-25), launch spawn path (A-26), grind old-session refill (A-27), deadeye reject-leaves-state (A-28) | [ ] open |
+
+## As-built deviations
+
+1. Reading split across six foreground read-only reader agents (about 3.5k
+   lines each); every candidate finding was re-checked against the code
+   before it was accepted or fixed here. Alternatives: one inline read of
+   20.5k lines (exceeds one context window), sampling (forbidden by the
+   method). Why: full line-by-line coverage inside one lane run. Reverses if:
+   the lane prompt forbids foreground sub-agents outright.
+2. TESTS-A-01 fixed in the test harness (new `tests/ew_hermetic.py`, installed
+   from conftest, autouse) instead of editing about 20 fixtures and the
+   server. Alternatives: pass `config_path` / `market_client` / `profile_cfg`
+   in every fixture (misses `config_market`, which ignores `config_path`, and
+   the next new fixture); change server/ew/app.py (outside this tests slice,
+   FILED as a row). Why: one root-cause guard covers every current and future
+   test, including tests outside this slice. Reverses if: the server row lands
+   and every default follows `config_path` (the urlopen guard stays).
+3. Test-hygiene FIXED rows (the defect is in the test itself) carry
+   "hygiene" in the audit doc's test column instead of a red-before-fix run:
+   making them red needs breaking the code under test first. Reverses if: an
+   adjudicator requires mutation runs for test-only fixes.
+4. The FLEET item 12 progress file in the main checkout was not written:
+   this run was not granted writes outside its worktree. Reverses if: the
+   lane grant includes the progress path.

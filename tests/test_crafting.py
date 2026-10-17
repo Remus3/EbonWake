@@ -193,7 +193,9 @@ def test_cap_on_recipes(svc, monkeypatch):
 
 def test_vendor_input_is_never_priced_from_market(svc, env):
     svc.add(recipe(inputs=[{"id": 5, "qty": 1, "vendor_price": 3}]))
-    assert 5 not in env.peeks
+    svc.view()
+    assert 9 in env.peeks  # plan 150: the market was asked (the output), so the
+    assert 5 not in env.peeks  # absence of the vendor input is meaningful
 
 
 def test_hand_edited_store_is_cleaned(tmp_path, env):

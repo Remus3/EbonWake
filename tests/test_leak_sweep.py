@@ -87,14 +87,17 @@ import subprocess  # noqa: E402
 
 
 def _g(repo, *args):
+    # plan 150: bounded, so a git stuck on a lock or prompt fails, never hangs
     return subprocess.run(["git", *args], cwd=str(repo), check=True,
-                          capture_output=True).stdout.decode().strip()
+                          capture_output=True, timeout=60).stdout.decode().strip()
 
 
 def _commit(repo, name, text, msg):
     (repo / name).write_text(text, newline="\n")
     _g(repo, "add", name)
+    # plan 150: the machine's global hooks / signing never run on scratch commits
     _g(repo, "-c", "user.name=t", "-c", "user.email=t@example.com",
+       "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false",
        "commit", "-q", "-m", msg)
     return _g(repo, "rev-parse", "HEAD")
 

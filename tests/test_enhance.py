@@ -75,9 +75,10 @@ def test_agris_thresholds_seeded(svc, family, steps):
 
 
 def test_preview_values_flagged_unverified(table):
-    for r in table["rows"]:
-        if "crons_per_attempt" in r or "points" in r:
-            assert r["verified"] is False and r["unverified"]
+    flagged = [r for r in table["rows"] if "crons_per_attempt" in r or "points" in r]
+    assert flagged  # plan 150: the loop below used to pass over an empty list
+    for r in flagged:
+        assert r["verified"] is False and r["unverified"]
 
 
 # --- chance --------------------------------------------------------------------
@@ -393,7 +394,8 @@ def test_route_prices_from_cache_only(srv, tmp_path):
 @pytest.mark.parametrize("q", [
     "family=sovereign", "step=TET", "family=sovereign&step=TET&fs=-1",
     "family=sovereign&step=TET&fs=abc", "family=sovereign&step=TET&fs=1000",
-    "family=sovereign&step=TET&crons=2", "family=nope&step=TET", "family=sovereign&step=+3",
+    "family=sovereign&step=TET&crons=2", "family=nope&step=TET", "family=sovereign&step=%2B3",
+    "family=sovereign&step=+3",  # plan 150: "+" decodes to a space; %2B3 is the "+3" case
 ])
 def test_route_rejects_bad_query(srv, q):
     st, doc = _req(srv, "GET", "/api/deadeye/enhance?" + q)

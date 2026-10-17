@@ -8,7 +8,10 @@ Plan 097: the tier guard (tests/ew_tiers.py) - markers slow / server / git,
 binds a socket fails.
 
 Kit v14 3.4: FLEET_SIDECAR_ROOT is pinned to "" (off) for the whole suite, so
-fleet_lanes.worktree_path() never reads the machine variable."""
+fleet_lanes.worktree_path() never reads the machine variable.
+
+Plan 150: the host guard (tests/ew_hermetic.py) - no test reads the host's
+config/local.json or live market cache, or opens a non-loopback URL."""
 
 import os
 import sys
@@ -16,6 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ops" / "fleet_kit"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ew_hermetic  # noqa: E402
 import ew_tiers  # noqa: E402
 import fleet_test_guard  # noqa: E402
 
@@ -23,3 +27,4 @@ os.environ["FLEET_SIDECAR_ROOT"] = ""  # empty value = off (process env wins)
 
 fleet_test_guard.install(globals(), root=Path(__file__).resolve().parents[1], env_roots={})
 ew_tiers.install(globals())
+ew_hermetic.install(globals())

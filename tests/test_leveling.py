@@ -231,6 +231,10 @@ def test_samples_capped_newest_kept(svc, clock):
     doc = svc.store.get("leveling")
     assert len(doc["samples"]) == leveling.MAX_SAMPLES
     assert len(svc.view()["samples"]) == leveling.VIEW_SAMPLES
+    # plan 150: the 5 oldest were dropped, not the newest
+    kept = sorted(dt.datetime.fromisoformat(s["ts"]).timestamp() for s in doc["samples"])
+    assert kept[0] == T0.timestamp() + 5 * 60
+    assert kept[-1] == T0.timestamp() + (leveling.MAX_SAMPLES + 4) * 60
 
 
 def test_sample_delete(svc, clock):

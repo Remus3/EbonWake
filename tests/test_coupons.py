@@ -364,7 +364,8 @@ def test_one_click_add_drops_the_suggestion(srv):
 
 def test_state_sources_coupons(srv):
     st, body = _req(srv, "GET", "/api/state")
-    assert st == 200 and body["sources"]["coupons"]["status"] in ("pending", "ok", "off", "stale")
+    # plan 150: a fresh server that never fetched is exactly "pending"
+    assert st == 200 and body["sources"]["coupons"]["status"] == "pending"
     assert srv.test_net.calls == [], "/api/state never fetches"
 
 
