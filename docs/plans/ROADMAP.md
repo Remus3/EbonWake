@@ -154,6 +154,7 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 155 | Server config readers honour the injected config_path (audit follow-on TESTS-A-01, TESTS-A-15; plan doc docs/plans/155-config-path-injection.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
 | 156 | Test hygiene follow-ups from the 20261017 audit (audit follow-on TESTS-A-16, -17, -18, -19, -25, -26, -27, -28; plan doc docs/plans/156-test-hygiene-followups.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
 | 157 | Extend the test-isolation guard to tests/test_[a-l]*.py (audit follow-on TESTS-B-07; plan doc docs/plans/157-test-isolation-guard-a-l.md) | [x] done 2026-10-17 (loop; refute 0/3 PASS) |
+| 158 | Store last-good snapshots: a corrupt operator doc restores from `.good` / 7 daily backups instead of emptying, with a restored signal (research 0030; plan doc docs/plans/158-store-last-good-restore.md) | [ ] open |
 
 Ranking rationale per deep dive / audit and the closed channel-order
 sections: `docs/plans/ROADMAP-history.md` (moved verbatim 2026-10-09, plan
@@ -175,6 +176,8 @@ hardening slice each (about 7k lines, lane timeout 5400 s); queued after the
 the FILED product / test items became rows 153-157 (TESTS-A-01 / -15 and
 TESTS-B-06 folded into 155); OPS-CI-CONFIG-07..10 (shared slots.py) went to
 MAIN as a kit defect note.
+
+Ranking 20261018 deep dive (research 0030): 158 (silent operator-data loss on a corrupt doc; above polish, below the 0029 unattended-recovery rows).
 
 Rules: refute rounds capped at 3 per item; every plan lands via a lane worktree
 and one push; ETA log updated by every run.
