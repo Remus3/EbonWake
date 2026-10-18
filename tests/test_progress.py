@@ -11,6 +11,7 @@ import re
 import threading
 from pathlib import Path
 
+import fleet_test_guard  # kit v18: load-scaled timing budgets (conftest puts the kit on sys.path)
 import pytest
 
 from server.ew import app as ewapp
@@ -526,7 +527,7 @@ def test_get_view_refreshes_off_request_path(tmp_path):
     t0 = _t.monotonic()
     v1 = s.view()
     v2 = s.view()
-    assert _t.monotonic() - t0 < 1.0, "GET blocked on upstream"
+    assert _t.monotonic() - t0 < fleet_test_guard.budget(1.0), "GET blocked on upstream"
     assert v1["profile"]["status"] == "pending" and v1["profile"]["data"] is None
     assert v2["profile"]["status"] == "pending"
     assert _wait(lambda: len(f.calls) == 1)
@@ -563,7 +564,7 @@ def test_route_post_does_not_wait_on_slow_upstream(tmp_path):
         assert st == 200 and doc["profile"]["status"] == "pending"
         st, doc = _req(s, "POST", "/api/progress", {"character": {"level": 9}})
         assert st == 200 and doc["character"]["level"] == 9
-        assert _t.monotonic() - t0 < 2.0
+        assert _t.monotonic() - t0 < fleet_test_guard.budget(2.0)
         f.gate.set()
         assert _wait(lambda: _req(s, "GET", "/api/progress")[1]["profile"]["status"] == "ok")
         assert len(f.calls) == 1

@@ -123,7 +123,7 @@ def run_lane(lane, prompt, writes_code=False, timeout=3600, dry_run=False, root=
                          timeout=timeout, cwd=wt, stdin=True,
                          extra=CODE_EXTRA if writes_code else (),
                          governor="queued", governor_timeout=timeout, kind="build",
-                         **route)
+                         slot_id=lane, progress_task=task, **route)
         line = dict(line, worktree=str(wt))
         ok = line.get("rc") == 0 and not line.get("error")
         return line

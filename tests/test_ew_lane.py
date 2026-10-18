@@ -69,6 +69,8 @@ def test_run_lane_claims_lane_one_governor_slot_at_spawn(tmp_path):
     code, kw = seen["spawn"][0]
     assert code == "EW" and kw["cwd"] == wt and kw["governor"] == "queued"
     assert kw["kind"] == "build"
+    # kit v18: lanes label the usage row's slot and hand the progress row over
+    assert kw["slot_id"] == "data" and kw["progress_task"] == "lane-1"
     assert seen["record"] == [("lane-data-read", True)]
     assert seen["progress"] == [("lane-1", 20, "running"), ("lane-1", 100, "done")]
     assert all(s.startswith("data: ") for s in seen["step"])

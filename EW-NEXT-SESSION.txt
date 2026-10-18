@@ -14,10 +14,12 @@ session 37). Otherwise let the idle deep-dive seed new rows (ROADMAP open:
 none besides MAIN-gated row 106).
 
 Carried forward (not acted on yet):
-- OPERATOR: MAIN ORDER N1af105 step 5 read-back - at the next operator
-  logon, confirm no dashboard window shows, the tray icon is present and
-  the hotkey opens the dashboard. Steps 1-4 done (step 4 = logon task
-  reinstalled with --hidden in session 31, 82f9146).
+- NOTE: 2026-10-18 MAIN ORDER N1af105 step 5 read-back PASS (operator
+  confirmed at logon): no dashboard window showed at logon; the dashboard
+  loads when the operator chooses it from the tray/hotkey; the tray icon is
+  present while the dashboard is open and while it is minimized. Steps 1-4
+  done (step 4 = logon task reinstalled with --hidden in session 31,
+  82f9146). N1af105 complete.
 - OPERATOR: asked session 37, awaiting answer (one batched ask, nothing
   blocks on it; do not re-send): QA plans 009-073 in
   the dashboard / overlay (per-plan detail in docs/handoff-ledger.txt;

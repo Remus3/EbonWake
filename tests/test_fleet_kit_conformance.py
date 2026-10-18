@@ -1,4 +1,4 @@
-"""Fleet kit v17 is vendored byte-for-byte and the CLAUDE.md FLEET-COMMON block is
+"""Fleet kit v18 is vendored byte-for-byte and the CLAUDE.md FLEET-COMMON block is
 byte-identical. Never edit the kit locally; MAIN ships new versions."""
 
 import hashlib
@@ -10,7 +10,7 @@ KIT = ROOT / "ops" / "fleet_kit" / "fleet_headless.py"
 SF_CMD = 'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_subagent_first.py"'
 CLAIMS_CMD = 'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_claims.py" hook'
 RELEASE_CMD = 'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_claims.py" release-hook'
-MANIFEST_V15_SHA256 = "6a02c0582f2326036b1a95e19202003be399d79b73fc407791e17cdc145a42fe"
+MANIFEST_SHA256 = "9a02b1438bd9b12bb027fcaacade042b38f0cb497b5288c774646b30532cdfa0"
 SLOTS_SHA256 = "290cbf80ce6989e15ad778be9032503733c8820030bfa6a9b27439b29d70486e"
 
 
@@ -26,13 +26,13 @@ def test_fleet_kit_conformance():
     assert _load().conformance(ROOT) == []
 
 
-def test_kit_is_v17_with_all_files():
+def test_kit_is_v18_with_all_files():
     import json
     man = json.loads((ROOT / "ops" / "fleet_kit" / "MANIFEST.json").read_text("ascii"))
-    assert man["version"] == 17
-    assert _load().KIT_VERSION == 17
+    assert man["version"] == 18
+    assert _load().KIT_VERSION == 18
     data = (ROOT / "ops" / "fleet_kit" / "MANIFEST.json").read_bytes()
-    assert hashlib.sha256(data).hexdigest() == MANIFEST_V15_SHA256
+    assert hashlib.sha256(data).hexdigest() == MANIFEST_SHA256
     assert {"cli_display.json", "fleet_checklist.py", "fleet_done.py", "fleet_headless.py",
             "fleet_inbox.py", "fleet_lanes.py", "fleet_secrets.py", "fleet_statusline.js",
             "fleet_subagent_first.py", "fleet_subagent_status.js", "fleet_watch.py", "tokens.css", "tokens.json",
