@@ -267,6 +267,19 @@
     return { cls: 'warn ew-ovr', tab: 'system', text: n === 1 ? '1 override' : n + ' overrides',
       title: overrideItems(sec).map(function (i) { return overrideBadge(i).title; }).join('\n') };
   }
+  // Plan 158: one warn pill while a store doc was restored from its last-good
+  // copy in the last day (signals digest `restores` section); else null.
+  function restorePill(doc) {
+    const sec = doc && doc.restores && typeof doc.restores === 'object' ? doc.restores : null;
+    const items = sec && Array.isArray(sec.items) ? sec.items.filter(function (i) {
+      return i && typeof i === 'object' && typeof i.domain === 'string';
+    }) : [];
+    if (!items.length) return null;
+    const lines = items.map(function (i) { return 'restored ' + i.domain + ' from last-good'; });
+    return { cls: 'warn ew-rst', tab: 'system',
+      text: items.length === 1 ? lines[0] : items.length + ' docs restored from last-good',
+      title: lines.join('\n') };
+  }
 
   // Server card rows from /api/version + /api/health (either may be null).
   // Plan 078: `started` in opts.zone (default local) with the UTC as a third
@@ -317,7 +330,7 @@
     sourceFreshness: sourceFreshness, SIGNAL_CLS: SIGNAL_CLS, signalRows: signalRows,
     signalPill: signalPill, VERDICT_ORDER: VERDICT_ORDER, verdictRows: verdictRows, fmtOverrideValue: fmtOverrideValue, overrideBadge: overrideBadge,
     overrideItems: overrideItems, overrideBadges: overrideBadges, overrideRows: overrideRows,
-    overridePill: overridePill, serverRows: serverRows, DEFAULT_HOTKEYS: DEFAULT_HOTKEYS,
+    overridePill: overridePill, restorePill: restorePill, serverRows: serverRows, DEFAULT_HOTKEYS: DEFAULT_HOTKEYS,
     validAccelerator: validAccelerator, hotkeys: hotkeys, knownIssueChips: knownIssueChips });
   return function link() {
     externalUrl = K.externalUrl;

@@ -283,7 +283,7 @@ def test_digest_shape_and_order():
         assert r["level"] in signals.LEVELS
         assert r["lines"] == [] or r["id"] == "data"  # plan 085: evidence on the data row only
     assert doc["bad"] == 0 and doc["worst"] in ("ok", "off")
-    assert set(doc) == {"rows", "bad", "worst", "at", "overrides"}
+    assert set(doc) == {"rows", "bad", "worst", "at", "overrides", "restores"}
     assert doc["overrides"] == {"count": 0, "items": []}  # plan 079: none by default
 
 

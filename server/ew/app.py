@@ -500,7 +500,8 @@ class EWServer(ThreadingHTTPServer):
             "ocr": self._sig_ocr, "notices": self._sig_notices, "market": self._sig_market,
             "profile": self._sig_profile, "boss_drift": lambda: None,
             "data": self.verdicts.signal},  # plan 085
-            clock=today_clock or time.time, overrides=self._sig_overrides)
+            clock=today_clock or time.time, overrides=self._sig_overrides,
+            restores=self.store.restores)  # plan 158
         # Plan 080: coupon / event-notice checks are always on; a config incident
         # switch (plan 079 entry, 24 h) turns one off until the first start after
         # it expires. Only read when a live client was passed (main(), never a bare test).
