@@ -200,3 +200,17 @@ reviewer prefers inline).
 - Step 4 `tools/logon_task.py install` + read-back: DONE session 31 (2026-10-12) from the MAIN checkout; `logon_task.py status` read back arguments `"<root>/tools/launch.py" --hidden`, delay PT1M, enabled.
 - Step 5 next-logon read-back (no dashboard window, tray icon present, hotkey opens it): BLOCKED - needs a physical logon by the operator.
 - Progress file ops/loop/control/progress/N1af105.json: BLOCKED - write to the main checkout was denied by this run's permissions.
+
+## Order Neba23f - blocked items
+
+GH-HYGIENE ORDER (MAIN 2026-10-18-1215). Section 1 done in this tree: README
+Features table gained the missing Home and Settings tabs (server `TABS` in
+`server/ew/app.py` serves nine); every other README claim, relative link,
+screenshot file, badge target, hotkey default (`Control+Alt+E` /
+`Control+Alt+D`) and the Apache-2.0 licence line verified against HEAD.
+
+- Section 2 (About, topics, visibility, default branch, branch protection, wiki / projects / discussions, social preview, releases / tags via gh): BLOCKED - `gh` is outside this lane's allow list.
+- Section 3 (outside view via gh repo view / gh API, Actions status of badge workflows, open issues and PRs): BLOCKED - `gh` is outside this lane's allow list.
+- Outside-view finding, root tree: three tracked one-off merge-conflict scratch scripts `fix_resolve.py`, `p107-resolve_fix.py`, `p115-resolve_fix.py` sit at the repo root (no consumer found); removal via `git rm`: BLOCKED - `git rm` is outside this lane's allow list. Next session or lane: `git rm` them.
+- Section 4 (commit, push, read back): BLOCKED by this lane's own order (no commit); the loop commits and pushes after merge.
+- Progress file ops/loop/control/progress/Neba23f.json: BLOCKED - write to the main checkout was denied by this run's permissions.
