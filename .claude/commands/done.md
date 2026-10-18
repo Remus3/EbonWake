@@ -117,6 +117,20 @@ Overwrite the whole file, read it back (the read-back is the recorded act),
 commit it, push it (same batch if CI has not started, else one more small push
 is acceptable for the hand-off only).
 
+### 7b. Status board push (kit v19, FLEET-COMMON item 18)
+
+After the hand-off is READ BACK and before the done marker, push the board ONCE:
+pipe the last printed session checklist into
+
+    python ops/fleet_kit/fleet_board.py calls --final --session <n>
+
+and make the two tool calls it prints, exactly (Artifact publish of status.json,
+then ArtifactData update of datasets/board with the blob url in place of
+`__URL__`). A version mismatch: `fleet_board.py pushed --version <current>`, redo
+the second call. A headless run prints `no push: headless` - nothing to do. A
+failed push is one hand-off line (`NOTE: board push failed - <cause>`), never a
+ritual failure.
+
 ### 8. Done marker, then the final output - ONE line
 
 The LAST act of /done (kit v9, FLEET-COMMON item 15), after the commit and the

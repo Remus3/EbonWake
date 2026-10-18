@@ -49,3 +49,5 @@ app/dist/
 .claude/settings.local.json
 .claude/worktrees/
 _scratch/
+# kit v19 status board runtime state
+ops/loop/control/board/

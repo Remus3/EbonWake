@@ -172,6 +172,13 @@ edit. Tree-specific rules go BELOW this block, never inside it.
     strips, pre-push refuses; operator identity only from local git config
     `fleet.operatorIdent`), fleet_gitlock and the account attribution keys.
     A history rewrite runs only on MAIN's ORDER, via `fleet_rewrite.py`.
+18. STATUS BOARD (kit v19; operator order 2026-10-18). Each tree's claude.ai
+    board URL lives in `ops/status_board.json` {"url"}. An interactive
+    session pushes its board ONLY at session start, after every item-13 b
+    reprint and at /done (`--final`): `fleet_board.py calls --session <n>`
+    (checklist on stdin) renders status.json and prints the exact two tool
+    calls - one Artifact asset upload of that file, one ArtifactData update
+    of datasets/board pinned with if_version. Headless runs never push.
 <!-- FLEET-COMMON END -->
 
 # EW rules (tree-specific)
@@ -321,6 +328,12 @@ edit another tree's registry.
 
 - Start: read `EW-NEXT-SESSION.txt`, then this file, `docs/plans/ROADMAP.md`,
   `git log -10`. On "continue", work the hand-off's next action.
+- Status board (kit v19, FLEET-COMMON 18; board in `ops/status_board.json`):
+  an interactive session pushes ONLY after printing the session-start checklist
+  and after every item-13 b reprint - pipe that checklist into
+  `python ops/fleet_kit/fleet_board.py calls --session <n>` and make the two
+  printed calls; /done pushes once with `--final`. Headless runs never push.
+  A failed push is a hand-off line, never a blocker.
 - Spec first, then failing test, then code (TDD). A `verifier` agent confirms
   before any done-claim (refute rounds capped at 3).
 - End: `/done` (`.claude/commands/done.md`). Its ONLY chat output is

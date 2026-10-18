@@ -1,4 +1,4 @@
-"""Fleet kit v18 is vendored byte-for-byte and the CLAUDE.md FLEET-COMMON block is
+"""Fleet kit v19 is vendored byte-for-byte and the CLAUDE.md FLEET-COMMON block is
 byte-identical. Never edit the kit locally; MAIN ships new versions."""
 
 import hashlib
@@ -10,7 +10,7 @@ KIT = ROOT / "ops" / "fleet_kit" / "fleet_headless.py"
 SF_CMD = 'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_subagent_first.py"'
 CLAIMS_CMD = 'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_claims.py" hook'
 RELEASE_CMD = 'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_claims.py" release-hook'
-MANIFEST_SHA256 = "9a02b1438bd9b12bb027fcaacade042b38f0cb497b5288c774646b30532cdfa0"
+MANIFEST_SHA256 = "98271d87bf45f49b84f0c82a3a075a83c0d6309c2897adf40a3b6750e84b751c"
 SLOTS_SHA256 = "290cbf80ce6989e15ad778be9032503733c8820030bfa6a9b27439b29d70486e"
 
 
@@ -26,18 +26,18 @@ def test_fleet_kit_conformance():
     assert _load().conformance(ROOT) == []
 
 
-def test_kit_is_v18_with_all_files():
+def test_kit_is_v19_with_all_files():
     import json
     man = json.loads((ROOT / "ops" / "fleet_kit" / "MANIFEST.json").read_text("ascii"))
-    assert man["version"] == 18
-    assert _load().KIT_VERSION == 18
+    assert man["version"] == 19
+    assert _load().KIT_VERSION == 19
     data = (ROOT / "ops" / "fleet_kit" / "MANIFEST.json").read_bytes()
     assert hashlib.sha256(data).hexdigest() == MANIFEST_SHA256
     assert {"cli_display.json", "fleet_checklist.py", "fleet_done.py", "fleet_headless.py",
             "fleet_inbox.py", "fleet_lanes.py", "fleet_secrets.py", "fleet_statusline.js",
             "fleet_subagent_first.py", "fleet_subagent_status.js", "fleet_watch.py", "tokens.css", "tokens.json",
             "fleet_claims.py", "fleet_gitlock.py", "fleet_suite_gate.py", "fleet_test_guard.py",
-            "fleet_identity.py", "fleet_rewrite.py",
+            "fleet_identity.py", "fleet_rewrite.py", "fleet_board.py",
             "FLEET-COMMON.md", "LICENSE", "NOTICE"} == set(man["files"])
     on_disk = {p.name for p in (ROOT / "ops" / "fleet_kit").iterdir() if p.is_file()}
     assert on_disk == set(man["files"]) | {"MANIFEST.json"}
