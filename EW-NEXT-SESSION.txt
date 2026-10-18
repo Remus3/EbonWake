@@ -1,17 +1,16 @@
 EW NEXT SESSION
 ---------------
-SESSION: 38
+SESSION: 39
 
 Next action: monitor the loop (\EbonwakeOps\LaneLoop, progress/loop.json,
 loop_items/*.json); any item left in adjudicate / merge-conflict / gave-up
 / failed-dirty is fixed by a session agent (merge-stuck recipe in
-Context). After the operator's next logon, read back MAIN ORDER N1af105
-step 5 (OPERATOR bullet below) and record it. Answer any MAIN reply to the
-2026-10-12 notes (kit v17 ANSWER, SF-deny + commit-msg temp-path
-INFORMATION), to the 2026-10-15 N301812 ANSWER and to the 2026-10-17 14:06
-INFORMATION (slots.py governor defects OPS-CI-CONFIG-07..10; none as of
-session 37). Otherwise let the idle deep-dive seed new rows (ROADMAP open:
-none besides MAIN-gated row 106).
+Context). Confirm the loop sent the ANSWER for MAIN ORDER neba23f
+(GH-HYGIENE, merged 19f2aba) and that order N8d56e4 (kit v19) reads
+settled. Answer any MAIN reply to open EW notes (2026-10-12 kit v17 ANSWER
++ INFORMATION, 2026-10-15 N301812 ANSWER, 2026-10-17 14:06 slots
+INFORMATION, 2026-10-18 kit v18 / v19 ANSWERs). Otherwise let the idle
+deep-dive seed new rows (ROADMAP open: none besides MAIN-gated row 106).
 
 Carried forward (not acted on yet):
 - NOTE: 2026-10-18 MAIN ORDER N1af105 step 5 read-back PASS (operator
@@ -181,62 +180,69 @@ Carried forward (not acted on yet):
   the same name, so it stays.
 
 Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew, armed; session
-37 read: Ready, last run 16:34 rc 0, tick #1136; at /done (2026-10-17
-16:53) all 3 lane locks free, HALT absent; loop_items 172 merged, 18
+38 /done read (2026-10-18 13:2x): Ready, last run 12:34 rc 0, tick #1219
+idle; all 3 lane locks free, HALT absent; loop_items 176 merged, 18
 no-change, 1 failed (N7416e2, done by hand - NOTE above), none in
-adjudicate. Headless 55/120 in 24 h. Inbox: no unhandled ORDER / FIX /
-RULING, no MAIN reply to open notes. Outbound 2026-10-17: 1 (INFORMATION
-to MAIN 14:06). A loop tick that writes loop_inbox_watch.json during a
-whole suite trips fleet_test_guard (session 37 /done run 1, 16:49) - a
-race, not a test defect; re-run the gated suite. Logon task \Ebonwake args end in --hidden,
-delay PT1M, enabled (read back session 31). FLEET_SIDECAR_ROOT absent in HKCU Environment
-(read 2026-10-17 session 37 /done; row 106 stays MAIN-gated).
-ROADMAP open: none (row 106 [>] MAIN-gated). State: ops/loop/control/
-loop_items/*.json, progress/loop.json, progress/lane-<i>.json,
-inbox_status.json. Merge-stuck items are fixed by a session agent (merge
-refs/ew/keep/<id> onto main, keep both sides, mark item merged, delete
-keep ref, push). Restart: stop the server pid from /api/version, then
-`python tools/launch.py --server-only`. Proxy probe: netstat for :3456
-LISTENING. Memory is tight on the box; run suites sequentially.
-Repo-review style whole-checkout work runs by hand in a session, not as a
-loop lane (lanes cannot read gitignored main-checkout dirs, the gitlock or
-the progress file). tools/leak_sweep.py --pre-push reads stdin; run it
-with stdin from /dev/null or it hangs.
+adjudicate. Headless 31/120 in 24 h. Inbox: MAIN ORDER neba23f
+(GH-HYGIENE) merged by the loop as 19f2aba, its ANSWER not yet in the
+outbound ledger at /done; v19 ORDER N8d56e4 done by a session agent
+(1697041, ANSWER 1/1) and still listed pending in the loop checklist until
+the session-38 done mark / seen line settles it. SS ANSWER 1307 (kit v19
+not adopted by SS) is SS->MAIN, no reply. Outbound 2026-10-18: SS ANSWER
+1234 (undelivered: no inbox known for SS - config, not EW's to fix), MAIN
+ANSWERs 1235 (v18) and 1245 (v19). Kit v19: status board
+ops/status_board.json, fleet_board.py; /done step 7b pushes it --final;
+ops/stop_sentinels.json declares HALT. A loop tick that writes
+loop_inbox_watch.json during a whole suite trips fleet_test_guard - a
+race, not a test defect; re-run the gated suite. Logon task \Ebonwake args
+end in --hidden, delay PT1M, enabled (read back session 31).
+FLEET_SIDECAR_ROOT empty in HKCU Environment (read 2026-10-18 session 38
+/done; row 106 stays MAIN-gated). ROADMAP open: none (row 106 [>]
+MAIN-gated). State: ops/loop/control/ loop_items/*.json,
+progress/loop.json, progress/lane-<i>.json, inbox_status.json.
+Merge-stuck items are fixed by a session agent (merge refs/ew/keep/<id>
+onto main, keep both sides, mark item merged, delete keep ref, push).
+Restart: stop the server pid from /api/version, then `python
+tools/launch.py --server-only`. Proxy probe: netstat for :3456 LISTENING.
+Memory is tight on the box; run suites sequentially. Repo-review style
+whole-checkout work runs by hand in a session, not as a loop lane (lanes
+cannot read gitignored main-checkout dirs, the gitlock or the progress
+file). tools/leak_sweep.py --pre-push reads stdin; run it with stdin from
+/dev/null or it hangs.
 
 Acceptance: loop idle or merging cleanly; nothing in adjudicate /
-merge-conflict / gave-up / failed-dirty; any MAIN reply to the 2026-10-12
-notes, the N301812 ANSWER or the 2026-10-17 slots INFORMATION answered (or
-acked by ledger line); new deep-dive rows built by the loop.
+merge-conflict / gave-up / failed-dirty; neba23f ANSWER sent and N8d56e4
+settled; any MAIN reply to open EW notes answered (or acked by ledger
+line); new deep-dive rows built by the loop.
 
-Do NOT redo: session 37: monitoring only, no code changes; the batched
-OPERATOR ask (QA 009-073, scorecard download, N1af105 step 5) was
-delivered in chat - do not re-send. Session 36 (2026-10-17, operator order): targeted
-deep-dive 134 (docs/research/0029) -> plans 135-140 (server watchdog, loop status
-card, stalled-lane flag, control ledger rotation, fetch politeness, weekly
-silver goal) all merged by the loop; then the A1 full file-by-file
-hardening + bug audit, plans 141-152 in 12 slices (server a-d, app-dash
-a/b, app-core, app-shell, tools, tests a/b, ops-ci-config), all merged:
-67 FIXED, 15 FILED, records docs/audit/20261017-*.md; the FILED items
-became follow-on rows 153-157 (CORS dashboard origins, robots no
-cross-host redirect, config_path injection, test hygiene, test-isolation
-guard a-l), all merged; OPS-CI-CONFIG-07..10 (shared ops/loop/slots.py, not
-EW's to edit) went to MAIN as INFORMATION 14:06. 149 was salvaged by a
-session merge of its keep ref (b186c63). A1 is DONE - do not re-queue it.
-Session 35: monitoring only; deep-dive 20261017 (1d991c8). Session 34:
+Do NOT redo: session 38: MAIN ORDER Nfd0a15 (kit v18) vendored f5dcd58,
+pushed, ANSWER 1/1 (carries the N1af105 step 5 PASS read-back), order
+marked handled in the loop ledger. H364614 N1af105 step 5 read-back
+PASSED (operator 2026-10-18; NOTE above) - done, N1af105 complete. Kit v19
+(MAIN ORDER 2026-10-18-1235) vendored 1697041 by a session agent, pushed
+(ls-remote match), ANSWER 1/1. GH-HYGIENE order neba23f merged by the
+loop (c54a8e9, 4cd9468, 19f2aba). Session 37: monitoring only; the batched
+OPERATOR ask (QA 009-073, scorecard download) was delivered in chat - do
+not re-send. Session 36 (2026-10-17, operator order): targeted deep-dive
+134 (docs/research/0029) -> plans 135-140 all merged; A1 full
+file-by-file hardening + bug audit, plans 141-152, all merged: 67 FIXED,
+15 FILED, records docs/audit/20261017-*.md; follow-on rows 153-157 all
+merged; OPS-CI-CONFIG-07..10 (shared ops/loop/slots.py, not EW's) went to
+MAIN as INFORMATION 14:06. A1 is DONE - do not re-queue it. Session 34:
 loop checklist header reads SESSION from this file (5c7b9b3). N301812
-optional Conventional Commits commit-msg check RULED closed, no change
-(subjects pinned by tests/test_ew_loop.py); reverses if MAIN orders a hook
-check in writing. Session 33: MAIN ORDER N301812 all done (287b2d5..
-773ee40). Session 31: N1af105 step 4 (82f9146). Older sessions:
-docs/handoff-ledger.txt and git log.
+optional Conventional Commits commit-msg check RULED closed, no change;
+reverses if MAIN orders a hook check in writing. Session 33: MAIN ORDER
+N301812 all done (287b2d5..773ee40). Session 31: N1af105 step 4
+(82f9146). Older sessions: docs/handoff-ledger.txt and git log.
 
-In flight: none. Loop armed, no lane running (all lane locks free 16:53).
+In flight: none. Loop armed, no lane running (all lane locks free at
+/done).
 
-Status: main = origin at 3b94a6e before this hand-off (session 37: no
-code commits). /done gates run fresh 16:53: gated pytest rc 0 (128 s; run
-1 at 16:49 hit the loop-tick guard race above), gated node 835/0
-(npm.cmd), leak sweep ARMED (19). CI on dc25d77: ci 39070794330 success,
-codeql 39070794290 success (3b94a6e hand-off-only, no run). Server health
-ok on :8940. Session jsonl < 10 MB (largest 2.0 MB).
+Status: main = origin at 19f2aba before this hand-off. /done gates run
+fresh 2026-10-18: gated pytest 4291 passed rc 0 (144 s), gated node rc 0
+(npm.cmd), leak sweep ARMED (19). CI on c54a8e9: ci 39152131739 success,
+codeql 39152131674 success; kit v19 1697041: ci 39151026145, codeql
+39151026174 success. Server health ok on :8940. Session jsonl < 10 MB
+(largest 2.0 MB).
 
 Start with: read this file, then CLAUDE.md, docs/plans/ROADMAP.md, git log -10.
