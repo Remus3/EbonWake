@@ -171,7 +171,8 @@
       return [c.id, c.title, c.meta, c.empty, c.rows.map(function (r) { return [r.label, r.note, r.cls, r.tick, r.ack]; })];
     })) + '|' + JSON.stringify(out.quiet) + '|' + JSON.stringify(S.err) + '|' + Object.keys(S.pending).join(',') +
       '|' + S.msg + '|' + S.obMsg + '|' + S.mdMsg + '|' + JSON.stringify(C.signalPill(S.snap.signals)) +
-      '|' + JSON.stringify(C.overridePill(S.snap.signals)) + '|' + JSON.stringify(loopLine());
+      '|' + JSON.stringify(C.overridePill(S.snap.signals)) + '|' + JSON.stringify(loopLine()) +
+      '|' + JSON.stringify(C.restorePill(S.snap.signals));
   }
 
   // Plan 136: one quiet line only while the loop is stale, halted or has stuck
@@ -193,6 +194,18 @@
   // Plan 079: `N overrides` on the status line while any override is in force.
   function overrideNode() {
     const pill = C.overridePill(S.snap.signals);
+    if (!pill) return null;
+    const b = el('button', 'ew-pill ew-hsig ' + pill.cls, pill.text);
+    b.type = 'button';
+    b.title = pill.title;
+    b.addEventListener('click', function () { openTab(pill.tab); });
+    return b;
+  }
+
+  // Plan 158: `restored <domain> from last-good` while a store doc was restored
+  // in the last day; it opens System. No toast.
+  function restoreNode() {
+    const pill = C.restorePill(S.snap.signals);
     if (!pill) return null;
     const b = el('button', 'ew-pill ew-hsig ' + pill.cls, pill.text);
     b.type = 'button';
@@ -338,6 +351,8 @@
     if (e && p.firstChild) p.firstChild.querySelector('.ew-cbody').appendChild(e);
     const lp = loopNode();
     if (lp) p.insertBefore(lp, p.firstChild);
+    const rst = restoreNode();
+    if (rst) p.insertBefore(rst, p.firstChild);
     const ovr = overrideNode();
     if (ovr) p.insertBefore(ovr, p.firstChild);
     const sig = signalNode();

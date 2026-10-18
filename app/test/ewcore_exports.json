@@ -447,6 +447,7 @@
     ["overrideBadges","function"],
     ["overrideRows","function"],
     ["overridePill","function"],
+    ["restorePill","function"],
     ["serverRows","function"],
     ["validAccelerator","function"],
     ["hotkeys","function"],

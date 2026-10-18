@@ -45,3 +45,31 @@ Depends on: 138.
 - Zip export / import button: needs operator action; the failure is silent.
 - Git-tracking `ops/runtime`: public repo, would leak operator data.
 - SQLite store: stdlib allows it, but it is a rewrite of every domain reader.
+
+## As-built deviations
+
+1. Restore order is `.good`, then the newest VALID daily backup, then empty.
+   Alternatives: `.good` only (slice 2 text). Why: the title promises restore
+   from `.good` / 7 daily backups, and a corrupt `.good` with a good backup
+   beside it would otherwise still empty the doc. Reverses if: a backup restore
+   is shown to resurrect data the operator deleted on purpose.
+2. Backup prune runs in `Store.put` on the first put of a local day (per
+   domain, newest 7 kept), not in plan 138's `tools/ledger_rotate.py` pass.
+   Alternatives: hook the tick's rotate_daily. Why: ledger_rotate rotates the
+   loop's control ledgers in the MAIN checkout; the store lives under the
+   server's runtime root (any host, any test root), and the day's first put is
+   already the rotation moment - still no new scheduler. Pruned copies are
+   unlinked: each is a redundant copy of a live doc, not irreplaceable (FLEET
+   item 9). Reverses if: backups move under the control ledger tree.
+3. The signal is a `restores: {count, items}` section on the /api/signals
+   digest (beside plan 079 `overrides`; each item `level: warn`, `text:
+   restored <domain> from last-good`) plus a Home warn pill
+   (`C.restorePill`, opens System), not a new liveness row. Alternatives: a
+   `store` row in REASONS. Why: rows are per-signal liveness with hint-file
+   coverage; a restore is an event. Restores are held in memory for 24 h
+   (`Store.restores()`). Reverses if: restores must survive a server restart.
+4. A restore writes the recovered bytes back to `<domain>.json` (atomic), so
+   the next read is plain and the next put rotates `.good` normally.
+5. Progress file `progress/p158-build.json` was not written: the lane's
+   permission mode denied writes outside the worktree and helper-script runs.
+   Reverses if: the lane grants that write.

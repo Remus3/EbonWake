@@ -241,9 +241,22 @@ def _overrides(raw):
     return {"count": len(items), "items": items}
 
 
-def digest(inputs, now, hints=None, overrides=None):
+def _restores(raw):
+    """Plan 158: {count, items} of store docs restored from a last-good copy,
+    one warn line each (`restored <domain> from last-good`)."""
+    items = []
+    for r in raw if isinstance(raw, list) else []:
+        if isinstance(r, dict) and isinstance(r.get("domain"), str):
+            items.append({"domain": r["domain"], "source": r.get("source"),
+                          "at": _num(r.get("at")), "level": "warn",
+                          "text": f"restored {r['domain']} from last-good"})
+    return {"count": len(items), "items": items}
+
+
+def digest(inputs, now, hints=None, overrides=None, restores=None):
     """{rows: [{id, name, level, age_s, reason, detail, hint, lines}], bad, worst,
-    at, overrides: {count, items}}; `lines` = plan 085 evidence (data row only)."""
+    at, overrides: {count, items}, restores: {count, items}}; `lines` = plan 085
+    evidence (data row only)."""
     hints = hints or load_hints()
     inputs = _d(inputs)
     rows = []
@@ -262,18 +275,20 @@ def digest(inputs, now, hints=None, overrides=None):
     worst = max((r["level"] for r in rows), key=_RANK.__getitem__)
     at = _dt.datetime.fromtimestamp(now, _dt.timezone.utc).replace(microsecond=0).isoformat()
     return {"rows": rows, "bad": sum(r["level"] == "bad" for r in rows), "worst": worst, "at": at,
-            "overrides": _overrides(overrides)}
+            "overrides": _overrides(overrides), "restores": _restores(restores)}
 
 
 class SignalService:
     """GET /api/signals. `sources` maps a row id to fn() -> its input dict (or
     None); a failing source becomes a warn row, never a 500."""
 
-    def __init__(self, sources, clock=time.time, hints_path=None, overrides=None):
+    def __init__(self, sources, clock=time.time, hints_path=None, overrides=None,
+                 restores=None):
         self.sources = sources
         self.clock = clock
         self.hints_path = hints_path
         self.overrides = overrides  # plan 079: () -> {count, items}
+        self.restores = restores  # plan 158: () -> [{domain, source, at}]
 
     def inputs(self):
         out = {}
@@ -291,4 +306,10 @@ class SignalService:
                 ovr = self.overrides()
             except Exception:  # noqa: BLE001 - a ledger fault lists none, never a 500
                 ovr = None
-        return digest(self.inputs(), self.clock(), load_hints(self.hints_path), ovr)
+        rst = None
+        if self.restores is not None:
+            try:
+                rst = self.restores()
+            except Exception:  # noqa: BLE001 - a store fault lists none, never a 500
+                rst = None
+        return digest(self.inputs(), self.clock(), load_hints(self.hints_path), ovr, rst)
