@@ -41,6 +41,7 @@ overlay for one Black Desert Online player, fed by a small local server on
 
 | Tab | What it does |
 |---|---|
+| **Home** | What to do now: active timers, today's progress, the session summary and a first-run checklist |
 | **Today** | Daily and weekly checklist with NA reset countdowns, login events, dice |
 | **Market** | Central Market prices, history, order book and alert thresholds from the public arsha.io API - read-only, cached, with backoff |
 | **Progress** | Main-story, season-pass and gear tracks; optional profile card from a self-hosted BDO-REST-API |
@@ -48,6 +49,7 @@ overlay for one Black Desert Online player, fed by a small local server on
 | **Events** | Coupon, event and Twitch-drop tracker with expiries |
 | **Deadeye** | Build notes and an enhancement plan |
 | **System** | Server health, game state (not running / running / logged in) from the client's session log, screenshot OCR |
+| **Settings** | Hotkeys, game folders, market tax bonuses and the other per-host values, written to `config/local.json` |
 
 The **overlay** shows the reset clocks, today's checklist count, the grind
 session, the active buff and whatever ends soonest. It is toggled with
