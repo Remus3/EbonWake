@@ -247,3 +247,54 @@ CONTRIBUTORS file; `.github/dependabot.yml` covers github-actions (/), pip (/ci)
 - Dependabot fix (likely open Dependabot PRs or alerts): BLOCKED - needs the order text and `gh`, outside this lane's allow list.
 - Commit, push, read-back: BLOCKED by this lane's own order (no commit); the loop commits and pushes after merge.
 - Progress file ops/loop/control/progress/Na7e421.json: BLOCKED - main checkout outside this run's read/write permissions.
+
+## Order N7e0676 - blocked items
+
+OPERATOR-MARKED-FIXES ORDER (MAIN 2026-10-18-2312): remove "dependabot[bot]"
+from the repo page Contributors. Repo-side scan in this lane (local refs, fetched
+origin/main tip bd94d6c): `git log origin/main` author + committer census = one
+identity, the operator; zero bot author or committer on the default branch. The
+only bot-authored commits in the object store are the three open Dependabot PR
+heads (remote-tracking `origin/dependabot/*` only, not ancestors of main):
+e07001d (github-actions group), 5f50483 (electron 44.7.0), 288bcb6 (ruff 0.17.0).
+All three bumps already landed on main as operator commits (82e97fd, d2bc84a,
+48887e0; `git diff HEAD <bot> -- <files>` empty for actions and electron, ruff
+pins equal), so the PRs are superseded. History was already rewritten once
+(2026-10-09, session 20, plan f3dc20264bb1 3 -> 0, contributors read back 1).
+`fleet_rewrite.py plan` scans only refs/heads + refs/tags, so it would flag 0
+here (no local branch holds a bot commit): no rewrite is warranted from local
+state; not a kit defect on this evidence. Likeliest cause of the sidebar row:
+remote main differs from the fetched tip, or GitHub's contributors cache kept
+the pre-rewrite count. Going forward (rule, already practised): a Dependabot
+bump is applied as an operator commit and its PR closed "superseded by <sha>";
+never a GitHub merge/squash that keeps the bot as author. Alerts stay on.
+
+- Contributors read-back `gh api repos/<owner>/<repo>/contributors`: BLOCKED - `gh` is outside this lane's allow list. Next interactive session: run it; if it still lists dependabot[bot], `git fetch` and re-run the author/committer census on origin/main.
+- Fresh remote state (`git fetch` / `git ls-remote origin`): BLOCKED - network git is outside this lane's allow list; the census above is against the last fetched origin/main.
+- `python ops/fleet_kit/fleet_rewrite.py plan` dry run: BLOCKED - denied in this lane. A `run`, if ever needed, must happen in the main checkout (it refuses while a linked worktree exists) after `plan` and `bundle`, then a gated force push.
+- Close the three superseded Dependabot PRs with reason "applied as operator commit 82e97fd / d2bc84a / 48887e0" and delete their branches: BLOCKED - `gh` is outside this lane's allow list.
+- Commit, push, read-back: BLOCKED by this lane's own order (no commit); the loop commits and pushes after merge.
+- Progress file ops/loop/control/progress/N7e0676.json: BLOCKED - write to the main checkout was denied by this run's permissions.
+
+As-built deviations (refute round 2/3). Decision: the order is NOT closed as done;
+it stays an open ROADMAP row for a run that holds `gh` and network git. Alternatives:
+(a) claim done from the local census (rejected: census is against a stale fetched
+tip `bd94d6c` and the sidebar cause is a guess); (b) run `gh` / network git here
+(rejected: tried again in round 2, `gh api .../contributors` and `git fetch` both
+need approval this run cannot give; a harness permission denial is not a decision
+the adjudicator can lift); (c) a standing OPERATOR bullet (rejected: standing orders
+1 and 6 send tool grants to the adjudicator, and this is one). Self-adjudicated:
+the `gh` grant is the thing to request, so the row below is a plain open work item,
+not an operator task. Why: removal of dependabot[bot] is only verifiable by a
+`gh api .../contributors` read-back. Reverses if: a run with `gh` and network git
+reads back a contributors list without dependabot[bot] (close the row), or lists it
+(then run the census on the fetched tip and `fleet_rewrite.py plan`).
+Added in round 2: `tests/test_fix_no_bot_identity.py` guards "no bot author or
+committer reachable from HEAD" so the claim is no longer prose only. The
+hand-off file is not edited by this run (rule); the loop carries the row below
+into `EW-NEXT-SESSION.txt` via /done. Merge state: `docs/plans/ROADMAP.md` has no
+conflict markers; `git add` was denied to this run, so the loop stages it to clear
+the UU status. No commit.
+refute-rounds: 2/3
+
+- [ ] open (priority) N7e0676 contributors/dependabot: with `gh` and network git, `git fetch`, `gh api repos/<owner>/<repo>/contributors --jq '.[].login'`; if dependabot[bot] is listed re-run the origin/main author/committer census and `fleet_rewrite.py plan`; close the three superseded Dependabot PRs ("applied as operator commit"); send MAIN the ONE ANSWER note with the read-back.
