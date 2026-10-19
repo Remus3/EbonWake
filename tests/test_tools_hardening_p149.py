@@ -81,7 +81,7 @@ def test_tools02_bad_numbers_fall_back_per_key(tmp_path):
 
 def test_tools02_valid_numbers_still_apply(tmp_path):
     cfg = _cfg(tmp_path, {"loop": {"tick_s": 600, "lane_timeout_s": 3600,
-                                   "max_notes_per_day": 9, "max_new_plans_per_day": 0}})
+                                   "max_notes_per_day": 30, "max_new_plans_per_day": 0}})
     assert (cfg["tick_s"], cfg["lane_timeout_s"]) == (600, 3600)
     assert cfg["max_notes_per_day"] == loop_base.DEFAULT_MAX_NOTES  # never raised
     assert cfg["max_new_plans_per_day"] == 0

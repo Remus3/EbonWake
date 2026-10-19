@@ -49,9 +49,9 @@ INFRA_RX = re.compile(r"SUITE-GATE:|TimeoutExpired|OSError|SubprocessError|fail 
 # RULING note escalates to a lane work item (a lane does the work, the loop
 # answers after merge); any other note is classified for free and only what
 # classify() cannot settle gets one sonnet low-effort bare triage spawn. At
-# most loop.max_notes_per_day (kit OUTBOUND_CAP 6; config may lower it, never
+# most loop.max_notes_per_day (kit OUTBOUND_CAP 12 since v20.1; config may lower it, never
 # raise it) outbound notes per local day.
-DEFAULT_MAX_NOTES = 6
+DEFAULT_MAX_NOTES = 12
 PROGRESS_TASK = "loop"
 TICK_S = 900
 HEADROOM = 3

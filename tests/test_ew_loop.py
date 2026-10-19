@@ -380,9 +380,9 @@ def test_existing_destination_copy_with_other_bytes_is_not_overwritten(tmp_path)
 
 
 def test_max_notes_default_is_kit_cap_and_config_cannot_raise_it(tmp_path):
-    assert ew_loop.load_config(tmp_path)["max_notes_per_day"] == 6
-    root = make_root(tmp_path, local={"loop": {"max_notes_per_day": 12}})
-    assert ew_loop.load_config(root)["max_notes_per_day"] == 6
+    assert ew_loop.load_config(tmp_path)["max_notes_per_day"] == 12
+    root = make_root(tmp_path, local={"loop": {"max_notes_per_day": 24}})
+    assert ew_loop.load_config(root)["max_notes_per_day"] == 12
     root2 = make_root(tmp_path / "b", local={"loop": {"max_notes_per_day": 2}})
     assert ew_loop.load_config(root2)["max_notes_per_day"] == 2
 
@@ -480,7 +480,7 @@ def test_note_settled_before_the_seen_ledger_is_backfilled_once(tmp_path):
 
 def test_default_cap_reaches_the_kit_outbound_cap(tmp_path):
     root, _, _ = _inbox_root(tmp_path, local_extra={"max_notes_per_day": 40})
-    assert ew_loop.Tick(deps(root)).cap.cap == 6
+    assert ew_loop.Tick(deps(root)).cap.cap == 12
 
 
 def test_unlabelled_tick_spawns_are_kind_build(tmp_path):
