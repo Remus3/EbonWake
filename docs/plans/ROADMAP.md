@@ -229,3 +229,31 @@ dismissed in this lane; nothing in repo files was changed for this order.
 - Section 3 per-kind open before -> open after record: BLOCKED - depends on section 1; next session writes it into the hand-off.
 - Commit, push, read-back: BLOCKED by this lane's own order (no commit); the loop commits and pushes after merge.
 - Progress file ops/loop/control/progress/Nc266c6.json: BLOCKED - write to the main checkout was denied by this run's permissions.
+
+## Order N7e0676 - blocked items
+
+OPERATOR-MARKED-FIXES ORDER (MAIN 2026-10-18-2312): remove "dependabot[bot]"
+from the repo page Contributors. Repo-side scan in this lane (local refs, fetched
+origin/main tip bd94d6c): `git log origin/main` author + committer census = one
+identity, the operator; zero bot author or committer on the default branch. The
+only bot-authored commits in the object store are the three open Dependabot PR
+heads (remote-tracking `origin/dependabot/*` only, not ancestors of main):
+e07001d (github-actions group), 5f50483 (electron 44.7.0), 288bcb6 (ruff 0.17.0).
+All three bumps already landed on main as operator commits (82e97fd, d2bc84a,
+48887e0; `git diff HEAD <bot> -- <files>` empty for actions and electron, ruff
+pins equal), so the PRs are superseded. History was already rewritten once
+(2026-10-09, session 20, plan f3dc20264bb1 3 -> 0, contributors read back 1).
+`fleet_rewrite.py plan` scans only refs/heads + refs/tags, so it would flag 0
+here (no local branch holds a bot commit): no rewrite is warranted from local
+state; not a kit defect on this evidence. Likeliest cause of the sidebar row:
+remote main differs from the fetched tip, or GitHub's contributors cache kept
+the pre-rewrite count. Going forward (rule, already practised): a Dependabot
+bump is applied as an operator commit and its PR closed "superseded by <sha>";
+never a GitHub merge/squash that keeps the bot as author. Alerts stay on.
+
+- Contributors read-back `gh api repos/<owner>/<repo>/contributors`: BLOCKED - `gh` is outside this lane's allow list. Next interactive session: run it; if it still lists dependabot[bot], `git fetch` and re-run the author/committer census on origin/main.
+- Fresh remote state (`git fetch` / `git ls-remote origin`): BLOCKED - network git is outside this lane's allow list; the census above is against the last fetched origin/main.
+- `python ops/fleet_kit/fleet_rewrite.py plan` dry run: BLOCKED - denied in this lane. A `run`, if ever needed, must happen in the main checkout (it refuses while a linked worktree exists) after `plan` and `bundle`, then a gated force push.
+- Close the three superseded Dependabot PRs with reason "applied as operator commit 82e97fd / d2bc84a / 48887e0" and delete their branches: BLOCKED - `gh` is outside this lane's allow list.
+- Commit, push, read-back: BLOCKED by this lane's own order (no commit); the loop commits and pushes after merge.
+- Progress file ops/loop/control/progress/N7e0676.json: BLOCKED - write to the main checkout was denied by this run's permissions.
