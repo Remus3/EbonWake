@@ -1,16 +1,33 @@
 EW NEXT SESSION
 ---------------
-SESSION: 40
+SESSION: 41
 
 Next action: work all other open items - every open ROADMAP row (159
-[>] session: GitHub Security alert #4 + correction ANSWER) and every
-actionable hand-off bullet below (security row 159 first, then confirm
-N7e0676 merged cleanly and plan 161 behaves on the next attachment, then
-the rest). Loop stays armed; monitor progress/loop.json and
+[>] session: GitHub Security alert #4 + correction ANSWER), the new MAIN
+ORDER N38ca97 (DEPENDABOT-MERGE-RULE, session item) and every actionable
+hand-off bullet below (security row 159 first, then N38ca97 incl. the 3
+open bot PRs, then confirm N7e0676 merged cleanly and plan 161 behaves on
+the next attachment, then the rest). Session 40 did no work of its own. Loop was
+Disabled at /done (first bullet); once armed again, monitor progress/loop.json and
 loop_items/*.json; any item in adjudicate / merge-conflict / gave-up /
 failed-dirty is fixed by a session agent (merge-stuck recipe in Context).
 
 Carried forward (not acted on yet):
+- LaneLoop scheduled task read back Disabled at session 40 /done
+  (2026-10-19 01:53; last run 01:49 rc 0, fire 1269; no HALT file; not
+  disabled by the /done agent). Find out why (operator or another agent);
+  re-enable only if no one paused it on purpose, then read back
+  `python tools/loop_task.py status`.
+- MAIN ORDER N38ca97 (2026-10-19-0034 DEPENDABOT-MERGE-RULE, to LW/RC/EW,
+  HOP 1; loop checklist says "session: needs CLAUDE.md"): next session
+  does it once - add the rule (bot PRs only via path A squash with operator
+  author+committer and no Co-authored-by trailer, or path B close + operator
+  re-apply commit; alerts stay on) to CLAUDE.md tree-specific section and
+  any merge doc, check hooks per its section 2, meet section 3 acceptance,
+  send ONE ANSWER (TERMINAL). Do N7e0676 (23:12) first if not done.
+  Open bot PRs at /done: #6 electron 44.7.0->44.8.0 (app npm), #7
+  github-actions group (2 updates), #8 ruff 0.17.0->0.17.1 (/ci pip) -
+  land each per path A or B, never as-is.
 - NOTE: board push failed - session 39 /done sub-agent got not_found on
   the Artifact asset upload (ops/status_board.json url); the exact two
   calls were handed to the main session. If the board still shows
@@ -31,8 +48,11 @@ Carried forward (not acted on yet):
   ANSWER) merged by the loop as 1ea56d5 during session 39 /done (tests
   tests/test_loop_inbox_p161.py, refute 0/3 PASS); pushed with the
   hand-off. Watch the next attachment-carrying MAIN order.
-- Loop item N7e0676 (the .md copy of MAIN ORDER 2312) was `committed` at
-  /done; its merge only adds a ROADMAP write-up (order already answered by
+- Loop item N7e0676 (the .md copy of MAIN ORDER 2312) hit a merge
+  conflict; resolve lane run 1/2 ran 01:34 (state `ran`, keep ref
+  refs/ew/keep/N7e0676 = e652e5a) and waits for the next tick (loop
+  Disabled - see first bullet); if it ends merge-conflict / gave-up, apply
+  the merge-stuck recipe. Its merge only adds a ROADMAP write-up (order already answered by
   hand in 0055 and in the seen ledger, so no further ANSWER should go). If
   the loop sends one anyway, that is a row-161 defect case - record it,
   do not answer MAIN again.
@@ -69,7 +89,7 @@ Carried forward (not acted on yet):
   worktree list` and fleet_lanes.worktree_path(i) for i=0..2, remove HALT,
   flip ROADMAP row 106 to [x]. Reverses if MAIN orders trees to set it
   themselves.
-  Read 2026-10-19 session 39: UNSET (row 106 still waits on MAIN).
+  Read 2026-10-19 session 40: UNSET (row 106 still waits on MAIN).
 - MAIN to record EW's port block 8940-8959 in the machine-wide registry and
   add EW to the roster / lane widget (roster INFO 0230 says EW is a member;
   Hbd1ed4).
@@ -207,10 +227,10 @@ Carried forward (not acted on yet):
   docs/research/0014 line 19 (ProgramData kit path); the vendored kit uses
   the same name, so it stays.
 
-Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew, armed; read back
-session 39 (2026-10-19 00:09): Ready, last run 00:04 rc 0, fire 1262;
-lane locks free at /done; plan 161 merged 1ea56d5; loop item N7e0676
-`committed` (merge on the next tick). Kit v20.1 vendored (KIT_VERSION 20, KIT_PATCH 1,
+Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew; read back
+session 40 /done (2026-10-19 01:53): DISABLED, last run 01:49 rc 0, fire
+1269, no HALT; lane locks free; lane worktrees lane-0/1 at fc5cf28, lane-2
+at 9c92e2e (detached); loop item N7e0676 state `ran` (resolve 1/2). Kit v20.1 vendored (KIT_VERSION 20, KIT_PATCH 1,
 OUTBOUND_CAP 12; EW loop_base.DEFAULT_MAX_NOTES 12). Outbound 2026-10-19:
 1 of 12 (EW ANSWER 0055 batched v20 + v20.1 + 2312 TERMINAL, delivered
 1/1 to MAIN, hash-checked). Outbound 2026-10-18: SS 1234 (undelivered, no
@@ -253,14 +273,15 @@ re-queue. Session 34: N301812 Conventional Commits hook check RULED
 closed; reverses if MAIN orders a hook check in writing. Older sessions:
 docs/handoff-ledger.txt and git log.
 
-In flight: loop item N7e0676 (state committed, merge by the next loop
-tick; progress/loop.json). No session agent running.
+In flight: loop item N7e0676 (resolve run 1/2 finished 01:34, state ran,
+merge by the next loop tick once LaneLoop is enabled; progress/loop.json).
+No session agent or lane running (lane locks free, worker pids gone).
 
-Status: main = origin at the hand-off commit (ls-remote read back; session push
-bd94d6c..45ac01d, ls-remote match). /done gates fresh 2026-10-19: gated
-pytest 4291 passed rc 0 (third run; first two lost to the loop-tick guard
-race), gated node 837/837 rc 0, leak sweep ARMED (19). CI on 45ac01d: ci
-39206395304 success, codeql 39206395331 success. Server health ok on :8940.
-Session jsonl < 10 MB (largest 1.9 MB).
+Status: session 40 made no commits besides this hand-off; main = origin
+at the hand-off commit (ls-remote read back). /done gates fresh
+2026-10-19: gated pytest 4302 passed rc 0 (second run; the first tripped fleet_test_guard because the /done agent wrote progress/done.json mid-suite - own race, the two tests pass alone), node 837/837 rc 0, leak
+sweep ARMED (19). CI on fc5cf28: ci 39210655120 success, codeql
+39210655093 success. Server health ok on :8940. Session jsonl < 10 MB
+(largest 1.9 MB; this session 0.5 MB).
 
 Start with: read this file, then CLAUDE.md, docs/plans/ROADMAP.md, git log -10.
