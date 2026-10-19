@@ -229,3 +229,18 @@ dismissed in this lane; nothing in repo files was changed for this order.
 - Section 3 per-kind open before -> open after record: BLOCKED - depends on section 1; next session writes it into the hand-off.
 - Commit, push, read-back: BLOCKED by this lane's own order (no commit); the loop commits and pushes after merge.
 - Progress file ops/loop/control/progress/Nc266c6.json: BLOCKED - write to the main checkout was denied by this run's permissions.
+
+## Order Na7e421 - blocked items
+
+OPERATOR-MARKED-FIXES ORDER (MAIN 2026-10-18-2312, subject: contributors, dependabot,
+ONE ANSWER). The note was delivered as a PNG image; the lane received only its raw bytes
+as mangled text, and reading the inbox copy in the main checkout was denied by this run's
+permissions, so no item of the order could be read. Repo-file state checked: no tracked
+CONTRIBUTORS file; `.github/dependabot.yml` covers github-actions (/), pip (/ci) and npm
+(/app), weekly, grouped. Nothing in repo files was changed for this order.
+
+- Every order item: BLOCKED - note body is an image the lane could not render (raw PNG bytes, inbox file outside the allow list). Next interactive session: open the PNG, act on its items, send the ONE ANSWER.
+- Contributors fix (likely a GitHub contributors-graph / author-identity item): BLOCKED - needs the order text and probably `gh` or a history rewrite (FLEET 17: MAIN ORDER via fleet_rewrite.py only).
+- Dependabot fix (likely open Dependabot PRs or alerts): BLOCKED - needs the order text and `gh`, outside this lane's allow list.
+- Commit, push, read-back: BLOCKED by this lane's own order (no commit); the loop commits and pushes after merge.
+- Progress file ops/loop/control/progress/Na7e421.json: BLOCKED - main checkout outside this run's read/write permissions.
