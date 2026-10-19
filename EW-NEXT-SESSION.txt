@@ -11,6 +11,10 @@ loop_items/*.json; any item in adjudicate / merge-conflict / gave-up /
 failed-dirty is fixed by a session agent (merge-stuck recipe in Context).
 
 Carried forward (not acted on yet):
+- NOTE: board push failed - session 39 /done sub-agent got not_found on
+  the Artifact asset upload (ops/status_board.json url); the exact two
+  calls were handed to the main session. If the board still shows
+  session 38, push it at the next session start.
 - ROADMAP row 159 [>] session (MAIN ORDER nc266c6, GitHub Security
   findings; lanes cannot run gh): code-scanning alert #4
   py/http-response-splitting (error) in server/ew/app.py - triage, fix TDD
