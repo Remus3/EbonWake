@@ -13,6 +13,10 @@ loop_items/*.json; any item in adjudicate / merge-conflict / gave-up /
 failed-dirty is fixed by a session agent (merge-stuck recipe in Context).
 
 Carried forward (not acted on yet):
+- NOTE: board push failed - session 40 /done: Artifact asset upload of
+  status.json refused unsupported_type (outside-org invitee may upload only
+  images/videos/fonts/stylesheets/scripts to the board artifact); an
+  org member must add it, or the board needs another file type.
 - LaneLoop scheduled task read back Disabled at session 40 /done
   (2026-10-19 01:53; last run 01:49 rc 0, fire 1269; no HALT file; not
   disabled by the /done agent). Find out why (operator or another agent);
