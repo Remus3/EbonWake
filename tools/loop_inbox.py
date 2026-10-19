@@ -12,7 +12,8 @@ from pathlib import Path
 
 from loop_base import (
     CODE, DELIVERY_REL, DONE_STATES, INBOX_REL, Items, LEGACY_LEDGER_REL, MAX_ROUNDS,
-    NOTE_HEAD, NOTE_MAX, NOTE_STAMP, ORDERS_REL, WATCH_REL, ascii_text, atomic_write,
+    NOTE_HEAD, NOTE_MAX, NOTE_STAMP, ORDERS_REL, ROADMAP_REL, WATCH_REL, ascii_text,
+    atomic_write,
     iso, read_json, read_jsonl, with_hop,
 )
 from loop_prompts import GATES
@@ -48,16 +49,66 @@ def session_paths(name, text):
 
 
 def order_prompt(order):
+    att = [a for a in order.get("attachments") or [] if isinstance(a, str)]
     return ("You are an Ebonwake (EW) build lane in a detached git worktree. Read "
             "CLAUDE.md first. Carry out the channel ORDER note below in THIS tree. Do "
             "every item that needs only repo files. An item needing a password, an OAuth "
             "grant, a download, a tool outside your allow list or a physical act is left "
-            "undone and listed as BLOCKED (one line, the reason) in a section 'Order "
-            + order["id"] + " - blocked items' at the end of docs/plans/ROADMAP.md. Do not "
+            "undone. In a section 'Order " + order["id"] + " - blocked items' at the end "
+            "of docs/plans/ROADMAP.md list EVERY item of the order, one bullet each, "
+            "marked DONE, NOT-APPLICABLE or BLOCKED (one line, the reason). Do not "
             "write the ANSWER note; the loop writes it after merge. "
+            + ("The note's attachment(s), part of this order, sit beside it in the "
+               "inbox: " + ", ".join(att) + ". " if att else "")
             + GATES.format(task=order["id"])
             + "\n\n--- NOTE " + order["note"] + " ---\n" + order.get("text", "")[:NOTE_MAX]
             + "\n--- END NOTE ---")
+
+
+# Plan 161: a note is an .md; any other file is an attachment of the .md with
+# the same stem (2026-10-18: the .png of MAIN ORDER 2312 became item Na7e421).
+NOTE_SUFFIX = ".md"
+
+
+def is_attachment_name(name):
+    return Path(name).suffix.lower() != NOTE_SUFFIX
+
+
+def note_attachments(path):
+    """Names of the non-.md files beside note `path` with its stem, sorted;
+    dot files (in-flight copies) are never attachments."""
+    path = Path(path)
+    try:
+        return sorted(p.name for p in path.parent.iterdir()
+                      if p.is_file() and not p.name.startswith(".")
+                      and p.stem == path.stem and is_attachment_name(p.name))
+    except OSError:
+        return []
+
+
+def all_blocked(roadmap, oid):
+    """Plan 161: True when ROADMAP's 'Order <oid> - blocked items' section has
+    at least one bullet and every bullet is BLOCKED (none DONE /
+    NOT-APPLICABLE): the lane did nothing, so the session carries it."""
+    m = re.search(r"^## Order " + re.escape(oid) + r" - blocked items\s*$(.*?)(?=^## |\Z)",
+                  roadmap or "", re.M | re.S)
+    if not m:
+        return False
+    bullets = [ln for ln in m.group(1).splitlines() if re.match(r"\s*[-*] ", ln)]
+    return bool(bullets) and all(
+        "BLOCKED" in b and not re.search(r"\bDONE\b|NOT-APPLICABLE", b) for b in bullets)
+
+
+ALL_BLOCKED = "all items BLOCKED"
+
+
+def session_needs(order, rec):
+    """What routes an order to the session: plan 091 protected targets, plus
+    plan 161's all-BLOCKED lane result."""
+    hits = session_paths(order.get("note", ""), order.get("text", ""))
+    if (rec or {}).get("session_route") == "all-blocked":
+        hits.append(ALL_BLOCKED)
+    return hits
 
 
 def queued_orders(root):
@@ -105,8 +156,9 @@ def session_orders(root):
     settled = settled_notes(root)
     out = []
     for o in queued_orders(root):
-        hits = session_paths(o.get("note", ""), o.get("text", ""))
-        if hits and not order_settled(o, items.get(o["id"]), settled):
+        rec = items.get(o["id"])
+        hits = session_needs(o, rec)
+        if hits and not order_settled(o, rec, settled):
             out.append(dict(o, needs=hits))
     return out
 
@@ -212,6 +264,14 @@ class InboxMixin:
         lines, ORDER / FIX / RULING escalate, anything else is triaged once."""
         name = path.name
         if self.handled(name, outbox):
+            return True
+        if is_attachment_name(name):  # plan 161: never a note of its own
+            note = path.with_suffix(NOTE_SUFFIX).name
+            owned = (path.parent / note).is_file()
+            dec = self.fi.classify(name, CODE, "")
+            self.fi.mark_seen(self.root, path, dec, clock=self.d.clock,
+                              verdict="ATTACHMENT" if owned else "ORPHAN-ATTACHMENT")
+            self.step(f"inbox attachment of {note if owned else 'no note'}: {name}"[:200])
             return True
         text = path.read_text(encoding="utf-8", errors="replace")
         head = text[:NOTE_HEAD]
@@ -359,10 +419,20 @@ class InboxMixin:
         oid = order_id(name)
         rec = self.items.get(oid)
         # plan 091: a session-routed order closes only on the session's mark
-        done = (bool(rec) and bool(rec.get("session_done"))) if session_paths(name, text) \
+        done = (bool(rec) and bool(rec.get("session_done"))) \
+            if session_needs({"note": name, "text": text}, rec) \
             else bool(rec) and rec.get("state") in DONE_STATES + ("adjudicate",)
+        roadmap = self.root / ROADMAP_REL
+        if done and not rec.get("session_done") and roadmap.is_file() and all_blocked(
+                roadmap.read_text(encoding="utf-8", errors="replace"), oid):
+            # plan 161: the lane did nothing (every item BLOCKED, 2319 re
+            # Nc266c6); the session carries it, then the loop answers
+            self.items.put(dict(rec, session_route="all-blocked"))
+            self.step(f"inbox: order {oid} {ALL_BLOCKED} -> session")
+            done = False
         if not done:
-            self.queue_order(oid, name, text)
+            self.queue_order(oid, name, text,
+                             note_attachments(Path(self.cfg["inbox_dir"]) / name))
             self.awaiting += 1
             return False  # answered after the lane item is done
         context = (f"EW's loop carried this order out as lane item {oid}: state "
@@ -397,10 +467,21 @@ class InboxMixin:
     def orders(self):
         return queued_orders(self.root)
 
-    def queue_order(self, oid, name, text):
-        if self.dry or any(o["id"] == oid for o in self.orders()):
+    def queue_order(self, oid, name, text, attachments=()):
+        if self.dry:
             return
-        doc = {"orders": self.orders() + [{"id": oid, "note": name, "text": text,
-                                           "title": ascii_text(name, 120)}]}
-        atomic_write(self.root / ORDERS_REL, json.dumps(doc, indent=1))
+        orders = self.orders()
+        old = next((o for o in orders if o["id"] == oid), None)
+        if old is not None:
+            # plan 161: an attachment landing after its note joins the order
+            if attachments and list(attachments) != old.get("attachments", []) \
+                    and not self.items.get(oid):
+                old["attachments"] = list(attachments)
+                atomic_write(self.root / ORDERS_REL, json.dumps({"orders": orders}, indent=1))
+            return
+        entry = {"id": oid, "note": name, "text": text, "title": ascii_text(name, 120)}
+        if attachments:
+            entry["attachments"] = list(attachments)
+        atomic_write(self.root / ORDERS_REL, json.dumps({"orders": orders + [entry]},
+                                                        indent=1))
         self.step(f"inbox escalated: {name} -> lane item {oid}")
