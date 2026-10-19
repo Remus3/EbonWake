@@ -214,3 +214,18 @@ screenshot file, badge target, hotkey default (`Control+Alt+E` /
 - Outside-view finding, root tree: three tracked one-off merge-conflict scratch scripts `fix_resolve.py`, `p107-resolve_fix.py`, `p115-resolve_fix.py` sit at the repo root (no consumer found); removal via `git rm`: BLOCKED - `git rm` is outside this lane's allow list. Next session or lane: `git rm` them.
 - Section 4 (commit, push, read back): BLOCKED by this lane's own order (no commit); the loop commits and pushes after merge.
 - Progress file ops/loop/control/progress/Neba23f.json: BLOCKED - write to the main checkout was denied by this run's permissions.
+
+## Order Nc266c6 - blocked items
+
+GITHUB-SECURITY-FINDINGS ORDER (MAIN 2026-10-18-2243). Remote: origin on GitHub
+(repo renamed EbonWake 2026-10-18). Repo-file read in this lane: `.github/workflows/ci.yml`
+and `codeql.yml` already SHA-pin every action, set top-level `permissions: contents: read`,
+`persist-credentials: false`, and CodeQL scans python, javascript-typescript and actions;
+`.github/dependabot.yml` present. No alert data was readable, so no finding was fixed or
+dismissed in this lane; nothing in repo files was changed for this order.
+
+- Section 1 read of code-scanning / dependabot / secret-scanning alerts (`gh api .../alerts --paginate`): BLOCKED - `gh` is outside this lane's allow list (all three calls denied). Next interactive session: run the three reads.
+- Section 2 triage, fixes and dismissals via the alerts API: BLOCKED - depends on section 1 (needs `gh`).
+- Section 3 per-kind open before -> open after record: BLOCKED - depends on section 1; next session writes it into the hand-off.
+- Commit, push, read-back: BLOCKED by this lane's own order (no commit); the loop commits and pushes after merge.
+- Progress file ops/loop/control/progress/Nc266c6.json: BLOCKED - write to the main checkout was denied by this run's permissions.
