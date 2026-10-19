@@ -1001,16 +1001,21 @@ class Handler(BaseHTTPRequestHandler):
         """Plan 153 (SERVER-A-05): Allow-Origin only for the dashboard origins -
         `null` (dashboard / overlay load from file://) and this server's own
         loopback origins - so another web page cannot read /api/* cross-origin.
-        No Origin header (not a cross-origin browser read) keeps `*`."""
+        No Origin header (not a cross-origin browser read) keeps `*`.
+        Plan 162 (code-scanning alert #4, py/http-response-splitting): the
+        value written is the server's own allow-list string, never the
+        request's Origin, so no request byte reaches a response header."""
         origin = self.headers.get("Origin")
         if origin is None:
             self.send_header("Access-Control-Allow-Origin", "*")
             return
         self.send_header("Vary", "Origin")
         port = self.server.server_address[1]
-        own = {"http://%s:%d" % (h, port) for h in LOOPBACK_HOSTS}
-        if origin == "null" or origin in own:
-            self.send_header("Access-Control-Allow-Origin", origin)
+        allowed = ["null"] + ["http://%s:%d" % (h, port) for h in LOOPBACK_HOSTS]
+        for own in allowed:
+            if origin == own:
+                self.send_header("Access-Control-Allow-Origin", own)
+                break
 
     def _send(self, code, body, ctype="application/json", cors=True):
         data = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")

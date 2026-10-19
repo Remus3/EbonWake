@@ -70,6 +70,34 @@ def test_no_origin_header_unchanged(srv):
     assert st == 200 and acao == "*"
 
 
+class _Tainted(str):
+    """A request-supplied header value; equal to an allowed origin but not
+    one of the server's own strings."""
+
+
+class _FakeHandler:
+    def __init__(self, origin, port):
+        self.headers = {"Origin": origin}
+        self.server = type("S", (), {"server_address": ("127.0.0.1", port)})()
+        self.sent = []
+
+    def send_header(self, k, v):
+        self.sent.append((k, v))
+
+
+@pytest.mark.parametrize("make", [lambda p: "null",
+                                  lambda p: "http://127.0.0.1:%d" % p])
+def test_allow_origin_value_is_server_built_not_request_echo(make):
+    """Plan 162 (code-scanning alert #4, py/http-response-splitting): the
+    Allow-Origin value written is the server's own allow-list string, never
+    the request's Origin object, so no request byte reaches a header."""
+    h = _FakeHandler(_Tainted(make(8940)), 8940)
+    ewapp.Handler._cors_headers(h)
+    acao = [v for k, v in h.sent if k == "Access-Control-Allow-Origin"]
+    assert acao == [make(8940)]
+    assert type(acao[0]) is str
+
+
 def test_sse_follows_same_rule(srv):
     st, acao, vary = _get(srv, "/api/events", "https://example.com")
     assert st == 200 and acao is None and vary == "Origin"
