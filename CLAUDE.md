@@ -337,6 +337,28 @@ edit another tree's registry.
 - ASCII + LF in every authored file (FLEET item 8); `tests/test_ascii_lf.py`.
 - Never add a `Co-Authored-By` trailer.
 
+## Bot PRs (MAIN ORDER N38ca97, DEPENDABOT-MERGE-RULE)
+
+- Contributors show ONLY the operator: every default-branch commit has the
+  operator as author AND committer (FLEET item 17).
+- Never merge a Dependabot or other bot PR as-is (no merge commit, no
+  rebase-merge). Only two paths:
+  A. Squash with the operator as author and committer (GitHub dialog with the
+     author set, or `gh pr merge <n> --squash --author-email <operator noreply>`
+     with explicit `--subject` / `--body`), REMOVING every `Co-authored-by:`
+     trailer GitHub adds.
+  B. (EW default) Close the PR with a one-line reason and re-apply the bump as
+     an operator commit here (fleet_gitlock, hooks active), gates green, push
+     per policy. Re-apply only the version bump; never a lockfile regression
+     the bot's regeneration carries in.
+- READ BACK after every bot-PR landing: `gh pr view <n> --json state` and,
+  after any path A squash, `python tools/bot_pr_check.py` (fetches, scans the
+  new default-branch commits for a non-operator / bot author or committer and
+  ANY `Co-authored-by:` line; a GitHub squash never runs the local commit-msg
+  hook). A hit is recorded and fixed with `ops/fleet_kit/fleet_rewrite.py`.
+- Dependabot alerts and security updates stay ON; repo auto-merge stays OFF
+  (read back `gh api repos/{owner}/{repo} --jq .allow_auto_merge`).
+
 ## Session workflow
 
 - Start: read `EW-NEXT-SESSION.txt`, then this file, `docs/plans/ROADMAP.md`,

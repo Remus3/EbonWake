@@ -20,6 +20,10 @@ the process; reasoning lives in that ruling.
    `gh release create v0.X.Y --notes-file <file>`; `--generate-notes` stays
    OFF (generated notes are empty with local merges).
 
+6. Bot PRs (Dependabot) never merge as-is: path A (operator squash, no
+   `Co-authored-by:` trailer) or path B (close + operator re-apply commit),
+   then read back (`tools/bot_pr_check.py`). Rule: CLAUDE.md "Bot PRs".
+
 ## Steps
 
     git fetch origin
