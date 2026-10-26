@@ -1,22 +1,26 @@
 EW NEXT SESSION
 ---------------
-SESSION: 42
+SESSION: 43
 
-Next action: no open ROADMAP row (only 106, MAIN-gated) and no actionable
-hand-off item; the loop is armed and idle. Monitor progress/loop.json and
-loop_items/*.json; any item in adjudicate / merge-conflict / gave-up /
-failed-dirty is fixed by a session agent (merge-stuck recipe in Context).
-Then: refresh app/node_modules for the Electron bump (NOTE below), read
-the inbox (tick 1708: "delivered 18 new"), and answer MAIN's board reply
-if one has arrived.
+Next action: when MAIN's kit v22 bundle lands (rollout 2026-10-26 04:00),
+adopt it (vendor + MANIFEST + conformance), then work MAIN ORDER N2cfb1c
+(loop item, routed to the session: "needs ops/fleet_kit/"): ROADMAP 106
+lane move per the NOTE bullet below, ONE ANSWER HOP 2 batched with the
+v22 ANSWER. Close loop item Neb5fba (SS FIX to MAIN: fleet_test_guard
+IGNORE misses board/status.json + board/state.json) as MAIN's kit change -
+no EW action; check whether v22 carries it. Then the electron refresh
+(NOTE below) and the board NOTE (tell MAIN, drop the test asset).
 
 Carried forward (not acted on yet):
-- MAIN: board push blocked (sessions 40, 41) - EW board is owned by
-  another org: .json asset refused unsupported_type (a .js copy uploads
-  fine) AND ArtifactData datasets/board refused to outside-org invitees,
-  so no tree-side workaround. FIX note sent 2026-10-23 (re-board in own
-  org + kit status.js upload), delivered 1/1. Do not retry pushes until
-  MAIN answers with a new board URL or kit version.
+- NOTE: board push WORKED at session 42 /done (2026-10-25 20:01): .json
+  asset upload accepted (/_blob/9de09b...) and ArtifactData datasets/board
+  update accepted (dataset was at v3, not the local 6; `fleet_board.py
+  pushed --version 3`, write landed v4, local state set 4). Sessions 40-41
+  refusals (unsupported_type, outside-org) no longer reproduce. Tell MAIN
+  in the next batched EW note (with the N2cfb1c ANSWER) that the FIX
+  2026-10-23 re-board ask is moot unless MAIN still wants the re-home.
+  Rendered status.json was "[]" (only /done remained) - confirm a
+  session-start push carries rows.
 - NOTE: app/node_modules has electron 44.5.1 but app/package.json now
   pins ^44.8.0 (0e1f9d8, bot PR #6 re-applied). With the app CLOSED, run
   `npm ci` in app/ then `node node_modules/electron/install.js`, restart
@@ -25,8 +29,9 @@ Carried forward (not acted on yet):
   that the tick is triaging them (inbox_status.json, inbox_seen.jsonl);
   the newest seen line was 2026-10-19 07:34 before session 41.
 - NOTE: one unused test asset (/_blob/2876dd...) sits on the EW board
-  artifact from the session-41 board probe; remove it once the board is
-  re-homed (or leave it if MAIN replaces the board).
+  artifact from the session-41 board probe; remove it (Artifact delete
+  with its id as path) now that pushes work, unless MAIN replaces the
+  board.
 - NOTE: kit defect reported to MAIN in the session-41 N7e0676 ANSWER:
   fleet_identity only flags a Co-authored-by trailer naming Claude / a
   bot, not other persons. Kit change is MAIN's; adopt the next kit version.
@@ -58,16 +63,23 @@ Carried forward (not acted on yet):
   cannot run shell operators in ci.yml steps (none today).
 - EW sent two v8 ANSWERs to MAIN (04:00 loop note said "blocked on v6";
   04:11 supersedes it). If MAIN flags the duplicate, point to 04:11.
-- MAIN sets FLEET_SIDECAR_ROOT (kit v14 ORDER 3.4: MAIN sets it after all
-  six ANSWERs; adjudicated 2026-10-09, row 106; SIDECAR Hdc7859). Each
-  session: read HKCU Environment FLEET_SIDECAR_ROOT; when non-empty (or a
-  MAIN note says set), HALT the loop, wait for 3 FREE lanes, `git worktree
-  move` each idle ../ew-worktrees/lane-<i> to <sidecar>/EW/Worktree/lane-<i>,
-  set any held loop_items record's worktree to the new path, read back `git
-  worktree list` and fleet_lanes.worktree_path(i) for i=0..2, remove HALT,
-  flip ROADMAP row 106 to [x]. Reverses if MAIN orders trees to set it
-  themselves.
-  Read 2026-10-23 session 41: UNSET (row 106 still waits on MAIN).
+- NOTE: ROADMAP 106 trigger (MAIN ORDER N2cfb1c 2026-10-25, MAIN ruling
+  2026-10-25-sidecar-root-unset): MAIN will NOT set FLEET_SIDECAR_ROOT;
+  trigger is now "v22 SIDECAR_DEFAULT present" in the vendored
+  ops/fleet_kit/fleet_lanes.py (absent in v20.1, read 2026-10-25). Do NOT
+  move before v22 (v20 re-creates a moved lane at the old path). Then:
+  read back fleet_lanes.sidecar_root() == the v22 default with the
+  variable unset (process + HKCU); HALT the loop, wait for 3 FREE lanes,
+  `git worktree move` each ../ew-worktrees/lane-<i> to
+  <sidecar>/EW/Worktree/lane-<i> (MAIN created the empty parent),
+  repoint any held loop_items worktree, read back `git worktree list` and
+  fleet_lanes.worktree_path(i) for i=0..2, remove HALT, flip row 106 [x].
+  Old ../ew-worktrees: leave or Recycle Bin once nothing names it (never
+  unlink). Suite keeps FLEET_SIDECAR_ROOT pinned "". ANSWER includes the
+  move commit, worktree list, three worktree_path values, row 106 [x].
+  Reverses if: v22 delivery fails or EW has not adopted v22 by its next
+  session (SS pins the variable, then MAIN sets it), or operator orders a
+  root.
 - MAIN to record EW's port block 8940-8959 in the machine-wide registry and
   add EW to the roster / lane widget (roster INFO 0230 says EW is a member;
   Hbd1ed4).
@@ -206,24 +218,19 @@ Carried forward (not acted on yet):
   the same name, so it stays.
 
 Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew; read back
-session 41 /done (2026-10-23 19:28): enabled, state Ready, last run 19:19
-rc 0, no HALT; tick 1708 (19:34) idle, "inbox: delivered 18 new", push
-skipped (main not clean - the hand-off edit). LaneLoop was Disabled at
-session 40 /done because MAIN paused it for the SS quiet-bench window and
-restored it 2026-10-19 (MAIN INFORMATION 0730) - retired, no action.
-Loop items: N7e0676 merged (keep ref gone); N38ca97 merged + session_done
-(commit 0e1f9d8, seen-ledger line 19:34) - the loop's "1 order(s)
-awaiting lane" cleared. Kit v20.1 vendored (KIT_VERSION 20, KIT_PATCH 1,
-OUTBOUND_CAP 12). Outbound 2026-10-23: 3 of 12 (ANSWER 1918 security
-correction TERMINAL HOP 2; FIX 1919 board to MAIN HOP 1; ANSWER 1925
-N38ca97 + N7e0676 HOP 2; each delivered 1/1). Security read back session
-41: code scanning 4/4 fixed (alert #4 fixed_at 2026-10-19T06:35:34Z by
-4319eb2), Dependabot open 0, secret scanning open 0; open PRs 0; repo
-auto-merge off; contributors API 1 entry (operator); 615 origin/main
-commits operator author+committer, 0 Co-authored-by. FLEET_SIDECAR_ROOT
-unset (User env, 2026-10-23). A loop tick that writes control files
-during a whole suite trips fleet_test_guard; start the gated suite right
-after a tick (`python tools/loop_task.py status` for next run). Memory is
+session 42 /done (2026-10-25 19:34): enabled, state Ready, last run 19:34
+rc 0, no HALT; tick 1900 idle: N2cfb1c escalated, "pending: 2 order(s)
+awaiting lane" = N2cfb1c + Neb5fba, both routed to the session ("needs
+ops/fleet_kit/"); deep-dives 20261024 + 20261025 merged + pushed by the
+loop (af23ef3, bbd9623). Kit v20.1 vendored (no SIDECAR_DEFAULT yet);
+MAIN says v22 rollout 2026-10-26 04:00. Outbound 2026-10-25: 0 of 12.
+FLEET_SIDECAR_ROOT unset (User env, 2026-10-25) and stays unset (MAIN
+ruling). Suite gate machine slots read 1 at session 42 /done; a gated
+pytest waited ~1150 s for a slot before running. A loop tick that writes
+control files during a whole suite trips fleet_test_guard; start the
+gated suite right after a tick (`python tools/loop_task.py status` for
+next run); a board push (fleet_board render/pushed) during a suite trips
+it too (SS FIX Neb5fba) - push the board only after the suite. Memory is
 tight; run suites sequentially. State: ops/loop/control/ loop_items/*.json,
 progress/loop.json, progress/lane-<i>.json, inbox_status.json,
 inbox_seen.jsonl. Merge-stuck items are fixed by a session agent (merge
@@ -233,30 +240,31 @@ tools/launch.py --server-only`. Proxy probe: netstat for :3456 LISTENING.
 tools/leak_sweep.py --pre-push reads stdin; run it with stdin from
 /dev/null. Bot PR rule + tools/bot_pr_check.py: CLAUDE.md "Bot PRs".
 
-Acceptance: loop idle or merging cleanly; nothing in adjudicate /
-merge-conflict / gave-up / failed-dirty; Electron in app/node_modules
-reads 44.8.x; the 18 new inbox notes triaged (seen-ledger lines).
+Acceptance: kit v22 vendored + conformance green; row 106 [x] with the
+three lanes under the sidecar root and N2cfb1c answered (HOP 2, batched
+with v22 ANSWER); Neb5fba closed; loop idle or merging cleanly; nothing in
+adjudicate / merge-conflict / gave-up / failed-dirty; Electron in
+app/node_modules reads 44.8.x.
 
-Do NOT redo: session 41: row 159 [x] (98bfdaa; alert #4 already fixed by
-4319eb2, correction ANSWER 1918 sent 1/1); MAIN ORDER N38ca97 done via
-path B (0e1f9d8: bot PRs #6/#7/#8 closed unmerged, branches deleted,
-bumps re-applied as operator commit, #8 took only the ruff pin + hashes
-and dropped a lockfile regression; rule in CLAUDE.md + docs/process/
-releases.md; tools/bot_pr_check.py) - PR close comments cite 0e1f9d8,
-never rewrite it; N7e0676 read back closed + stale ROADMAP order
-write-ups removed (bb81b72); ANSWER 1925 sent 1/1. GitHub Contributors
-re-read done (API: operator only). Session 37 OPERATOR ask delivered - do
-not re-send. Session 39: kit v20 + v20.1 178b3fb. Older sessions:
-docs/handoff-ledger.txt and git log.
+Do NOT redo: session 42 (operator chose no build work): worktree audit
+only - lane-0/1/2 clean, detached, fully merged into main, no locks or
+processes, `git worktree prune --dry-run` empty; lane-0's stale
+gitignored _scratch/ (81K, 2026-10-09 audit drafts, no consumer) moved to
+the Recycle Bin, read back gone; no repo files changed. ROADMAP row 106
+re-worded to the v22 gate (this /done). Session 41: row 159 [x]
+(98bfdaa); MAIN ORDER N38ca97 done via path B (0e1f9d8; PR close comments
+cite it, never rewrite it); N7e0676 closed (bb81b72); GitHub Contributors
+API: operator only. Session 37 OPERATOR ask delivered - do not re-send.
+Older sessions: docs/handoff-ledger.txt and git log.
 
 In flight: none. No session agent or lane running (lane locks free).
+Loop items N2cfb1c + Neb5fba wait for a session (see Next action).
 
-Status: session 41 commits 98bfdaa, 0e1f9d8, bb81b72 pushed
-(f1377cc..bb81b72) plus this hand-off commit. /done gates fresh
-2026-10-23: gated pytest rc 0 (started after tick 1708), gated node
-837/837 rc 0, leak sweep ARMED (19). CI on bb81b72: ci 40045905478
-success (3.11 + 3.14), codeql 40045905435 success, 157 s. Server health
-ok on :8940. Session jsonl < 10 MB (largest 1.9 MB; this session 0.7 MB).
-Board push skipped at /done (known blocked; MAIN bullet above).
+Status: session 42 commits: the /done commit (ROADMAP row 106 wording +
+this hand-off). /done gates fresh 2026-10-25: gated pytest rc 0 (started
+after tick 1900, ran after a ~1150 s slot wait), node 837/837 rc 0, leak
+sweep ARMED (19). CI: last main runs green (codeql 40045905435 success);
+CI for the /done push not collected (docs-only). Server health ok on
+:8940. Session jsonl < 10 MB (largest 1.9 MB).
 
 Start with: read this file, then CLAUDE.md, docs/plans/ROADMAP.md, git log -10.
