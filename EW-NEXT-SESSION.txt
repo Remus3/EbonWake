@@ -21,6 +21,11 @@ Carried forward (not acted on yet):
   2026-10-23 re-board ask is moot unless MAIN still wants the re-home.
   Rendered status.json was "[]" (only /done remained) - confirm a
   session-start push carries rows.
+- Dependabot: 2 open HIGH alerts read 2026-10-25 20:05 (push of
+  6bc5f57): #27 electron (app/package-lock.json, fixed 44.9.1) and #30
+  undici (app/package-lock.json, fixed 7.30.1); open PRs 0. Bump both as
+  an operator commit (path B), gates green, push; then do the electron
+  refresh NOTE below with the new version; read back alert count 0.
 - NOTE: app/node_modules has electron 44.5.1 but app/package.json now
   pins ^44.8.0 (0e1f9d8, bot PR #6 re-applied). With the app CLOSED, run
   `npm ci` in app/ then `node node_modules/electron/install.js`, restart
@@ -263,8 +268,9 @@ Loop items N2cfb1c + Neb5fba wait for a session (see Next action).
 Status: session 42 commits: the /done commit (ROADMAP row 106 wording +
 this hand-off). /done gates fresh 2026-10-25: gated pytest rc 0 (started
 after tick 1900, ran after a ~1150 s slot wait), node 837/837 rc 0, leak
-sweep ARMED (19). CI: last main runs green (codeql 40045905435 success);
-CI for the /done push not collected (docs-only). Server health ok on
+sweep ARMED (19). CI: no run fired for 6bc5f57 (paths-ignore); last ci
+40045905478 + codeql 40045905435 on bb81b72 success. Pushed
+d258b63..6bc5f57 plus the Dependabot-bullet hand-off commit. Server health ok on
 :8940. Session jsonl < 10 MB (largest 1.9 MB).
 
 Start with: read this file, then CLAUDE.md, docs/plans/ROADMAP.md, git log -10.
