@@ -75,12 +75,18 @@ def verify_prompt(item, rnd, tree=None):
     """Plan 096: the loop's ci gates already ran green on exactly this tree;
     the verifier reviews and does not re-run pytest (VERIFY_EXTRA has none)."""
     on = f" (tree {tree[:12]})" if tree else ""
+    # plan 163: 9e52b0e passed with an empty app/ diff for a FIX's ordered files
+    order = ("For this order: list every ordered file (one the note orders changed); "
+             "one that "
+             "is missing from the diff and not named in a BLOCKED / NOT-APPLICABLE "
+             "bullet of its 'Order <id> - blocked items' ROADMAP section is a FAIL. "
+             if item.get("kind") == "order" else "")
     return (f"You are the EW review-lane verifier, refute round {rnd}/{MAX_ROUNDS}. This "
             f"worktree's uncommitted diff (git status, git diff HEAD) implements: "
             f"{item['label']}. Read-only: never edit. The loop's authoritative ci gates "
             f"(ruff, whole pytest suite, npm test) ran green on exactly this tree{on}: "
-            "do not re-run pytest. Check the diff against the plan's acceptance and its "
-            "tests, the Game ToS floor in CLAUDE.md, ASCII + LF, and no machine "
+            "do not re-run pytest. " + order + "Check the diff against the plan's "
+            "acceptance and its tests, the Game ToS floor in CLAUDE.md, ASCII + LF, and no machine "
             "path. End with exactly one line 'VERDICT: PASS' or 'VERDICT: FAIL', then "
             "numbered findings for a FAIL.")
 

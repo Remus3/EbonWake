@@ -125,7 +125,11 @@ def test_code_lane_runs_accept_edits_read_lane_does_not(tmp_path):
     ew_lane.run_lane("review", "look", root=tmp_path, **f)
     extra = seen["spawn"][0][1]["extra"]
     assert extra[:2] == ("--permission-mode", "acceptEdits")
-    assert "Bash(python -m pytest:*)" in extra[3] and "git" not in extra[3]
+    assert "Bash(python -m pytest:*)" in extra[3]
+    # plan 163: git add / status / diff only; the loop commits, merges and pushes
+    tools = extra[3].split(",")
+    git = sorted(t for t in tools if t.startswith("Bash(git"))
+    assert git == ["Bash(git add:*)", "Bash(git diff:*)", "Bash(git status:*)"]
     assert seen["spawn"][1][1]["extra"] == ()
 
 

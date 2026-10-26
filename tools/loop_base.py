@@ -121,7 +121,7 @@ VERIFY_EXTRA = ("--allowedTools",
                 "Bash(git diff:*),Bash(git status:*),"
                 "Bash(npm test:*),Bash(node --test:*),Bash(python tools/leak_sweep.py:*)")
 DEEP_EXTRA = ("--permission-mode", "acceptEdits", "--allowedTools",
-              ew_lane.CODE_EXTRA[3] + ",WebFetch,WebSearch")
+              ew_lane.GATE_TOOLS + ",WebFetch,WebSearch")  # plan 163: no npm / gh
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 _DETACHED = getattr(subprocess, "DETACHED_PROCESS", 0)
 _BREAKAWAY = getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
