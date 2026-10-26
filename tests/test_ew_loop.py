@@ -626,7 +626,7 @@ def test_checklist_lines(tmp_path):
     block = ew_loop.render_checklist(progress(root))
     lines = block.splitlines()
     assert lines[0] == "Session 2 checklist" and lines[-1] == chr(0x2610) + " /done"
-    assert lines[1] == chr(0x2610) + " 012: Grind spot recommender (dispatched, ~45m)"
+    assert lines[1] == chr(0x2610) + " 012: Grind spot recommender (dispatched, ~45m Remain)"
     raw = (root / "ops/loop/control/progress/loop.json").read_bytes()
     raw.decode("ascii")
     st = json.loads((root / "ops/loop/control/inbox_status.json").read_text())

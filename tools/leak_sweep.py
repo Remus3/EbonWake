@@ -38,9 +38,11 @@ ZERO = "0" * 40
 
 # Byte-pinned shared files that legitimately carry a drive-rooted DEFAULT path.
 STRUCT_ALLOW_FILES = {"ops/loop/slots.py"}
-# Paths the structural arm never flags (generic, identify nobody).
+# Paths the structural arm never flags (generic, identify nobody). Sidecars is
+# the fleet kit's generic sidecar root default (kit v22 fleet_lanes.SIDECAR_DEFAULT).
 STRUCT_ALLOW_PATHS = re.compile(
-    r"^[A-Za-z]:[\\/]+(ProgramData|Program Files( \(x86\))?|Windows)([\\/]|$)", re.I)
+    r"^[A-Za-z]:[\\/]+((ProgramData|Program Files( \(x86\))?|Windows)([\\/]|$)"
+    r"|Sidecars\b)", re.I)
 EMAIL_ALLOW = re.compile(r"@(example\.(com|org|net)|users\.noreply\.github\.com)$", re.I)
 
 STRUCTURAL = [

@@ -38,6 +38,9 @@ def test_structural_allowlist():
     generic = "C" + ":" + "\\" + "ProgramData\\thing"
     assert _kinds(generic, needles=[]) == []
     assert _kinds("x" + "@" + "example.com", needles=[]) == []
+    sidecar = "E" + ":" + "/" + "Sidecars/<CODE> exists)"
+    assert _kinds(sidecar, needles=[]) == []
+    assert _kinds("E" + ":" + "\\" + "SidecarsX\\y", needles=[]) == ["drive-path"]
     pinned = "C" + ":" + "\\" + "Anything\\here"
     assert ls.scan_text(pinned, "ops/loop/slots.py", [], "ops/loop/slots.py") == []
 

@@ -91,6 +91,16 @@ run finishes the remaining steps and repeats nothing destructive.
 - Red = the first next action in the hand-off ("resolve CI <job>"). A 2-3 second
   "job was not started" failure is billing, not code.
 
+### 6b. Reap finished worktrees (kit v22)
+
+Before the hand-off commit, run
+
+    python ops/fleet_kit/fleet_done.py reap --apply
+
+It removes only linked worktrees where nothing can be lost (never a lane,
+never --force); listed worktrees stay. Record its summary line in the
+hand-off as a `NOTE:` bullet.
+
 ### 7. Hand-off - ALWAYS, never skipped
 
 1. READ the current `EW-NEXT-SESSION.txt`.
@@ -117,19 +127,18 @@ Overwrite the whole file, read it back (the read-back is the recorded act),
 commit it, push it (same batch if CI has not started, else one more small push
 is acceptable for the hand-off only).
 
-### 7b. Status board push (kit v19, FLEET-COMMON item 18)
+### 7b. Status board render (kit v23, FLEET-COMMON item 18 - LOCAL ONLY)
 
-After the hand-off is READ BACK and before the done marker, push the board ONCE:
-pipe the last printed session checklist into
+After the hand-off is READ BACK and before the done marker, render the board
+ONCE: pipe the last printed session checklist into
 
-    python ops/fleet_kit/fleet_board.py calls --final --session <n>
+    python ops/fleet_kit/fleet_board.py render --final --session <n>
 
-and make the two tool calls it prints, exactly (Artifact publish of status.json,
-then ArtifactData update of datasets/board with the blob url in place of
-`__URL__`). A version mismatch: `fleet_board.py pushed --version <current>`, redo
-the second call. A headless run prints `no push: headless` - nothing to do. A
-failed push is one hand-off line (`NOTE: board push failed - <cause>`), never a
-ritual failure.
+It writes status.json, state.json and board.html to ops/loop/control/board/.
+No Artifact or ArtifactData call, no push. A headless run prints
+`board not rendered: headless` - nothing to do. A failed render is one
+hand-off line (`NOTE: board render failed - <cause>`), never a ritual
+failure.
 
 ### 8. Done marker, then the final output - ONE line
 
