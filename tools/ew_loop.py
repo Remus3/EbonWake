@@ -114,8 +114,8 @@ from loop_roadmap import (  # noqa: E402
     resolve_roadmap, title_tokens,  # noqa: F401
 )
 from loop_inbox import (  # noqa: E402
-    InboxMixin, order_prompt, order_settled, session_done, session_needs, session_orders,
-    settled_notes,
+    InboxMixin, missing_ordered, order_prompt, order_settled, session_done, session_needs,
+    session_orders, settled_notes,
     session_paths, FLOORS_IN_HOOKS, SESSION_TARGETS, inbox_prompt, order_id, queued_orders,  # noqa: F401
     triage_spawn_kwargs,  # noqa: F401
 )
@@ -871,6 +871,8 @@ class Tick(InboxMixin, MergeMixin):
     def extra_checks(self, rec, wt):
         if rec.get("kind") == "resolve":
             return self.marker_checks(wt)
+        if rec.get("kind") == "order":
+            return self.order_checks(rec, wt)
         if rec.get("kind") != "deep-dive":
             return []
         main_titles = plan_titles(self.d.main_tree)
@@ -887,17 +889,40 @@ class Tick(InboxMixin, MergeMixin):
             out.append(f"missing docs/research/NNNN-deep-dive-{rec['date']}.md")
         return out
 
-    def marker_checks(self, wt):
-        """Plan 058: a resolve run must leave no conflict marker in any file it
-        changed (the commit's `git add -A` would stage a marker as resolved)."""
+    def changed_names(self, wt):
+        """Tracked changes vs HEAD plus untracked files of the lane worktree."""
         names = set()
         for args in (["diff", "HEAD", "--name-only", "-z"],
                      ["ls-files", "--others", "--exclude-standard", "-z"]):
             r = self.d.git(args, wt)
             if r.returncode == 0:
-                names.update(n for n in r.stdout.split("\0") if n)
+                names.update(n.replace("\\", "/") for n in r.stdout.split("\0") if n)
+        return names
+
+    def order_checks(self, rec, wt):
+        """Plan 163: a FIX order whose ordered files are missing from the diff
+        never reaches the verifier (keep-ref 9e52b0e passed with an empty app/
+        diff). A file marked BLOCKED / NOT-APPLICABLE by path is exempt."""
+        order = next((o for o in self.orders() if o["id"] == rec.get("id")), None)
+        if order is None:
+            return []
+        name, text = order.get("note", ""), order.get("text", "")
+        if self.fi.note_class(name, text[:NOTE_HEAD]) != "FIX":
+            return []
+        roadmap = Path(wt) / ROADMAP_REL
+        road = roadmap.read_text(encoding="utf-8", errors="replace") \
+            if roadmap.is_file() else ""
+        miss = missing_ordered(text, self.changed_names(wt), road, order["id"],
+                               lambda p: (Path(wt) / p).exists())
+        return [f"FIX {order['id']}: ordered files missing from the diff: "
+                f"{', '.join(miss)} - change them or mark each BLOCKED / "
+                "NOT-APPLICABLE by path in the order's blocked-items section"] if miss else []
+
+    def marker_checks(self, wt):
+        """Plan 058: a resolve run must leave no conflict marker in any file it
+        changed (the commit's `git add -A` would stage a marker as resolved)."""
         bad = []
-        for name in sorted(names):
+        for name in sorted(self.changed_names(wt)):
             with contextlib.suppress(OSError):
                 if MARKER_RX.search((Path(wt) / name).read_text(encoding="utf-8",
                                                                 errors="replace")):

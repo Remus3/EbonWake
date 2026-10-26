@@ -54,7 +54,12 @@ def order_prompt(order):
             "CLAUDE.md first. Carry out the channel ORDER note below in THIS tree. Do "
             "every item that needs only repo files. An item needing a password, an OAuth "
             "grant, a download, a tool outside your allow list or a physical act is left "
-            "undone. In a section 'Order " + order["id"] + " - blocked items' at the end "
+            "undone. A dependency bump is not a download: run `npm install` / `npm ci` "
+            "with `--prefix app`, then `npm test --prefix app`, and read the alerts "
+            "with `gh api repos/{owner}/{repo}/dependabot/alerts` (GET only: never "
+            "-X PATCH, dismiss or close one; the alert closes when the bump lands). "
+            "Change every file the note orders changed, or mark it BLOCKED / "
+            "NOT-APPLICABLE by path. In a section 'Order " + order["id"] + " - blocked items' at the end "
             "of docs/plans/ROADMAP.md list EVERY item of the order, one bullet each, "
             "marked DONE, NOT-APPLICABLE or BLOCKED (one line, the reason). Do not "
             "write the ANSWER note; the loop writes it after merge. "
@@ -100,6 +105,38 @@ def all_blocked(roadmap, oid):
 
 
 ALL_BLOCKED = "all items BLOCKED"
+
+# Plan 163: the repo-relative files a note orders changed (keep-ref 9e52b0e
+# passed with an empty app/ diff). A path has a slash and a file extension;
+# URLs and the session-routed targets (plan 091) are never lane files.
+URL_RX = re.compile(r"\S+://\S+")
+PATH_RX = re.compile(r"(?<![\w./\\-])((?:[\w.-]+/)+[\w-][\w.-]*\.[A-Za-z0-9]+)(?![\w/-])")
+
+
+def ordered_files(text):
+    found = PATH_RX.findall(URL_RX.sub(" ", text or ""))
+    return sorted({p for p in found
+                   if not any(rx.search(p) for _, rx in SESSION_TARGETS)})
+
+
+def blocked_paths(roadmap, oid):
+    """Paths named in a BLOCKED / NOT-APPLICABLE bullet of the order's
+    'Order <oid> - blocked items' ROADMAP section (plan 161 format)."""
+    m = re.search(r"^## Order " + re.escape(oid) + r" - blocked items\s*$(.*?)(?=^## |\Z)",
+                  roadmap or "", re.M | re.S)
+    out = set()
+    for ln in (m.group(1).splitlines() if m else ()):
+        if re.match(r"\s*[-*] ", ln) and re.search(r"\bBLOCKED\b|NOT-APPLICABLE", ln):
+            out.update(PATH_RX.findall(ln))
+    return out
+
+
+def missing_ordered(text, changed, roadmap, oid, exists):
+    """Ordered files of this tree (`exists(path)` for the file or its parent
+    directory) that are neither changed nor marked BLOCKED / NOT-APPLICABLE."""
+    skip = set(changed) | blocked_paths(roadmap, oid)
+    return [p for p in ordered_files(text)
+            if p not in skip and (exists(p) or exists(p.rsplit("/", 1)[0]))]
 
 
 def session_needs(order, rec):

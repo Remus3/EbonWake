@@ -35,10 +35,19 @@ SEED_CONFIG = ("config/leak_needles.json", "config/local.json")
 # Headless -p has no prompt to approve edits; code lanes run in acceptEdits so
 # file edits land in the lane worktree. Bash stays on the project allow list
 # plus the gate commands below; commits and merges are done by the main session.
-CODE_EXTRA = ("--permission-mode", "acceptEdits", "--allowedTools",
-              "Bash(python -m pytest:*),Bash(npm test:*),Bash(node --test:*),"
+GATE_TOOLS = ("Bash(python -m pytest:*),Bash(npm test:*),Bash(node --test:*),"
               "Bash(python tools/leak_sweep.py:*),Bash(python -m ruff:*),"
               "Bash(python tools/ocr_bench.py:*),Bash(python tools/ew_tests.py:*)")
+# Plan 163: a dependency-bump / alert-closing item needs npm, the Dependabot
+# alert reads and git add of a regenerated lockfile (N82830d failed 3/3 on
+# denials). gh is read-only by prompt (GETs); {owner}/{repo} are gh placeholders.
+DEP_TOOLS = ("Bash(npm install:*),Bash(npm ci:*),Bash(npm ls:*),Bash(npm view:*),"
+             "Bash(npm outdated:*),Bash(npm audit:*),"
+             "Bash(git add:*),Bash(git status:*),Bash(git diff:*),"
+             "Bash(gh api repos/{owner}/{repo}/dependabot/alerts:*),"
+             "Bash(gh pr view:*),Bash(gh pr list:*)")
+CODE_EXTRA = ("--permission-mode", "acceptEdits", "--allowedTools",
+              GATE_TOOLS + "," + DEP_TOOLS)
 sys.path.insert(0, str(ROOT / "tools"))
 import eta  # noqa: E402
 
