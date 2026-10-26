@@ -109,7 +109,7 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 103 | Main-checkout inventory the lanes cannot read: count ops/runtime, ops/loop/control, moon_sync_inbox / outbox, logs, app/node_modules (one folder + file count); list sidecar moves into the one sidecar folder; Recycle Bin only, consumer-checked (research 0018) | [x] done 2026-10-09 (folded into 102: counts in research 0018; 33 stale progress files + 2 budget backups moved to the sidecar archive, duplicate old-drive project dir to the Recycle Bin) |
 | 104 | Hand-off prune at the next /done: move the closed NOTE / OPERATOR QA bullets research 0018 lists into a dated hand-off ledger and fix the stale Status block (session 19 under SESSION 20) | [x] done 2026-10-09 (session 22 /done: closed bullets to docs/handoff-ledger.txt, Status block rewritten) |
 | 105 | TEMP-1 (MAIN FIX N7416e2): pytest.ini tmp_path_retention_policy = failed, tmp_path_retention_count = 1; behavior test in tests/test_pytest_retention.py. Plan: `docs/plans/105-temp1-pytest-retention.md` | [x] done 2026-10-09 (rebuilt on main from keep ref; refute-rounds 3/3, adjudicated) |
-| 106 | Sidecar consolidation, session part (research 0018 F-OUT-2/3): lane worktrees from ../ew-worktrees to the kit v14 sidecar root (<sidecar>/EW/Worktree/lane-<i>, fleet_lanes) with the loop HALTed and lanes idle; archive the superseded kit bundles v6-v13 out of moon_sync_inbox after an inbox_seen check | [>] MAIN-gated (bundle archive done 2026-10-09: kit bundles v6-v14 to the Recycle Bin after an inbox_seen check; worktree move now waits for kit v22 adoption: MAIN ORDER N2cfb1c 2026-10-25 rules FLEET_SIDECAR_ROOT stays unset and v22 fleet_lanes.SIDECAR_DEFAULT supplies the root; hand-off NOTE bullet) |
+| 106 | Sidecar consolidation, session part (research 0018 F-OUT-2/3): lane worktrees from ../ew-worktrees to the kit v14 sidecar root (<sidecar>/EW/Worktree/lane-<i>, fleet_lanes) with the loop HALTed and lanes idle; archive the superseded kit bundles v6-v13 out of moon_sync_inbox after an inbox_seen check | [>] MAIN-gated (bundle archive done 2026-10-09: kit bundles v6-v14 to the Recycle Bin after an inbox_seen check; worktree move now waits for kit v22 adoption: MAIN ORDER N2cfb1c 2026-10-25 rules FLEET_SIDECAR_ROOT stays unset and v22 fleet_lanes.SIDECAR_DEFAULT supplies the root; hand-off NOTE bullet; gate MET by v23 adoption, MAIN ORDER Ne1235e 2026-10-26 orders the move now - session act, not a lane act: a lane runs inside lane-0 and cannot HALT, idle and move itself, see section Order Ne1235e) |
 | 107 | Split the two monoliths by domain, no behaviour change (research 0018 F-APP-1): app/shared/ewcore.js (7562 lines) into per-feature modules re-exported from ewcore.js, and tools/ew_loop.py (2563 lines) inbox / roadmap / merge helpers into modules; every existing test passes unchanged | [x] done 2026-10-09 (loop; refute 0/3 PASS) |
 | 108 | Fame bonus auto: OCR (and profile fame tier) derive market.fame_pct; a config value never beats a read, only a newer typed override wins; plan docs/plans/108-fame-auto.md (depends on 081) | [x] done 2026-10-10 (loop; refute 0/3 PASS) |
 | 109 | Value Pack auto: VP armed from the buff OCR with expiry, lapsed timer = no VP, market.vp retires to a fallback; zero-touch guard leaves only profile.multi_character (depends on 108) | [x] done 2026-10-10 (loop; refute 0/3 PASS) |
@@ -231,3 +231,29 @@ screenshot file, badge target, hotkey default (`Control+Alt+E` /
 - Reply (ONE ANSWER note): NOT-APPLICABLE - the loop writes it after merge.
 - After the work: /done: NOT-APPLICABLE - headless lane; the loop and the next session close it.
 - Progress file ops/loop/control/progress/N6e995b.json: BLOCKED - write to the main checkout was denied by this run's permissions.
+
+## Order Ne1235e - blocked items
+
+MAIN ORDER U5 2026-10-26 (row 106 sidecar lane move). Arrived as a headless
+build lane running in lane-0 itself (lane lock 0 RUNNING), so the move is a
+session act. No repo file needs to change for it: tools/ew_loop.py and
+tools/ew_lane.py already take every lane path from kit
+`fleet_lanes.worktree_path()`, which is sticky on the old path only while it
+exists and the new one does not - after the move the next fire uses
+`<sidecar root>/EW/Worktree/lane-<i>` with no code edit.
+
+- Item 1 (HALT the loop, lanes idle, `git worktree move` lane-0..2 under the sidecar root): BLOCKED - this run IS the lane-0 executor (lanes not idle, a worktree cannot move itself mid-run) and `ops/loop/control/HALT` / the main checkout's git worktree metadata are outside this lane's writable tree; next interactive session does it per the hand-off ROADMAP 106 NOTE bullet.
+- Item 2a (point every stored worktree_path at the new location): NOT-APPLICABLE as a code change - no tracked file stores a lane path (all derive from fleet_lanes.worktree_path); the runtime lane locks rewrite worktree_path on the next claim. Read back of the three values: BLOCKED with item 1.
+- Item 2b (un-HALT, let one lane fire to prove it): BLOCKED - follows item 1; session act.
+- Item 3 (mark row 106 [x] with the commit): BLOCKED - follows item 1; row 106 annotated with this order meanwhile.
+- Read back (`git worktree list` after the move, three worktree_path values, first lane fire result, row-106 line): BLOCKED - follows items 1-3. Before the move, read now: lane-0..2 at `../ew-worktrees/lane-<i>` (f231188, 9e52b0e, 9c92e2e detached).
+- tests/test_ew_lane.py `test_kit_worktree_layout_is_per_lane_index` (asserts the `ew-worktrees` parent): NOT-APPLICABLE - the suite pins FLEET_SIDECAR_ROOT off and the kit skips the v22 default under pytest, so it stays correct after the move.
+- Reply (ONE ANSWER note with the read-back): NOT-APPLICABLE - the loop writes it after merge; it should carry this BLOCKED list until the session finishes the move.
+- After the work: /done: NOT-APPLICABLE - headless lane; the loop and the next session close it.
+- Progress file ops/loop/control/progress/Ne1235e.json: BLOCKED - write to the main checkout was denied by this run's permissions.
+
+### Order Ne1235e - As-built deviations (refute round 1/3)
+
+- Deviation: the worktree move (items 1-3 and read-back) is not done by this run. Decision: leave it a session act, recorded BLOCKED above. Alternatives: (a) move lane-0 from inside lane-0 (git refuses a worktree moving itself while a live lane runs in it; rejected); (b) edit ew_lane.py / ew_loop.py to fake the new path (rejected: paths already come from fleet_lanes.worktree_path(), so there is no file to change and a fake would desync the lane locks). Why: HALT, idle lanes and the move all need the main checkout, which a lane cannot touch. Reverses if: the order note names a repo file this section did not cover (then add it) or a session executes the move (then mark row 106 [x] with the read-back).
+- Verified for the round: the NOT-APPLICABLE test claim holds - tests/conftest.py pins FLEET_SIDECAR_ROOT to "" and fleet_lanes skips SIDECAR_DEFAULT under PYTEST_CURRENT_TEST, so tests/test_ew_lane.py stays correct after the move.
+- The reviewer could not read the order note (inbox read denied to it and to this run); the file list is the producer's reading of the lane prompt. Adjudicate at round 3 if still open.
