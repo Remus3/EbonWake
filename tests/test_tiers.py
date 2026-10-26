@@ -200,7 +200,7 @@ def test_gate_adds_xdist_loadfile_when_present():
     argv = ew_loop._gate_argv("python -m pytest -q", xdist=True)
     i = argv.index("--")
     assert "fleet_suite_gate.py" in argv[1]
-    assert argv[i + 2:] == ["-m", "pytest", "-q", "-n", "4", "--dist", "loadfile"]
+    assert argv[i + 2:] == ["-m", "pytest", "-q", "-n", "8", "--dist", "loadfile"]
 
 
 def test_gate_runs_serially_without_xdist():
@@ -242,7 +242,7 @@ def test_ew_tests_fast_argv_goes_through_the_suite_gate():
 def test_ew_tests_fast_argv_adds_xdist_and_extra_args():
     argv = ew_tests.fast_argv("s1.main", ["-x"], xdist=True)
     tail = argv[argv.index("--") + 2:]
-    assert tail == ["-m", "pytest", "-q", "--fast", "-n", "4", "--dist", "loadfile", "-x"]
+    assert tail == ["-m", "pytest", "-q", "--fast", "-n", "8", "--dist", "loadfile", "-x"]
 
 
 def test_ew_tests_main_passes_the_exit_code_through():

@@ -43,7 +43,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 def _serve():
     s = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
     s.hits, s.routes = [], {}
-    threading.Thread(target=s.serve_forever, daemon=True).start()
+    # A short poll: shutdown() otherwise waits out the 0.5 s default per server.
+    threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
     return s
 
 

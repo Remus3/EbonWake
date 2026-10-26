@@ -248,10 +248,11 @@ def _whole_suite(argv):
     return not any(a.endswith(".py") or "::" in a for a in rest)
 
 
-# Plan 097: the whole suite runs on 4 xdist workers when pytest-xdist (an
+# Plan 097: the whole suite runs on 8 xdist workers when pytest-xdist (an
 # optional dev-only accelerator, never imported by EW code) is importable;
 # loadfile keeps each module - every real-git module included - on one worker.
-XDIST_ARGS = ("-n", "4", "--dist", "loadfile")
+# 8, not auto (16): two gate slots share the box (MAIN order N6e995b).
+XDIST_ARGS = ("-n", "8", "--dist", "loadfile")
 
 
 def _xdist_available():

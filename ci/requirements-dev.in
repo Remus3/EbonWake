@@ -1,6 +1,6 @@
 # Plan 097: dev-only test accelerator for the loop gate box. NOT a runtime
 # dependency (server/, tools/ and tests/ import only the stdlib and pytest) and
-# NOT installed by ci. The loop gate adds `-n 4 --dist loadfile` only when
+# NOT installed by ci. The loop gate adds `-n 8 --dist loadfile` only when
 # pytest-xdist is importable; without it the gate runs serially.
 # Hash-pinned file (generated 2026-10-09 by the repo review, constrained to
 # the ci pins so ruff / pytest match ci):
