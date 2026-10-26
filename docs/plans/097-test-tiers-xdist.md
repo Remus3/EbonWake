@@ -139,3 +139,14 @@ the loop's authoritative gate, which costs a whole fix round.
    finished tree. Every test module was run under the guard by name, in
    batches (3607 collected, all green). Reverses if: never - it
    is a record of what was and was not run.
+9. MAIN ORDER N6e995b (2026-10-25, suite speed): `XDIST_ARGS` is now
+   `-n 8 --dist loadfile` (was `-n 4`), and the last test fixture on the
+   default 0.5 s `serve_forever` poll (tests/test_redirect_guard.py) uses
+   0.01 like the other 66. Alternatives: `-n auto` (16 workers) - rejected,
+   two gate slots would each oversubscribe the 16-CPU box; keep -n 4 -
+   rejected, the order names 8 and every server test binds port 0; the
+   note's 0.05 poll - rejected for 0.01, the value every sibling fixture
+   already uses. Why: fast tier 32.65 s at -n 4 vs 29.66 s at -n 8; the
+   redirect-guard file 15.52 s to 0.95 s. Reverses if: gate runs at -n 8
+   show worker crashes or memory pressure against the commit limit - then
+   back to -n 4.

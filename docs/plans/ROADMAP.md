@@ -221,3 +221,12 @@ screenshot file, badge target, hotkey default (`Control+Alt+E` /
 ## Order N7e0676 - contributors (closed)
 
 - [x] done 2026-10-23 session 41 N7e0676 contributors/dependabot: read back via gh: contributors API (anon=1) lists 1 entry, the operator (User), no dependabot[bot]; fetched origin/main census: every commit operator author and committer, 0 Co-authored-by lines; bot PRs #6 #7 #8 closed unmerged (path B, bumps re-applied as operator commit 0e1f9d8, MAIN ORDER N38ca97); #1 #3 #4 #5 closed, #2 merged pre-rewrite. Loop resolve merged as 55bfeed. Status reported inside the N38ca97 ANSWER (0055 already answered N7e0676).
+
+## Order N6e995b - blocked items
+
+- Item 1 (`serve_forever` poll interval in tests/test_redirect_guard.py and every other `serve_forever` under tests/): DONE - the redirect-guard `_serve` helper was the only one on the 0.5 s default (66 others already pass `poll_interval=0.01`); it now passes 0.01 (matches the rest, not the note's 0.05). Same command `python -m pytest -p no:cacheprovider tests/test_redirect_guard.py -o addopts=""`: 15 passed 15.52 s before, 0.95 s after.
+- Item 2 (`-n 8 --dist loadfile`, kept only if server-marked tests bind 127.0.0.1:0): DONE - no test binds a fixed port (8940 appears only in fakes / config dicts), so `ew_loop.XDIST_ARGS` is now `-n 8 --dist loadfile` (loop gate and `tools/ew_tests.py fast`); test_tiers expectations and ci/requirements-dev.in comment follow. Fast tier through the suite gate: 4173 passed, 32.65 s at -n 4, 29.66 s at -n 8 (both with item 1). ci stays serial (plan 097 deviation 2).
+- Read back (before/after wall of `python -m pytest -q`): BLOCKED - this lane is ordered not to run the whole suite; the loop's authoritative gate run on this tree (now -n 8) is the after figure; before = MAIN's gate median 43 s.
+- Reply (ONE ANSWER note): NOT-APPLICABLE - the loop writes it after merge.
+- After the work: /done: NOT-APPLICABLE - headless lane; the loop and the next session close it.
+- Progress file ops/loop/control/progress/N6e995b.json: BLOCKED - write to the main checkout was denied by this run's permissions.
