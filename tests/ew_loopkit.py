@@ -102,6 +102,8 @@ def deps(root, **over):
         record=lambda kind, s, ok=True: seen["record"].append(kind),
         clock=lambda: 1_790_000_000.0,
         roster_path=None,  # plan 093: never the machine roster from FLEET_ROSTER
+        should_yield=lambda: False,  # kit v25: never the live governor
+        lane_cap=lambda: 3,
     )
     base.update(over)
     d = ew_loop.Deps(root, **base)

@@ -390,7 +390,9 @@ class Deps:
         self.pick_effort = k.pick_effort
         self.write_status = k.write_status
         self.lock = lambda path: fw.watch_lock(path)
-        self.lane_state = lambda: fl.repo_lane_state(self.root, ew_lane.LANE_CAP)
+        self.lane_state = lambda: fl.repo_lane_state(self.root, ew_lane.lane_cap())
+        self.lane_cap = ew_lane.lane_cap  # kit v25: live machine config
+        self.should_yield = ew_lane.should_yield  # kit v25: fair release
         self.lane_worktree = lambda i: fl.worktree_path(self.main_tree, CODE, i)
         self.pid_alive = fl.pid_alive
         self.main_tree = fl.main_tree(self.root)
@@ -1108,7 +1110,7 @@ class Tick(InboxMixin, MergeMixin):
         such index whose worktree is dirty or held (the claim would refuse)."""
         by_index = {r.get("index"): r for r in self.d.lane_state()}
         rows = [by_index.get(i) or {"index": i, "state": "FREE", "lane": None}
-                for i in range(ew_lane.LANE_CAP)]  # no lock row: a FREE index
+                for i in range(self.d.lane_cap())]  # no lock row: a FREE index
         recs = self.items.all()
         running = {r["lane"] for r in rows if r["state"] == "RUNNING"}
         busy = running | {r.get("lane") for r in recs.values()
@@ -1171,6 +1173,9 @@ class Tick(InboxMixin, MergeMixin):
             why = self.blocked()
             if why:
                 self.step(f"dispatch paused: {why}")
+                return
+            if self.d.should_yield():  # kit v25: cycle boundary, never a kill
+                self.step("dispatch paused: should_yield (another tree waits for a slot)")
                 return
             lane = free.pop(0)
             prompt = {"plan": plan_prompt, "handoff": handoff_prompt}.get(item["kind"])
@@ -1484,6 +1489,8 @@ def lane_worker(iid, deps=None, run_lane=None):
     why = spawn_block(d.root, d.budget, d.clock())  # may have changed since dispatch
     if why:
         return pause(why)
+    if d.should_yield():  # kit v25: do not start this cycle; nothing is killed
+        return pause("should_yield")
     run_lane = run_lane or ew_lane.run_lane
     cfg = load_config(d.root)
     timeout = cfg["lane_timeout_s"]
@@ -1515,6 +1522,8 @@ def lane_worker(iid, deps=None, run_lane=None):
             backoff_hit(d.root, d.clock(), text)
         if halt.exists():
             return pause("halted")
+        if "admission" in text.lower():  # kit v25: low RAM / high CPU, retry next tick
+            return pause(ascii_text(text, 200))
         # a dirty lane worktree: retrying cannot clear it, so it waits without
         # burning attempts until the tick sees that tree clean and unheld
         state = "lane-dirty" if "dirty" in text.lower() else "refused"

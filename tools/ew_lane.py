@@ -4,7 +4,8 @@
     ew_lane.py status
     ew_lane.py run <lane> --prompt-file F [--writes-code] [--timeout S] [--dry-run]
 
-Roster lanes: build, data, review. Up to LANE_CAP (3) run at once. Each run goes
+Roster lanes: build, data, review. Up to lane_cap() run at once (kit v25:
+the live machine config `fleet_lanes.load_config()`, default 3). Each run goes
 through the kit's `fleet_lanes.run_lane` (repo lane lock + its OWN clean git
 worktree `<repo parent>/ew-worktrees/lane-<i>`, detached at main's HEAD) and
 spawns through `fleet_headless.spawn` ONLY (account B proxy, fail closed - FLEET
@@ -29,7 +30,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 LANES = ("build", "data", "review")
-LANE_CAP = 3  # v6 LANE_CAP_MAX; no measured reason for less (ADR 0007)
 CODE = "EW"
 SEED_CONFIG = ("config/leak_needles.json", "config/local.json")
 # Headless -p has no prompt to approve edits; code lanes run in acceptEdits so
@@ -66,6 +66,31 @@ def kit():
 
 def lanes():
     return _load("fleet_lanes", "ops/fleet_kit/fleet_lanes.py")
+
+
+def lane_cap():
+    """Kit v25 LANE-CAP: the live per-tree lane cap, the machine config's
+    lane_cap_max clamped to its governor_width (no config: 3). Re-read on
+    every call; EW keeps no hard-coded cap (ADR 0007: no reason for less)."""
+    return lanes().lane_cap(None)
+
+
+def slot_count():
+    """Kit v25: the machine-wide governor slot count EW's spawns queue for
+    (live governor_width; no config: 3). spawn(governor="queued") takes its
+    slot with cap=None, so EW borrows idle slots up to lane_cap()."""
+    return int(lanes().load_config()["governor_width"])
+
+
+def should_yield():
+    """Kit v25 FAIR RELEASE, read only: True = do not start the next lane
+    cycle (another tree waits, no slot free, EW above its fair share). The
+    caller only declines to start work; it never stops a running worker.
+    An unreadable governor reads False (the kit's own slot wait still bounds)."""
+    try:
+        return bool(lanes().should_yield(CODE))
+    except Exception:  # noqa: BLE001 - advisory only
+        return False
 
 
 def check_lane(lane):
@@ -122,7 +147,7 @@ def run_lane(lane, prompt, writes_code=False, timeout=3600, dry_run=False, root=
     t0 = clock()
     ok = False
     try:
-        with lane_ctx(root, CODE, lane, run_id, cap=LANE_CAP) as claim:
+        with lane_ctx(root, CODE, lane, run_id, cap=lane_cap()) as claim:
             task = progress_task(claim["index"])
             wt = Path(claim["worktree"])
             seed_config(wt, root)
@@ -148,7 +173,7 @@ def run_lane(lane, prompt, writes_code=False, timeout=3600, dry_run=False, root=
 
 def status(root=ROOT):
     rows = []
-    for row in lanes().repo_lane_state(root, LANE_CAP):
+    for row in lanes().repo_lane_state(root, lane_cap()):
         rows.append(" ".join(f"{k}={v}" for k, v in sorted(row.items())))
     for lane in LANES:
         rows.append(f"{lane}: eta={eta.fmt(eta.estimate(f'lane-{lane}-code'))}")

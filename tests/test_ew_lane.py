@@ -10,7 +10,7 @@ import ew_lane  # noqa: E402
 
 
 def test_roster_and_cap():
-    assert ew_lane.LANES == ("build", "data", "review") and ew_lane.LANE_CAP == 3
+    assert ew_lane.LANES == ("build", "data", "review") and ew_lane.lane_cap() == 3
     with pytest.raises(SystemExit):
         ew_lane.check_lane("rogue")
 
