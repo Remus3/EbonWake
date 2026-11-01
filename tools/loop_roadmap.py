@@ -294,3 +294,42 @@ def dispatchable(rec, open_ids=()):
                 and not set(rec.get("needs") or ()) & set(open_ids))
     return rec is None or rec.get("state") == "paused" or (
         rec.get("state") in ("refused", "lost") and rec.get("attempts", 0) < MAX_ATTEMPTS)
+
+
+# -- W44 (MAIN ORDER Nee58d0 item 3): idle deep-dive weekly backoff
+DIVE_ZERO_STREAK = 3
+DIVE_BACKOFF_DAYS = 7
+_DIVE_RX = re.compile(r"^docs/research/\d+-deep-dive-(\d{8})\.md$")
+_PLAN_RX = re.compile(r"^docs/plans/\d{3}-[^/]*\.md$")
+
+
+def dive_backoff(history, today, streak=DIVE_ZERO_STREAK, days=DIVE_BACKOFF_DAYS):
+    """history = [(YYYYMMDD, plans proposed)] oldest first. True = skip the
+    dive today: the last `streak` dives all proposed 0 plans and the newest is
+    under `days` days old (weekly). Any plan proposed resets it to daily."""
+    if len(history) < streak or any(n for _, n in history[-streak:]):
+        return False
+    import datetime as _dt
+    last = _dt.datetime.strptime(history[-1][0], "%Y%m%d").date()
+    return (today - last).days < days
+
+
+def dive_history(tree, git, limit=40):
+    """Each deep-dive commit in `tree` (the one that added a
+    docs/research/NNNN-deep-dive-<date>.md), with the count of
+    docs/plans/NNN-*.md files that same commit added; oldest first. `git` is
+    the loop's runner, git(args, cwd) -> CompletedProcess. [] when git fails."""
+    try:
+        r = git(["log", f"-{int(limit)}", "--diff-filter=A", "--name-only",
+                 "--format=format:@", "--", "docs/research/", "docs/plans/"], tree)
+    except Exception:  # noqa: BLE001 - OSError, timeout: no history, no backoff
+        return []
+    if getattr(r, "returncode", 1) != 0 or not isinstance(getattr(r, "stdout", None), str):
+        return []
+    out = []
+    for group in r.stdout.split("@")[1:]:
+        names = [n.strip() for n in group.splitlines() if n.strip()]
+        dates = [m.group(1) for m in map(_DIVE_RX.match, names) if m]
+        if dates:
+            out.append((dates[0], sum(1 for n in names if _PLAN_RX.match(n))))
+    return sorted(out)

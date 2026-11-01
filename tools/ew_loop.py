@@ -112,6 +112,7 @@ from loop_roadmap import (  # noqa: E402
     plan_depends, plan_doc, plan_titles, resolve_item, roadmap_flip_time, roadmap_rows,
     RUN_FIELDS, VERDICTS_REL, _KEY_RX, _norm_words, base_kind, flip_roadmap,  # noqa: F401
     resolve_roadmap, title_tokens,  # noqa: F401
+    dive_backoff, dive_history,
 )
 from loop_inbox import (  # noqa: E402
     InboxMixin, missing_ordered, order_prompt, order_settled, session_done, session_needs,
@@ -1210,6 +1211,11 @@ class Tick(InboxMixin, MergeMixin):
             return None
         if list((self.d.main_tree / "docs" / "research").glob(f"*-deep-dive-{date}.md")):
             return None
+        # W44: weekly after 3 dives in a row proposed 0 plans; any plan resets
+        today = _dt.datetime.fromtimestamp(self.d.clock()).date()
+        if dive_backoff(dive_history(self.d.main_tree, self.d.git), today):
+            self.dive_backed_off = True
+            return None
         prompt = deep_dive_prompt(self.d.main_tree, date, self.cfg["max_new_plans_per_day"],
                                   plan_titles(self.d.main_tree))
         return {"id": iid, "kind": "deep-dive", "date": date, "title": "idle deep-dive",
@@ -1402,6 +1408,8 @@ class Tick(InboxMixin, MergeMixin):
                 work.append(dd)
                 self.step("idle: deep-dive")
                 self.dispatch([dd])
+            elif getattr(self, "dive_backed_off", False):
+                self.step("idle: deep-dive backed off to weekly (3 dives, 0 plans)")
             else:
                 self.step("idle: deep-dive already done today")
         self.launch_push()
