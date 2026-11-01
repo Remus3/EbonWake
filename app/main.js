@@ -12,6 +12,7 @@ const core = require('./shared/ewcore');
 const localhttp = require('./shared/localhttp');
 const tray = require('./shared/tray');
 const watchdog = require('./shared/watchdog');
+const W = require('./shared/overlaywin');
 
 const REPO = path.resolve(__dirname, '..');
 
@@ -81,12 +82,31 @@ function createDashboard() {
 // follows the overlay page's content (ew:overlay-size).
 const OVERLAY_MARGIN = 16;
 let overlayCfg = core.overlayConfig({});
+let stopForeground = null;
+
+// EW-DISPLAY-BY-ID (MAIN ORDER Nee58d0 item 6): the configured index is bound
+// to that display's ID in ops/runtime/overlay_display.json, so a monitor
+// reconnect (index reorder) keeps the screen; a missing display = primary.
+const DISPLAY_STATE = path.join(REPO, 'ops', 'runtime', 'overlay_display.json');
+
+function readDisplayState() {
+  try { return JSON.parse(fs.readFileSync(DISPLAY_STATE, 'utf8')); } catch (e) { return null; }
+}
+
+function writeDisplayState(saved) {
+  try {
+    fs.mkdirSync(path.dirname(DISPLAY_STATE), { recursive: true });
+    const tmp = DISPLAY_STATE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(saved) + '\n');
+    fs.renameSync(tmp, DISPLAY_STATE);
+  } catch (e) { /* placement still works; the bind retries next time */ }
+}
 
 function overlayWorkArea() {
-  const all = screen.getAllDisplays();
-  const d = overlayCfg.display !== null && all[overlayCfg.display] ? all[overlayCfg.display]
-    : screen.getPrimaryDisplay();
-  return d.workArea;
+  const prev = readDisplayState();
+  const r = W.resolveDisplay(screen.getAllDisplays(), screen.getPrimaryDisplay(), overlayCfg.display, prev);
+  if (r.saved && JSON.stringify(r.saved) !== JSON.stringify(prev)) writeDisplayState(r.saved);
+  return r.display.workArea;
 }
 
 function overlayPlacement(height) {
@@ -111,6 +131,8 @@ function createOverlay() {
   overlay.setAlwaysOnTop(true, 'screen-saver');
   overlay.setIgnoreMouseEvents(true, { forward: false });
   overlay.setVisibleOnAllWorkspaces(true);
+  // EW-CAPTURE-OPT (item 7): opt-in, default off - the self-test captures it.
+  if (W.contentProtection(cfg)) overlay.setContentProtection(true);
   overlay.webContents.on('will-navigate', function (e) { e.preventDefault(); });
   overlay.webContents.setWindowOpenHandler(function () { return { action: 'deny' }; });
   // Opt-in widgets (spec section 3) and scale / opacity ride in the query.
@@ -118,16 +140,35 @@ function createOverlay() {
   overlay.loadFile(path.join(__dirname, 'overlay', 'index.html'), { query: query });
   const win = overlay;
   overlay.on('closed', function () { if (overlay === win) overlay = null; });
+  focusGate = W.createFocusGate({ apply: applyOverlayVisible, enabled: W.focusHide(cfg) });
+}
+
+// EW-OVERLAY-FOCUS (item 5): shown = toggled on AND, while the game runs, the
+// game is the foreground window (hidden on alt-tab / minimise). The poller
+// reads only the OS foreground window; never under EW_SELFTEST.
+let focusGate = W.createFocusGate({});
+let lastForeground = null;
+
+function applyOverlayVisible(v) {
+  if (!overlay) return;
+  if (v) overlay.showInactive();
+  else overlay.hide();
+}
+
+function onForeground(report) {
+  lastForeground = report;
+  focusGate.onForeground(report);
 }
 
 // Plan 030: a settings save recreates the overlay from the new config (same
 // visibility) - no app restart. No payload: main re-reads config/local.json.
 function reloadOverlay() {
-  const wasVisible = !!overlay && overlay.isVisible();
+  const wasWanted = focusGate.wanted();
   if (overlay) overlay.destroy();
   overlay = null;
   createOverlay();
-  if (wasVisible) overlay.showInactive();
+  focusGate.onForeground(lastForeground);
+  focusGate.setWanted(wasWanted);
 }
 
 // One-way, number only, from the overlay page alone: clamp 60-600 px and
@@ -158,8 +199,7 @@ ipcMain.handle('ew:post', function (event, route, body) {
 
 function toggleOverlay() {
   if (!overlay) createOverlay();
-  if (overlay.isVisible()) overlay.hide();
-  else overlay.showInactive();
+  focusGate.setWanted(!focusGate.wanted());
 }
 
 function showDashboard() {
@@ -348,6 +388,7 @@ if (!app.requestSingleInstanceLock()) {
     globalShortcut.register(keys.showDashboard, showDashboard);
     // The selftest runs without a server on purpose; no watchdog there.
     if (!process.env.EW_SELFTEST) setInterval(watchdogTick, watchdog.POLL_MS);
+    if (!process.env.EW_SELFTEST) stopForeground = W.startForeground(childProcess.spawn, path.join(__dirname, 'shared', 'foreground.ps1'), onForeground);
     if (process.env.EW_SELFTEST) {
       selftest.run({
         app: app, dashboard: dashboard, overlay: overlay, keys: keys,
@@ -361,6 +402,7 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.on('will-quit', function () {
     globalShortcut.unregisterAll();
+    if (stopForeground) stopForeground();
     if (trayIcon) trayIcon.destroy();
   });
   app.on('window-all-closed', function () { /* overlay keeps the app alive */ });

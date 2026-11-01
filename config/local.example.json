@@ -14,11 +14,13 @@
     "_example_ocr_key": {"env": "EW_OCR_API_KEY"}
   },
   "overlay": {
-    "_doc": "Plan 022. anchor: tl|tr|bl|br|ml|mr or {\"x\": int, \"y\": int} (work-area relative); default ml keeps it off the top-right minimap. display: index into the display list, null = auto (primary). scale 0.8-1.6. opacity (panel) 0.5-0.95. Widgets are chosen by context (plan 067).",
+    "_doc": "Plan 022. anchor: tl|tr|bl|br|ml|mr or {\"x\": int, \"y\": int} (work-area relative); default ml keeps it off the top-right minimap. display: index into the display list, null = auto (primary). scale 0.8-1.6. opacity (panel) 0.5-0.95. Widgets are chosen by context (plan 067). display is bound to that display's ID (ops/runtime/overlay_display.json) so a monitor reconnect keeps the screen; a missing display = primary. focus_hide (default true): while the game runs, the overlay shows only while the game is the foreground window. content_protection (default false): hide the overlay from screen capture.",
     "anchor": "ml",
     "display": null,
     "scale": 1.0,
-    "opacity": 0.85
+    "opacity": 0.85,
+    "focus_hide": true,
+    "content_protection": false
   },
   "notify": {
     "_doc": "Plan 080: every notification rule is on while logged in; game-closed quiet and the 15/5/1 ladder govern volume. mute_until: blank = auto (not muted) or an ISO UTC time at most 24 h ahead. silent: no notification sound (default true).",
