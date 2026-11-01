@@ -50,6 +50,7 @@ CODE_EXTRA = ("--permission-mode", "acceptEdits", "--allowedTools",
               GATE_TOOLS + "," + DEP_TOOLS)
 sys.path.insert(0, str(ROOT / "tools"))
 import eta  # noqa: E402
+import lane_samples  # noqa: E402
 
 
 def _load(name, rel):
@@ -120,7 +121,8 @@ def progress_task(index):
 
 def run_lane(lane, prompt, writes_code=False, timeout=3600, dry_run=False, root=ROOT,
              spawn=None, lane_ctx=None, progress=None, record=eta.record,
-             clock=time.time, model=None, effort=None, eta_kind=None):
+             clock=time.time, model=None, effort=None, eta_kind=None,
+             sample_retry=False, sample_label=None):
     """One headless run on one lane. Returns the kit usage line plus "worktree".
     Progress goes to the MAIN checkout's progress/lane-<i>.json once the lane
     index is claimed; a dry run or a refused claim has no index and writes none.
@@ -128,7 +130,9 @@ def run_lane(lane, prompt, writes_code=False, timeout=3600, dry_run=False, root=
     by-hand run without them keeps the kit default (pick_model / pick_effort).
     eta_kind (the loop item kind, e.g. item-plan) sets the progress ETA and is
     recorded beside the lane kind, so mixed item sizes on one lane stop skewing
-    each other's estimate."""
+    each other's estimate. Order Nd11eb1 item 6: 1 lane in 20 and every retry
+    after a failure (sample_retry) run with persistence on and their transcript
+    is copied to the sidecar when the run ends (tools/lane_samples.py)."""
     check_lane(lane)
     route = {k: v for k, v in (("model", model), ("effort", effort)) if v is not None}
     run_id = f"lane-{lane}"
@@ -146,6 +150,7 @@ def run_lane(lane, prompt, writes_code=False, timeout=3600, dry_run=False, root=
     task = None
     t0 = clock()
     ok = False
+    sampled = None
     try:
         with lane_ctx(root, CODE, lane, run_id, cap=lane_cap()) as claim:
             task = progress_task(claim["index"])
@@ -153,6 +158,9 @@ def run_lane(lane, prompt, writes_code=False, timeout=3600, dry_run=False, root=
             seed_config(wt, root)
             progress(main, task, 20, f"{lane}: running headless in {wt.name}", eta_s,
                      "running")
+            sampled = lane_samples.begin(main, retry=sample_retry)
+            if sampled:
+                route["session_id"] = sampled
             line = spawn(root, CODE, prompt, note=run_id, writes_code=writes_code,
                          timeout=timeout, cwd=wt, stdin=True,
                          extra=CODE_EXTRA if writes_code else (),
@@ -162,6 +170,7 @@ def run_lane(lane, prompt, writes_code=False, timeout=3600, dry_run=False, root=
         ok = line.get("rc") == 0 and not line.get("error")
         return line
     finally:
+        lane_samples.finish(main, sampled, sample_label or run_id)
         spent = clock() - t0
         record(kind, spent, ok=ok)
         if eta_kind:

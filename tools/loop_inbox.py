@@ -13,10 +13,13 @@ from pathlib import Path
 from loop_base import (
     CODE, DELIVERY_REL, DONE_STATES, INBOX_REL, Items, LEGACY_LEDGER_REL, MAX_ROUNDS,
     NOTE_HEAD, NOTE_MAX, NOTE_STAMP, ORDERS_REL, ROADMAP_REL, WATCH_REL, ascii_text,
-    atomic_write,
+    atomic_write, epoch_of,
     iso, read_json, read_jsonl, with_hop,
 )
 from loop_prompts import GATES
+
+ROSTER_REL = Path("ops/fleet_roster.json")  # MAIN's fleet roster, relative to its root
+ROSTER_UP = 3  # MAIN's inbox dir sits at most this many levels under its root
 
 
 # ---------------------------------------------------------------- inbox helpers
@@ -329,6 +332,55 @@ def session_orders(root):
     return out
 
 
+def roster_paths(cfg, env_roster):
+    """Fleet rosters to look a code up in: loop.roster, FLEET_ROSTER, then
+    (Order Nd11eb1 item 1) MAIN's own ops/fleet_roster.json, found from MAIN's
+    loop.dest_inboxes row, so one known inbox resolves every code with no
+    machine path in a tracked file."""
+    out = [Path(p) for p in (cfg.get("roster"), env_roster) if p]
+    main = cfg["dest_inboxes"].get("MAIN")
+    if main:
+        out += [up / ROSTER_REL for up in list(Path(main).parents)[:ROSTER_UP]]
+    return out
+
+
+# Order Nd11eb1 item 3 (EW-1): plan 164 tells MAIN after 24 h, the status shows it.
+PARKED_WARN_S = 48 * 3600
+PARKED_SHOWN = 5
+
+
+def parked_items(root, inbox_dir, now):
+    """What waits on an interactive session, oldest first: session-routed orders
+    and items the loop will not self-accept (state adjudicate, CLAUDE.md loop
+    rule 4). [{"id", "why", "age_h"}]; an unknown start is left out, never age 0."""
+    rows = []
+    for o in session_orders(root):
+        note = Path(inbox_dir) / str(o.get("note") or "") if inbox_dir else None
+        since = order_wait_start(o, note) if note else o.get("queued_ts")
+        if isinstance(since, (int, float)) and not isinstance(since, bool):
+            rows.append((since, o["id"], ", ".join(o["needs"])))
+    for rec in Items(root).all().values():
+        if rec.get("state") == "adjudicate":
+            since = epoch_of(rec.get("finished") or rec.get("dispatched"))
+            if since is not None:
+                rows.append((since, rec.get("id"), "adjudicate"))
+    return [{"id": ascii_text(i, 40), "why": ascii_text(w, 80),
+             "age_h": round(max(now - s, 0) / 3600, 1)} for s, i, w in sorted(rows, key=lambda r: r[0])]
+
+
+def parked_status(rows):
+    """The fields beside the kit's inbox_status.json schema; {} when nothing is
+    parked. A warning line only from 48 h, naming the oldest item."""
+    if not rows:
+        return {}
+    doc = {"parked": rows[:PARKED_SHOWN], "parked_count": len(rows),
+           "parked_oldest_age_h": rows[0]["age_h"]}
+    if rows[0]["age_h"] * 3600 >= PARKED_WARN_S:
+        doc["parked_warning"] = (f"stale session: {rows[0]['id']} parked "
+                                 f"{int(rows[0]['age_h'])} h, needs {rows[0]['why']}")
+    return doc
+
+
 def session_done(root, oid, commit=None, clock=time.time):
     """Plan 091: the session marks a routed order done; the next tick answers
     it. None for an id that is not a queued order. A second call keeps the
@@ -524,20 +576,20 @@ class InboxMixin:
     # -- plan 093: destination copies (FLEET-COMMON 7: re-hash, N/M reached)
     def dest_inbox(self, to):
         """The destination tree's inbox dir for code `to`, or None: config
-        loop.dest_inboxes first, then the fleet roster (loop.roster, else
-        FLEET_ROSTER) entry's inbox, else its root/moon_sync_inbox."""
+        loop.dest_inboxes first, then the first fleet roster (roster_paths)
+        naming it: its inbox, else its root/moon_sync_inbox."""
         to = str(to or "").upper()
         if self.cfg["dest_inboxes"].get(to):
             return Path(self.cfg["dest_inboxes"][to])
-        roster = self.cfg.get("roster") or self.d.roster_path
-        doc = read_json(Path(roster), {}) if roster else {}
-        repos = doc.get("repos") if isinstance(doc, dict) else None  # plan 149 TOOLS-03
-        for r in repos if isinstance(repos, list) else []:
-            if isinstance(r, dict) and str(r.get("code", "")).upper() == to:
-                if r.get("inbox"):
-                    return Path(r["inbox"])
-                if r.get("root"):
-                    return Path(r["root"]) / INBOX_REL
+        for roster in roster_paths(self.cfg, self.d.roster_path):
+            doc = read_json(roster, {})
+            repos = doc.get("repos") if isinstance(doc, dict) else None  # plan 149 TOOLS-03
+            for r in repos if isinstance(repos, list) else []:
+                if isinstance(r, dict) and str(r.get("code", "")).upper() == to:
+                    if r.get("inbox"):
+                        return Path(r["inbox"])
+                    if r.get("root"):
+                        return Path(r["root"]) / INBOX_REL
         return None
 
     def deliver_note(self, src, to, record_failure=True):

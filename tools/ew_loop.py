@@ -80,6 +80,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import eta  # noqa: E402
 import ew_lane  # noqa: E402
+import lane_samples  # noqa: E402
 import ledger_rotate  # noqa: E402
 import usage_ledger  # noqa: E402
 # Plan 107: constants + small helpers + item records (loop_base), lane prompts
@@ -116,7 +117,7 @@ from loop_roadmap import (  # noqa: E402
 )
 from loop_inbox import (  # noqa: E402
     InboxMixin, missing_ordered, order_prompt, order_settled, session_done, session_needs,
-    session_orders, settled_notes,
+    parked_items, parked_status, session_orders, settled_notes,
     session_paths, FLOORS_IN_HOOKS, SESSION_TARGETS, inbox_prompt, order_id, queued_orders,  # noqa: F401
     triage_spawn_kwargs,  # noqa: F401
 )
@@ -383,9 +384,9 @@ class Deps:
         self.kit, self.watch = k, fw
         self.inbox = ew_lane._load("fleet_inbox", "ops/fleet_kit/fleet_inbox.py")
         self.checklist = ew_lane._load("fleet_checklist", "ops/fleet_kit/fleet_checklist.py")
-        # plan 100: the governor counts max(budget file, usage log) runs
-        self.budget = usage_ledger.UsageBudget(k.RunBudget(self.root / k.BUDGET_REL),
-                                               self.root / k.USAGE_REL)
+        # plan 100: the governor counts max(budget file, usage log) runs;
+        # Order Nd11eb1 item 2: with the tree's machine cap, not the bare default
+        self.budget = usage_ledger.gate_budget(k, self.root, CODE)
         self.spawn = k.spawn
         self.should_skip = k.should_skip
         self.pick_effort = k.pick_effort
@@ -766,10 +767,14 @@ class Tick(InboxMixin, MergeMixin):
             rec["rounds"] = rounds
             self.items.put(rec)
             note = f"lane-build-{rec['id']}"
+            # Order Nd11eb1 item 6: a fix round is a retry after a failure, sampled
+            sampled = lane_samples.begin(self.d.main_tree, retry=True)
             line = self.spawn(fix_prompt(rec, rounds, findings), note=note,
                               **self.route("fix", note), writes_code=True, cwd=wt, extra=ew_lane.CODE_EXTRA, kind="build",
                               governor="queued", governor_timeout=self.cfg["lane_timeout_s"],
-                              timeout=self.cfg["lane_timeout_s"])
+                              timeout=self.cfg["lane_timeout_s"],
+                              **({"session_id": sampled} if sampled else {}))
+            lane_samples.finish(self.d.main_tree, sampled, rec["id"])
             if not line:
                 return
         rec["rounds"] = rounds
@@ -1354,11 +1359,26 @@ class Tick(InboxMixin, MergeMixin):
                 add(h["id"], h["text"], f"{h['skip']}-only, skipped", None)
         return out
 
+    def status_parked(self, now):
+        """Order Nd11eb1 item 3: the parked item and its age beside the kit's
+        status fields (the kit owns the schema and rewrites the file on a spawn,
+        so the next tick restores these). Nothing parked = the file is untouched."""
+        extra = parked_status(parked_items(self.root, self.cfg["inbox_dir"], now))
+        if not extra:
+            return
+        path = self.root / self.d.kit.STATUS_REL
+        doc = read_json(path, None)
+        if isinstance(doc, dict):
+            atomic_write(path, json.dumps(dict(doc, **extra), indent=1))
+        if extra.get("parked_warning"):
+            self.step(extra["parked_warning"])
+
     def write(self, state, task, lines, started):
         now = self.d.clock()
         try:
             self.d.write_status(self.root, CODE, state, task, started, self.d.budget,
                                 task_eta_s=None, next_tick=now + self.cfg["tick_s"])
+            self.status_parked(now)
         except OSError:
             pass
         fire = fire_count(read_json(self.root / self.d.kit.PROGRESS_REL / f"{PROGRESS_TASK}.json"))
@@ -1523,6 +1543,7 @@ def lane_worker(iid, deps=None, run_lane=None):
     try:
         line = run_lane(rec["lane"], rec["prompt"], writes_code=True, timeout=timeout,
                         root=d.root, spawn=spawn, eta_kind=f"item-{rec.get('kind') or 'plan'}",
+                        sample_retry=rec.get("attempts", 1) > 1, sample_label=rec["id"],
                         **route)
     except Exception as exc:  # noqa: BLE001 - LaneRefused, Refused, OSError: all retryable
         text = f"{type(exc).__name__}: {exc}"

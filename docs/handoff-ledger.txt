@@ -79,6 +79,14 @@ pre-rewrite (see the session 20 bullet).
 
 OPERATOR QA detail (the hand-off keeps one batched OPERATOR bullet):
 
+- OPERATOR (overlay change 88d99c0 QA, added 2026-11-01, MAIN ORDER
+  Nd11eb1 item 4): three checks with the game running. (1) Hide off-focus:
+  alt-tab away from the game, the overlay hides; back on the game, it shows
+  again. (2) Second display: set the overlay to the second display, it
+  appears there; change the display order, it follows that display; unplug
+  it, it falls back to primary. (3) Capture guard opt-in: with
+  overlay.content_protection true the overlay is absent from a screen
+  capture; with it false (the default) it is present.
 - OPERATOR (plan 009 QA, optional, still unscored): 2026-10-07 the
   operator took 25 shots (4096x2304) but with the game UI HIDDEN (scenery /
   character only) - 0 silver / 0 buffs visible, 0 false reads (research
