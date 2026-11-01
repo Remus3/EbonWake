@@ -65,6 +65,7 @@ and the loop then answers the order as if a lane had carried it out
    - Why: a false positive costs a session a few minutes; a false negative
      costs three lane refute rounds and a wrong ANSWER.
    - Reverses if: more than two ordinary orders a week land on the session.
+   - Reversed 2026-11-01 by plan 164: a passing mention parked MAIN's ORDER 2215.
 3. Decision: the session surface is the CLI plus the loop checklist; no edit
    to CLAUDE.md, `.claude/commands/` or the hand-off from this lane.
    - Alternatives: write a hand-off bullet from the loop.

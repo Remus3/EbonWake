@@ -34,18 +34,86 @@ def order_id(name):
 
 
 # plan 091: lane briefs forbid ops/fleet_kit/ and CLAUDE.md and lanes have no
-# .claude/ write grant, so an ORDER naming one of them is blocked by
+# .claude/ write grant, so an ORDER changing one of them is blocked by
 # construction; it goes to the interactive session instead of a lane.
-SESSION_TARGETS = (("ops/fleet_kit/", re.compile(r"(?<![\w.])ops[\\/]fleet_kit\b|"
-                                                  r"\bkit[ _-]?v\d+\b", re.I)),
-                   (".claude/", re.compile(r"(?<![\w.])\.claude[\\/]")),
-                   ("CLAUDE.md", re.compile(r"(?<![\w.])CLAUDE\.md(?![\w.])")))
+_KIT_PATH = r"(?<![\w.])ops[\\/]fleet_kit\b"
+_KIT_VERSION = r"\bkit[ _-]?v\d+\b"
+_CLAUDE_DIR = re.compile(r"(?<![\w.])\.claude[\\/]")
+_CLAUDE_MD = re.compile(r"(?<![\w.])CLAUDE\.md(?!\w|\.\w)")  # a sentence's end still counts
+SESSION_TARGETS = (("ops/fleet_kit/", re.compile(_KIT_PATH + "|" + _KIT_VERSION, re.I)),
+                   (".claude/", _CLAUDE_DIR),
+                   ("CLAUDE.md", _CLAUDE_MD))
+# Plan 164: in a note body only the paths count, and only where ordered changed
+# (2026-10-31: a lead-in naming another order's kit version parked ORDER 2215).
+BODY_TARGETS = (("ops/fleet_kit/", re.compile(_KIT_PATH, re.I)),
+                (".claude/", _CLAUDE_DIR),
+                ("CLAUDE.md", _CLAUDE_MD))
+_CHANGE_VERB = re.compile(
+    r"\b(?:add|adopt|amend|append|apply|bump|change|copy|create|delete|edit|embed|fix|"
+    r"insert|install|merge|modify|move|patch|pin|put|remove|rename|replace|revert|"
+    r"rewrite|set|update|vendor|wire|write)\b", re.I)
+_NEGATED = re.compile(r"\b(?:not|don't|dont|never|without|no need to)\s+"
+                      r"(?:[\w,']+\s+){0,3}$", re.I)
+_CITED = re.compile(r"\b(?:per|see|cf|under|following|according to)\s+\W*$", re.I)
+_PASSIVE = re.compile(r"\W*(?:\w+\W+){0,3}?(?:must be|should be|has to be|needs?|gets?)\b",
+                      re.I)
+_SENTENCE_END = re.compile(r"(?<=[.!?;])\s+|\n\s*\n|\n(?=\s*(?:[-*]|\d+[.)])\s)")
+_HEADING = re.compile(r"^(#.*)$", re.M)
+
+
+def _ordered_in(sentence, rx):
+    """True when a mention of target `rx` in this sentence is the object of an
+    un-negated change verb: the nearest verb before it, else any verb after it
+    ('CLAUDE.md: add a rule'), or a passive ('CLAUDE.md must be ...')."""
+    for m in rx.finditer(sentence):
+        before = sentence[:m.start()]
+        if _CITED.search(before):
+            continue
+        if _PASSIVE.match(sentence, m.end()):
+            return True
+        verbs = list(_CHANGE_VERB.finditer(before))
+        verb = verbs[-1] if verbs else _CHANGE_VERB.search(sentence, m.end())
+        if verb and not _NEGATED.search(sentence[:verb.start()]):
+            return True
+    return False
 
 
 def session_paths(name, text):
-    """The protected targets an order note (name + body) touches, fixed order."""
-    blob = f"{name}\n{text or ''}"
-    return [t for t, rx in SESSION_TARGETS if rx.search(blob)]
+    """The protected targets an order changes, fixed order. Plan 164: the note
+    NAME counts on any match (every fleet kit note carries its version there);
+    the body counts only a protected path a sentence orders changed."""
+    sentences = _SENTENCE_END.split(_HEADING.sub(r"\1\n", text or ""))
+    hits = []
+    for (target, name_rx), (_, body_rx) in zip(SESSION_TARGETS, BODY_TARGETS):
+        if name_rx.search(name or "") or any(_ordered_in(s, body_rx) for s in sentences):
+            hits.append(target)
+    return hits
+
+
+# Plan 164: a session-routed order unsettled this long gets one BLOCKED ANSWER
+# naming what it needs (EW has few interactive sessions; the sender heard nothing).
+SESSION_WAIT_S = 24 * 3600
+
+
+def order_wait_start(order, note_path):
+    """Epoch the order started waiting: its queued_ts, else (orders queued
+    before plan 164) the note's mtime; None when neither is known."""
+    ts = order.get("queued_ts")
+    if isinstance(ts, (int, float)) and not isinstance(ts, bool):
+        return ts
+    try:
+        return Path(note_path).stat().st_mtime
+    except OSError:
+        return None
+
+
+def session_wait_note(name, oid, needs, hours):
+    return (f"# From EW - ANSWER re {name}: BLOCKED, waiting on a session\n\n"
+            f"- BLOCKED: order {oid}, unsettled after {int(hours)} hours. It needs: "
+            f"{', '.join(needs)}. A lane cannot carry that part.\n"
+            "- Unblocks: an interactive EW session does the work and marks "
+            "`session-done`; the loop then sends the order's ANSWER with per-item "
+            "verdicts. This note is sent once per order and is not repeated.\n")
 
 
 def order_prompt(order):
@@ -557,6 +625,7 @@ class InboxMixin:
         if not done:
             self.queue_order(oid, name, text,
                              note_attachments(Path(self.cfg["inbox_dir"]) / name))
+            self.bound_session_wait(oid, name, dec, outbox, batch)
             self.awaiting += 1
             return False  # answered after the lane item is done
         outcomes = item_outcomes(roadmap.read_text(encoding="utf-8", errors="replace")
@@ -588,6 +657,37 @@ class InboxMixin:
         self.step(f"inbox answered: {name} -> {to} ({n_ok}/1 reached)"[:200])
         return True
 
+    def bound_session_wait(self, oid, name, dec, outbox, batch):
+        """Plan 164: one BLOCKED ANSWER (no spawn) for a session-routed order
+        unsettled after SESSION_WAIT_S. The order stays open for the session;
+        its name has no -re-<stem> so handled() does not read it as settled.
+        A capped or paused tick sends nothing and is retried next tick."""
+        orders = self.orders()
+        order = next((o for o in orders if o["id"] == oid), None)
+        if order is None or order.get("blocked_answer"):
+            return
+        needs = session_needs(order, self.items.get(oid))
+        since = order_wait_start(order, Path(self.cfg["inbox_dir"]) / name)
+        now = self.d.clock()
+        if not needs or since is None or now - since < SESSION_WAIT_S:
+            return
+        if self.blocked():
+            return
+        if self.cap.used() + len(batch) >= self.cap.cap:
+            self.step(f"inbox: daily note cap {self.cap.cap} reached")
+            return
+        stamp = _dt.datetime.fromtimestamp(now).strftime(NOTE_STAMP)
+        dest = outbox / f"{stamp}-from-{CODE}-ANSWER-blocked-{Path(name).stem}.md"
+        body = session_wait_note(name, oid, needs, (now - since) // 3600)
+        if not self.write_note(dest, with_hop(body, self.fi.next_hop(dec.hop))):
+            return
+        order["blocked_answer"] = dest.name
+        atomic_write(self.root / ORDERS_REL, json.dumps({"orders": orders}, indent=1))
+        to = dec.sender or "MAIN"
+        self.cap.record(dest.name, "ANSWER", to)
+        n_ok = int(self.deliver_note(dest, to))
+        self.step(f"inbox: order {oid} BLOCKED answer -> {to} ({n_ok}/1 reached)"[:200])
+
     def orders(self):
         return queued_orders(self.root)
 
@@ -603,7 +703,8 @@ class InboxMixin:
                 old["attachments"] = list(attachments)
                 atomic_write(self.root / ORDERS_REL, json.dumps({"orders": orders}, indent=1))
             return
-        entry = {"id": oid, "note": name, "text": text, "title": ascii_text(name, 120)}
+        entry = {"id": oid, "note": name, "text": text, "title": ascii_text(name, 120),
+                 "queued_ts": self.d.clock()}
         if attachments:
             entry["attachments"] = list(attachments)
         atomic_write(self.root / ORDERS_REL, json.dumps({"orders": orders + [entry]},
