@@ -314,6 +314,10 @@ class InboxMixin:
             self.step(f"inbox: {len(new)} new (dry run)")
             return
         self.redeliver(outbox)
+        left = self.close_settled_work()  # kit v27: pending orders first
+        if left:
+            self.step(f"inbox: {len(left)} pending order(s): "
+                      f"{', '.join(r.get('note') or '?' for r in left)}"[:200])
 
         def deliver(names):
             batch = {}  # destination -> [(note, answer text, incoming hop)]
@@ -354,7 +358,29 @@ class InboxMixin:
             if path.is_file() else ""
         self.fi.mark_seen(self.root, path, self.fi.classify(name, CODE, head),
                           verdict="LEGACY", clock=self.d.clock)
+        self.close_settled_work()
         return True
+
+    def close_settled_work(self):
+        """Kit v27 (KIT-INBOX-PENDING-ORDER): mark_seen of an ORDER / FIX /
+        RULING also queues it in inbox_work.jsonl. EW works orders through its
+        own queue (queue_order) and answers them before the note is marked
+        seen, so a kit row whose note the seen ledger already settled (ANSWER
+        or LEGACY) is closed here with mark_work_done; the rest stay pending
+        (inbox_pending_orders.json) and are reported first."""
+        rows = self.fi.pending_work(self.root)
+        if not rows:
+            return []
+        settled = {d["note"] for d in read_jsonl(self.root / SEEN_REL)
+                   if d.get("note") and d.get("verdict") in ("ANSWER", "LEGACY")}
+        left = []
+        for row in rows:
+            if row.get("note") in settled:
+                self.fi.mark_work_done(self.root, row, outcome="answered",
+                                       clock=self.d.clock)
+            else:
+                left.append(row)
+        return left
 
     def answer(self, path, outbox, batch):
         """True when the note needs nothing more (handled now or before); False =

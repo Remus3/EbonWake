@@ -476,6 +476,13 @@ def test_note_settled_before_the_seen_ledger_is_backfilled_once(tmp_path):
     assert sorted(x["note"] for x in seen) == ["o-from-MAIN-ORDER-to-EW-v6.md",
                                                "q-from-MAIN-QUESTION-a.md"]
     assert {x["verdict"] for x in seen} == {"LEGACY"} and all(x.get("sha256") for x in seen)
+    # kit v27: the backfilled ORDER was queued by mark_seen and is closed at once
+    work = [json.loads(x) for x in
+            (root / "ops/loop/control/inbox_work.jsonl").read_text().splitlines()]
+    assert [(x["op"], x["note"]) for x in work] == [
+        ("queued", "o-from-MAIN-ORDER-to-EW-v6.md"), ("done", "o-from-MAIN-ORDER-to-EW-v6.md")]
+    marker = json.loads((root / "ops/loop/control/inbox_pending_orders.json").read_text())
+    assert marker["pending"] == []
 
 
 def test_default_cap_reaches_the_kit_outbound_cap(tmp_path):
