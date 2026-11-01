@@ -294,3 +294,12 @@ MAIN FIX 2026-11-01-0825 (the session router parks an order on a passing version
 - Whole suite through the suite gate: NOT-APPLICABLE - the lane brief reserves it for the loop's ci gates; this lane ran ruff, the targeted tests and the fast tier.
 - ONE ANSWER note: NOT-APPLICABLE - the loop writes it after merge.
 - Progress file ops/loop/control/progress/N489d76.json: BLOCKED - the write to the main checkout was denied by this run's permissions.
+
+## Order Neb5fba - blocked items
+
+SS FIX 2026-10-24-1525, addressed to MAIN (kit fleet_test_guard IGNORE misses the two board files). No EW file changed: the kit fix had already shipped.
+
+- Add board/status.json and board/state.json to fleet_test_guard.IGNORE, file by file: NOT-APPLICABLE - already shipped in kit v21; read at ops/fleet_kit/fleet_test_guard.py lines 81-82 of vendored v27, both paths listed by name, and FLEET item 11 forbids a local kit edit. Read, not run: this run's permissions refused a scratch snapshot script.
+- SS drops its local conftest entry once the kit ships: NOT-APPLICABLE - SS's own tree; EW's tests/conftest.py passes no ignore, so it has no such entry to drop.
+- Reply: NOT-APPLICABLE - the note asks for none beyond a kit version note, and the loop owns any ANSWER after merge.
+- Progress file ops/loop/control/progress/Neb5fba.json: BLOCKED - the write to the main checkout was denied by this run's permissions; FLEET item 13 d forbids a worktree copy, so none was written.
