@@ -159,6 +159,7 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 160 | Operator-marked fix: no dependabot[bot] in Contributors (MAIN ORDER na7e421, 2026-10-18-2312) | [x] done 2026-10-18 session 39: no rewrite needed - fleet_rewrite plan f595a4ac5f91 scanned 592 commits, 0 to rewrite, SHA change 0; read-back: contributors API (anon=1) lists only the operator; origin/main 590/590 commits operator author and committer (sidebar lag only). Going forward a Dependabot bump lands as an operator commit and the PR is closed with a reason |
 | 161 | Loop inbox: a note's attachment (.png beside its .md, same stem) is part of that note, never a separate order item or ANSWER (2026-10-18: the .png of MAIN ORDER 2312 became item Na7e421 and the loop sent a 2349 ANSWER asking MAIN to resend; session 39 retracted it). Also an order lane that ends with every item BLOCKED (e.g. needs gh) routes the order to the session instead of auto-sending a blank TERMINAL ANSWER (2319 re nc266c6). TDD in tools/loop_inbox.py | [x] done 2026-10-19 (loop; refute 0/3 PASS) |
 | 163 | Lane allow-list gap + false PASS: headless lanes deny npm/gh/git add so dependency-bump/alert-closing items can never pass (N82830d failed 3/3); keep-ref commit 9e52b0e carried 'verifier: PASS' with an empty app/ diff. Acceptance: a dependency-bump item can run npm install / npm test --prefix app and gh api dependabot alert reads in its lane; the verifier fails any FIX whose ordered files are missing from the diff | [x] done 2026-10-25 (loop; refute 0/3 PASS) |
+| 164 | Loop router routes on what an order orders, not a passing mention; a session-routed order unsettled after 24 h gets one BLOCKED ANSWER (MAIN FIX N489d76; plan doc docs/plans/164-router-routes-on-what-an-order-orders.md) | [x] done 2026-11-01 (order N489d76, lane; backlog settlement open, see the order section) |
 
 Ranking rationale per deep dive / audit and the closed channel-order
 sections: `docs/plans/ROADMAP-history.md` (moved verbatim 2026-10-09, plan
@@ -277,3 +278,19 @@ MAIN ORDER 2026-10-31-2128 (row 106: the 0334 ANSWER re Ne1235e misreported item
 
 - Deviation: the "merged commit's recorded per-item outcome" is read from the order's ROADMAP section in the merged tree, not from `git show <commit>` of the commit body. Decision: ROADMAP section. Alternatives: (a) parse the commit body via git (rejected: lane commit bodies carry only refute-rounds / verifier / loop item, no item verdicts - aed89e4 is an example - and a git spawn in the inbox pass needs a git-marked test path); (b) both (rejected: same gap). Why: every order lane is ordered to record each item there, and that section is what the merged commit adds. Reverses if: lane commit bodies start carrying per-item verdict lines.
 - Deviation: beyond the prompt change, every order ANSWER gets a deterministic per-item block appended. Decision: append it. Alternative: prompt-only (rejected: the 0334 misreport came from the LLM reply; a prompt cannot guarantee it). Why: the record must not depend on reply wording. Reverses if: MAIN rules the appended block noisy and a prompt-only check is proven sufficient.
+
+## Order N489d76 - blocked items
+
+MAIN FIX 2026-11-01-0825 (the session router parks an order on a passing version mention). Plan doc: docs/plans/164-router-routes-on-what-an-order-orders.md.
+
+- Item 1 (route on what the order orders): DONE - tools/loop_inbox.py `session_paths`: the version word counts only in the name, a body path only where a sentence orders it changed; tests/test_loop_inbox_p164.py pins a kit note and an ordered protected-path edit as routed.
+- Item 1 ACCEPT, the byte pin of ORDER 2215: BLOCKED - this lane's permissions deny the inbox, so `test_order_2215_is_not_routed` uses a reconstruction of the shape MAIN reported (plan 164 deviation 3); unblocks when a session pastes the real bytes into `ORDER_2215`.
+- Item 2 (bound the wait): DONE - `Tick.bound_session_wait` sends one BLOCKED ANSWER after 24 hours; `test_blocked_answer_sent_once_after_24_hours` uses a fake clock.
+- Item 3, Neb5fba: BLOCKED - the work reads closed (hand-off: the kit v23 test guard IGNORE covers it, no EW action), but `session-done` writes the main checkout, denied here; unblocks with a session running `python tools/ew_loop.py session-done Neb5fba`.
+- Item 3, N2cfb1c: BLOCKED - row 106 lane move still owed; it needs the loop HALTed and all lanes FREE, so a lane cannot do it; a session does the move, then marks it.
+- Item 3, Nba8669: BLOCKED - no tracked file names it and this lane cannot read the note or its record, so whether its work is done is unread; a session reads it with `python tools/ew_loop.py session`.
+- Item 3, Nb25a6f: BLOCKED - same as Nba8669.
+- Item 3 fallback: after merge routing re-reads each queued note, so a backlog order that only mentioned a target goes to a lane and one still routed gets its one BLOCKED ANSWER naming what it needs on the next tick.
+- Whole suite through the suite gate: NOT-APPLICABLE - the lane brief reserves it for the loop's ci gates; this lane ran ruff, the targeted tests and the fast tier.
+- ONE ANSWER note: NOT-APPLICABLE - the loop writes it after merge.
+- Progress file ops/loop/control/progress/N489d76.json: BLOCKED - the write to the main checkout was denied by this run's permissions.
