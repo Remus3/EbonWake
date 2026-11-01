@@ -106,6 +106,67 @@ def all_blocked(roadmap, oid):
 
 ALL_BLOCKED = "all items BLOCKED"
 
+# MAIN ORDER N3ef61f (2026-10-31): the 0334 ANSWER re Ne1235e called items
+# 1-3 "DONE" because the answer writer read only the lane's merge state
+# ("merged, verdict PASS"). An item's verdict comes from the merged commit's
+# recorded per-item outcome - the bullets of its 'Order <oid> - blocked
+# items' ROADMAP section - and an item with none is UNVERIFIED, never DONE.
+ITEM_VERDICTS = ("DONE", "BLOCKED", "NOT-APPLICABLE")
+UNVERIFIED = "UNVERIFIED"
+_VERDICT_RX = re.compile(r"(?<![\w-])(DONE|BLOCKED|NOT-APPLICABLE)(?![\w-])")
+
+
+def order_section(roadmap, oid):
+    m = re.search(r"^## Order " + re.escape(oid) + r" - blocked items\s*$(.*?)(?=^## |\Z)",
+                  roadmap or "", re.M | re.S)
+    return m.group(1) if m else ""
+
+
+def item_verdict(bullet):
+    """The recorded verdict of one item bullet: the first DONE / BLOCKED /
+    NOT-APPLICABLE token (a `[x]` box counts as DONE); none = UNVERIFIED."""
+    if re.match(r"\s*[-*] \[x\]", bullet, re.I):
+        return "DONE"
+    m = _VERDICT_RX.search(bullet)
+    return m.group(1) if m else UNVERIFIED
+
+
+def item_outcomes(roadmap, oid):
+    """[(verdict, item text)] for every bullet of the order's section, in order."""
+    out = []
+    for ln in order_section(roadmap, oid).splitlines():
+        if re.match(r"\s*[-*] ", ln):
+            text = re.sub(r"^\s*[-*] (\[[ xX]\] )?", "", ln).strip()
+            out.append((item_verdict(ln), ascii_text(text, 300)))
+    return out
+
+
+def outcome_block(outcomes, commit):
+    """The deterministic per-item section appended to every order ANSWER; it
+    is the record and supersedes any verdict the reply text states."""
+    head = (f"## Per-item outcome (recorded in commit {commit or 'none'}; this "
+            "section is authoritative)")
+    if not outcomes:
+        return (head + "\n\n- " + UNVERIFIED + ": no per-item outcome recorded; "
+                "no item is reported DONE.\n")
+    return head + "\n\n" + "".join(f"- {v}: {t}\n" for v, t in outcomes)
+
+
+def answer_context(rec, outcomes):
+    """The inbox-prompt context of an order ANSWER: lane facts plus each
+    item's recorded verdict, never the merge state as an item verdict."""
+    ctx = (f"EW's loop carried this order out as lane item {rec.get('id')}: state "
+           f"{rec.get('state')}, verdict {rec.get('verdict', 'none')}, "
+           f"refute-rounds {rec.get('rounds', 0)}/{MAX_ROUNDS}, commit "
+           f"{rec.get('commit', 'none')}. The lane's merge state and verdict are NOT "
+           "item verdicts. ")
+    if not outcomes:
+        return ctx + ("The commit records no per-item outcome: report every item "
+                      "UNVERIFIED, never DONE.")
+    return ctx + ("Report each item with exactly its recorded verdict, never "
+                  "upgraded; an item not listed is UNVERIFIED. Recorded: "
+                  + " | ".join(f"{v}: {t}" for v, t in outcomes))
+
 # Plan 163: the repo-relative files a note orders changed (keep-ref 9e52b0e
 # passed with an empty app/ diff). A path has a slash and a file extension;
 # URLs and the session-routed targets (plan 091) are never lane files.
@@ -472,11 +533,9 @@ class InboxMixin:
                              note_attachments(Path(self.cfg["inbox_dir"]) / name))
             self.awaiting += 1
             return False  # answered after the lane item is done
-        context = (f"EW's loop carried this order out as lane item {oid}: state "
-                   f"{rec.get('state')}, verdict {rec.get('verdict', 'none')}, "
-                   f"refute-rounds {rec.get('rounds', 0)}/{MAX_ROUNDS}, commit "
-                   f"{rec.get('commit', 'none')}. Mark each item DONE in that commit, "
-                   "or BLOCKED / NOT-APPLICABLE with the reason.")
+        outcomes = item_outcomes(roadmap.read_text(encoding="utf-8", errors="replace")
+                                 if roadmap.is_file() else "", oid)
+        context = answer_context(dict(rec, id=oid), outcomes)
         if self.cap.used() + len(batch) >= self.cap.cap:  # batches hold their slots
             self.capped += 1
             self.step(f"inbox: daily note cap {self.cap.cap} reached")
@@ -492,7 +551,9 @@ class InboxMixin:
             return False
         stamp = _dt.datetime.fromtimestamp(self.d.clock()).strftime(NOTE_STAMP)
         dest = outbox / f"{stamp}-from-{CODE}-ANSWER-re-{Path(name).stem}.md"
-        if not self.write_note(dest, with_hop(ascii_text(reply), self.fi.next_hop(dec.hop))):
+        reply = (ascii_text(reply).rstrip("\n") + "\n\n"
+                 + outcome_block(outcomes, rec.get("commit")))
+        if not self.write_note(dest, with_hop(reply, self.fi.next_hop(dec.hop))):
             return False
         to = dec.sender or "MAIN"
         self.cap.record(dest.name, "ANSWER", to)
