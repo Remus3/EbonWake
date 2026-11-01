@@ -2,8 +2,6 @@
   <img src="docs/assets/social-preview.png" width="100%" alt="Ebonwake banner: a faceted teal gem above a wake, the project name and the tagline - Black Desert Online companion, dashboard and click-through overlay, never reads memory or sends game input">
 </p>
 
-# Ebonwake
-
 **A Black Desert Online companion that never touches the game.**
 
 [![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
@@ -23,7 +21,8 @@ overlay for one Black Desert Online player, fed by a small local server on
 ![Ebonwake dashboard, Market tab: a watchlist row, item detail, add/edit form and a hot list of Central Market prices](docs/assets/dashboard-market.png)
 
 <sub>Dashboard, Market tab. Captured by the app's own desktop self-test
-(`EW_SELFTEST`), which drives only Ebonwake's windows - not from the game.</sub>
+(`EW_SELFTEST`), which drives only Ebonwake's windows - not from the
+game.</sub>
 
 ## Contents
 
@@ -67,7 +66,8 @@ unauthorized programs and every macro. Ebonwake's boundary is fixed and is not
 a setting:
 
 - **No memory reading or writing** of the game process.
-- **No injection** - no DLLs, no D3D/DXGI hooks, nothing loaded into the client.
+- **No injection** - no DLLs, no D3D/DXGI hooks, nothing loaded into the
+  client.
 - **No input automation** - no synthetic keys or clicks to the game window, no
   macros, no AFK helpers, and no screen-reading that leads to input.
 - **No packet access** and **no client file changes**.
@@ -96,7 +96,8 @@ npm start --prefix app             # dashboard + overlay (Ctrl+Alt+E toggles ove
 ```
 
 Per-host settings (hotkeys, game folders, market tax bonuses, optional profile
-family name and self-hosted profile API, OCR engine) go in `config/local.json`, copied from
+family name and self-hosted profile API, OCR engine) go in
+`config/local.json`, copied from
 [`config/local.example.json`](config/local.example.json). It is gitignored.
 
 ### Requirements
@@ -125,7 +126,8 @@ both on every push.
   gitignored `ops/runtime/` directory.
 - The profile card is off by default. When on, it sends only the family name
   you configure, and only to the self-hosted BDO-REST-API instance you set as
-  `profile.base_url` (run it on loopback); the public instance is never called.
+  `profile.base_url` (run it on loopback); the public instance is never
+  called.
 - API keys, if you add any, live in user environment variables and are
   referenced - never stored - from `config/local.json`.
 
@@ -162,29 +164,30 @@ code:
   scheduled work loop's local control files (the loop itself is
   `tools/ew_loop.py`). Runtime state lives under `ops/runtime/` and is
   gitignored.
-- [`.githooks/`](.githooks/) - pre-commit and pre-push hooks run a leak
-  sweep (machine paths, account ids, emails, secret shapes); the commit-msg
-  hook strips AI or bot attribution trailers. Install them in a fresh clone with
+- [`.githooks/`](.githooks/) - pre-commit and pre-push hooks run a leak sweep
+  (machine paths, account ids, emails, secret shapes); the commit-msg hook
+  strips AI or bot attribution trailers. Install them in a fresh clone with
   `python tools/install_hooks.py`.
 - [`EW-NEXT-SESSION.txt`](EW-NEXT-SESSION.txt) - the hand-off: the only
   continuity between sessions, listing the next action and every open item.
 - [`docs/plans/ROADMAP.md`](docs/plans/ROADMAP.md) and `docs/plans/` - the
   work queue; each change starts as a plan there.
 
-Commit subjects follow [Conventional Commits](https://www.conventionalcommits.org/)
-(for example `feat(plan-132): ...`, `fix(...)`, `merge: <topic>`); session
-detail such as refute rounds and the verifier verdict sits in the commit body.
+Commit subjects follow
+[Conventional Commits](https://www.conventionalcommits.org/) (for example
+`feat(plan-132): ...`, `fix(...)`, `merge: <topic>`); session detail such as
+refute rounds and the verifier verdict sits in the commit body.
 
 **Licence:** Ebonwake is open source under the Apache License 2.0 - see
-[`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). AI assistance does not change
-the licence or the warranty disclaimer it contains.
+[`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). AI assistance does not change the
+licence or the warranty disclaimer it contains.
 
 ## Status
 
 Shipped: every tab above plus the overlay, game-state watch, screenshot OCR,
-official-notice import, world bosses, enhancement / market / grind planners and
-a start-on-login package, and the self-running work loop (a scheduled task,
-installed and read back). The open-work queue is
+official-notice import, world bosses, enhancement / market / grind planners
+and a start-on-login package, and the self-running work loop (a scheduled
+task, installed and read back). The open-work queue is
 [`docs/plans/ROADMAP.md`](docs/plans/ROADMAP.md). There is no packaged release
 yet; run from a clone.
 
