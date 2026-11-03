@@ -163,6 +163,7 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 165 | Fleet Insights W44 session half (MAIN ORDER Nd11eb1; plan doc docs/plans/165-fleet-insights-w44.md): read back SS delivery 2/2 in the delivery ledger, `python tools/usage_ledger.py gate` and the parked fields of the live inbox_status.json; paste the overlay QA checks into the hand-off OPERATOR bullet; add the spend line step to the session's /done command | [>] session (a lane cannot read the main checkout or write the hand-off or .claude/; texts in the plan doc) |
 | 166 | Lane transcript samples read (MAIN ORDER Nd11eb1 item 6): `python tools/lane_samples.py status` shows one sample after a sampled lane and git ls-files shows none; record the size cap when 20 are measured; one sample survives a Sunday 04:30 retention run (first possible 2026-11-08) | [>] session (reads only, after the merge; a lane cannot read the sidecar) |
 | 167 | FLEET-9 read (MAIN ORDER Nd11eb1 item 7): zero live-state or timing failures in gated suite runs for 7 days; done when read clean on or after 2026-11-08 | [>] session (a read of gated runs, not before 2026-11-08) |
+| 168 | Loop checklist overflow is silent (EW analogue of SS FIX N44eed9 (a)): tools/ew_loop.py checklist add() drops rows past the kit ROWS_MAX (20) with no count or marker; write the dropped count beside the rows in progress/loop.json ("checklist_dropped": N) and pin it with a test at 25 rows; adopt the kit's own overflow form instead if a kit version ships one first | [ ] open |
 
 Ranking rationale per deep dive / audit and the closed channel-order
 sections: `docs/plans/ROADMAP-history.md` (moved verbatim 2026-10-09, plan
@@ -343,3 +344,16 @@ MAIN ORDER 2026-11-01-1225 (Fleet Insights W44, one batch before a planned reboo
 - Item 7 7-day read: BLOCKED - not due before 2026-11-08; row 167.
 - End state (committed, merged, pushed, worktree list, whole suite through the gate): BLOCKED - this lane does not commit; the loop gates, merges and pushes. A lane worktree is a standing one; the ANSWER must read tip, remote tip and worktree list from a session.
 - Progress file ops/loop/control/progress/Nd11eb1.json: BLOCKED - written in this worktree (gitignored), not the main checkout, whose writes are outside this run.
+
+## Order N44eed9 - blocked items
+
+SS FIX 2026-11-03-1324 to MAIN (kit checklist caps, item 13a departure, board displaced row). Every item targets kit files pinned at ops/fleet_kit/ (FLEET item 11) or asks MAIN for a ruling; EW holds none of it. The ONE ANSWER is MAIN's kit version note.
+
+- (a) fleet_checklist.Checklist.rows() cuts at ROWS_MAX 20 with no marker: NOT-APPLICABLE - ops/fleet_kit/fleet_checklist.py is pinned; the fix is MAIN's kit version. EW's own analogue (tools/ew_loop.py checklist add() drops rows past ROWS_MAX silently) is filed as ROADMAP row 168.
+- (a) fleet_headless._checklist_rows cuts at CHECKLIST_MAX 20 with no marker: NOT-APPLICABLE - ops/fleet_kit/fleet_headless.py is pinned; MAIN's kit version.
+- (a) fleet_headless [:120] task text cut vs fleet_checklist.item() ValueError above TASK_MAX: NOT-APPLICABLE - both kit files pinned; MAIN's kit version. EW's loop clips task text to 70 chars before item(), so it hits neither rule.
+- (a) requested kit change (overflow marker or count in both paths, one over-long text rule after fleet_board._clip): NOT-APPLICABLE - asked of MAIN; EW adopts it when a kit version ships it (row 168).
+- (b) ruling on SS b82bf05 trailing overflow note vs item 13a: NOT-APPLICABLE - a ruling for MAIN on SS's tree; EW prints no such trailing line and does not edit the byte-pinned common block.
+- (c) fleet_board.build() marks a row displaced past the cap done mid-session: NOT-APPLICABLE - ops/fleet_kit/fleet_board.py is pinned; MAIN's kit version. Unreachable in EW today (under 20 rows).
+- ONE ANSWER: NOT-APPLICABLE - addressed to MAIN; the loop writes any EW reply after merge.
+- Progress file ops/loop/control/progress/N44eed9.json: BLOCKED - this run may not execute the writer script (approval denied) and the progress dir is in the main checkout.
