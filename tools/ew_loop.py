@@ -496,6 +496,7 @@ class Tick(InboxMixin, MergeMixin):
         self.awaiting = self.capped = self.paused = 0
         self.open_ids = set()  # open ROADMAP row ids, set by work_list()
         self.last_tree = None  # plan 096: tree id of the last gate() call
+        self.checklist_dropped = 0  # plan 168: set by checklist()
 
     def route(self, kind, note):
         """Plan 099: spawn() model / effort keywords for one run of `kind`."""
@@ -1286,6 +1287,7 @@ class Tick(InboxMixin, MergeMixin):
         recs = self.items.all()
         now = self.d.clock()
         out, listed = [], set()
+        self.checklist_dropped = 0  # plan 168: rows past the kit ROWS_MAX, counted
 
         def est(rec):
             """Item-kind median (item-<kind>), else the lane-run median
@@ -1300,11 +1302,13 @@ class Tick(InboxMixin, MergeMixin):
             return max(int(e), 0)
 
         def add(iid, title, state, eta_s):
-            if len(out) < self.d.checklist.ROWS_MAX:
-                if state:
-                    state = ascii_text(state, self.d.checklist.STATE_MAX)
-                out.append(self.d.checklist.item(iid, ascii_text(" ".join(str(title).split()), 70)
-                                                 or iid, state, eta_s))
+            if len(out) >= self.d.checklist.ROWS_MAX:
+                self.checklist_dropped += 1
+                return
+            if state:
+                state = ascii_text(state, self.d.checklist.STATE_MAX)
+            out.append(self.d.checklist.item(iid, ascii_text(" ".join(str(title).split()), 70)
+                                             or iid, state, eta_s))
 
         def blocked_on(rec):
             return "blocked on " + ", ".join(rec.get("needs") or [])
@@ -1388,7 +1392,9 @@ class Tick(InboxMixin, MergeMixin):
         doc = {"task": PROGRESS_TASK, "pct": 100, "step": "; ".join(self.log)[-200:] or state,
                "eta_s": self.cfg["tick_s"], "status": "done", "updated": iso(now),
                "state": state, "fire": fire, "tick_s": took, "log": self.log[-40:],
-               "checklist": lines}
+               "checklist": lines,
+               # plan 168: the overflow past the kit ROWS_MAX is never silent
+               "checklist_dropped": self.checklist_dropped}
         atomic_write(self.root / self.d.kit.PROGRESS_REL / f"{PROGRESS_TASK}.json",
                      json.dumps(doc, indent=1))
         return doc
