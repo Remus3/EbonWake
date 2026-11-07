@@ -49,8 +49,8 @@ from urllib.parse import parse_qs
 from . import (__version__, autotick, autowatch, bossdrift, bosses, context, coupons, crafting,
                dataverdicts, daynight, deadeye, fameauto,
                derived, detect, enhance, eventcurrency, eventnotices, events, gamewatch, grind, imperial, inventory, itemnames,
-               knownissues, leveling, logindays, loopstatus, maint, maintdigest, market, mounts, ocr, ocrauto, onboarding, overrides,
-               pets,
+               knownissues, leveling, logindays, loopstatus, maint, maintdigest, market, mounts, ocr, ocrauto, olvia, onboarding,
+               overrides, pets,
                ports,
                playsession, portraits, progress, prompts, seals, settings, shopping, signals, silvergoal,
                single, spots, summary,
@@ -253,6 +253,10 @@ class EWServer(ThreadingHTTPServer):
             books=xpbooks.XpBooksService(self.store, clock=leveling_clock or time.time,
                                          weekly=lambda: self.weekly.counts()),
             maint_end=self._hot_until)
+        # Plan 170: typed Olvia lecture progress is a ledger entry, stale-marked
+        # at the semester boundary that resets it.
+        self.leveling.olvia = olvia.OlviaService(self.overrides, rows=self.leveling.semesters,
+                                                 clock=leveling_clock or time.time)
         # Plan 012: plan 004's character + plan 005's per-spot silver/h; plan
         # 018: the newest started XP epoch flags rows to re-verify.
         self.spots = spots.SpotsService.from_file(
@@ -297,7 +301,8 @@ class EWServer(ThreadingHTTPServer):
             hot=lambda: self.leveling.view()["hot_auto"],
             weekly=lambda: self.leveling.view()["hot_windows"],
             maint_inputs=self._maint_inputs, clock=today_clock or time.time,
-            multi_character=self._multi_character, vp_ends=self._vp_ends)  # plan 109
+            multi_character=self._multi_character, vp_ends=self._vp_ends,  # plan 109
+            semesters=lambda: self.leveling.semesters)  # plan 170
         # Plan 031: NA world boss table + operator loot ticks.
         self.bosses = bosses.BossService(self.store, clock=bosses_clock or time.time)
         # Plan 072: daily robots-gated diff against a public NA table; off
@@ -1370,11 +1375,12 @@ class Handler(BaseHTTPRequestHandler):
                "epoch_add": "epoch_add", "epoch_del": "epoch_del",
                "deadline_set": "deadline_set", "deadline_del": "deadline_del",
                "deadline_accept": "deadline_accept",
-               "book_add": "book_add", "book_use": "book_use", "book_del": "book_del"}
+               "book_add": "book_add", "book_use": "book_use", "book_del": "book_del",
+               "lecture": "lecture"}
         if len(body) != 1 or not (set(ops) & set(body)):
             raise ValueError("body must be one of {sample|sample_del|hot_add|hot_del|"
                              "milestones|epoch_add|epoch_del|deadline_set|deadline_del|"
-                             "deadline_accept|book_add|book_use|book_del: ...}")
+                             "deadline_accept|book_add|book_use|book_del|lecture: ...}")
         (op, arg), = body.items()
         return getattr(self.server.leveling, ops[op])(arg)
 

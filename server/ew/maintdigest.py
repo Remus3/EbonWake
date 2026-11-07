@@ -28,6 +28,7 @@ import unicodedata
 from pathlib import Path
 
 from . import maint as _maint
+from . import olvia as _olvia
 
 PATTERNS_FILE = Path(__file__).resolve().parent / "data" / "maint_loss_patterns.json"
 PARSE_V = 4  # Detail cache entries before plan 074 count as 1; plan 086 claims = 3;
@@ -321,11 +322,14 @@ class DigestService:
     profile.multi_character setting (off: Tag / alt-only warnings go to
     `suppressed`, never to `warnings`, the ladder or an ack). Plan 109:
     `vp_ends` -> epoch end of the armed Value Pack timer or None; from LEAD_S
-    before it the view carries `value_pack` {ends, in_s} (informational)."""
+    before it the view carries `value_pack` {ends, in_s} (informational).
+    Plan 170: `semesters` -> Olvia semester rows; a boundary at this
+    maintenance adds one `ending` row of kind "olvia"."""
 
     def __init__(self, store, loss_rows, items, hot, maint_inputs, clock=time.time,
-                 weekly=None, multi_character=None, vp_ends=None):
+                 weekly=None, multi_character=None, vp_ends=None, semesters=None):
         self.store = store
+        self.semesters = semesters or (lambda: [])
         self.loss_rows = loss_rows
         self.items = items
         self.hot = hot
@@ -365,7 +369,13 @@ class DigestService:
         hot = self._safe(self.hot) + weekly_hot(self._safe(self.weekly), now, start)
         warns, hidden = split_applicable(warnings(self._safe(self.loss_rows), now, start),
                                          self._multi(), self._multi_pats)
-        return nxt, warns, ending(self._safe(self.items), hot, now, start), hidden
+        ends = ending(self._safe(self.items), hot, now, start)
+        try:  # plan 170: Olvia graduation reset / weekly-quest end at this maintenance
+            ends = sorted(ends + _olvia.digest_rows(self._safe(self.semesters), now, start),
+                          key=lambda r: (r["ends"], r["kind"], r["title"]))
+        except Exception:  # noqa: BLE001 - a bad semester row never blanks the digest
+            pass
+        return nxt, warns, ends, hidden
 
     def _value_pack(self, now):
         """Plan 109: {ends, in_s} of a Value Pack timer ending within LEAD_S, or None."""

@@ -23,6 +23,8 @@ EXEMPT = {
     "bdo.documents_dir": "auto-detected (plan 065); typed only to point elsewhere",
     "profile.family": "the identity key every profile read starts from",
     "grind.week_goal": "pure preference (plan 140); the history goal applies without it",
+    "olvia.lecture": "operator record (plan 170); no public signal, stale-marked at the "
+                     "semester reset",
 }
 NEEDS_OPERATOR = ["profile.multi_character"]
 
