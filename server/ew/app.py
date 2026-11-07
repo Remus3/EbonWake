@@ -52,7 +52,7 @@ from . import (__version__, autotick, autowatch, bossdrift, bosses, context, cou
                knownissues, leveling, logindays, loopstatus, maint, maintdigest, market, mounts, ocr, ocrauto, onboarding, overrides,
                pets,
                ports,
-               playsession, portraits, progress, prompts, settings, shopping, signals, silvergoal,
+               playsession, portraits, progress, prompts, seals, settings, shopping, signals, silvergoal,
                single, spots, summary,
                today, weekly, whatnow, xpbooks, zoneinfo)
 from .store import Store
@@ -293,7 +293,7 @@ class EWServer(ThreadingHTTPServer):
         # Plan 095: + a buy-by line per wishlist item removed at a later maintenance.
         self.maintdigest = maintdigest.DigestService(
             self.store, loss_rows=lambda: self.notices.loss_rows() + self.currency.loss_rows(),
-            items=lambda: self.events.view()["items"],
+            items=lambda: self.events.view()["items"] + self._seal_digest_rows(),  # plan 169
             hot=lambda: self.leveling.view()["hot_auto"],
             weekly=lambda: self.leveling.view()["hot_windows"],
             maint_inputs=self._maint_inputs, clock=today_clock or time.time,
@@ -467,10 +467,14 @@ class EWServer(ThreadingHTTPServer):
                                                        signals=lambda: self.signals.view())
         # Plan 053: imperial delivery planner; CP from plan 042's card, else typed.
         # Plan 081: else the newer of the typed CP and the newest CP screenshot read.
+        # Plan 169: + the Reward Seal ledger (typed counts, Golden Seal countdown).
+        self.seals = seals.SealService(self.store, clock=today_clock or time.time,
+                                       maint_inputs=self._maint_inputs)
         self.imperial = imperial.ImperialService(
             self.store, clock=today_clock or time.time,
             cp=lambda: (self.progress.lifeskill_view().get("cp") or {}).get("value"),
-            prices=self.market.cached_prices, name=self.names.name, reads=self._ocr_read)
+            prices=self.market.cached_prices, name=self.names.name, reads=self._ocr_read,
+            seals=self.seals)
         # Plan 140: weekly silver goal over the grind + sales ledgers; the typed
         # goal is a plan 079 override until the weekly reset.
         self.silvergoal = silvergoal.SilverGoalService(
@@ -857,6 +861,14 @@ class EWServer(ThreadingHTTPServer):
     def _play_config(self):
         s = self.fixed_settings()
         return s["play.auto_session"], s["play.grace_s"]
+
+    def _seal_digest_rows(self):
+        """Plan 169: the Golden Seal conversion row for the plan 074 digest."""
+        svc = getattr(self, "seals", None)
+        try:
+            return svc.digest_rows() if svc is not None else []
+        except Exception:  # noqa: BLE001 - a broken seal ledger never blanks the digest
+            return []
 
     def _maint_inputs(self):
         """Plan 069: the effective maintenance slot + official notices (plan 059 / 064)."""
@@ -1412,9 +1424,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def _post_imperial(self, body):
         ops = {"deliver": "deliver", "cp": "set_cp", "mastery": "set_mastery",
-               "box_add": "box_add", "box_del": "box_del"}
+               "box_add": "box_add", "box_del": "box_del", "seal_count": "seal_count",
+               "seal_ex_add": "seal_ex_add", "seal_ex_del": "seal_ex_del"}  # plan 169
         if len(body) != 1 or not (set(ops) & set(body)):
-            raise ValueError("body must be one of {deliver|cp|mastery|box_add|box_del: ...}")
+            raise ValueError("body must be one of {deliver|cp|mastery|box_add|box_del|"
+                             "seal_count|seal_ex_add|seal_ex_del: ...}")
         (op, arg), = body.items()
         return getattr(self.server.imperial, ops[op])(arg)
 

@@ -211,8 +211,9 @@ class ImperialService:
     write returns the GET body."""
 
     def __init__(self, store, clock=time.time, cp=None, prices=None, name=None,
-                 data_path=None, reads=None):
+                 data_path=None, reads=None, seals=None):
         self.store = store
+        self.seals = seals  # plan 169: Reward Seal ledger shown on the same card
         self.clock = clock
         self.cp_source = cp or (lambda: None)
         self.reads = reads or (lambda kind: None)  # plan 081: newest OCR read of a kind
@@ -454,6 +455,33 @@ class ImperialService:
             doc["boxes"] = keep
         return self._write(go)
 
+    # -- plan 169: Reward Seal writes (delegated; each returns the card view) ---
+
+    def _seals(self):
+        if self.seals is None:
+            raise ValueError("reward seal ledger is not wired")
+        return self.seals
+
+    def seal_count(self, arg):
+        self._seals().set_count(arg)
+        return self.view()
+
+    def seal_ex_add(self, arg):
+        self._seals().ex_add(arg)
+        return self.view()
+
+    def seal_ex_del(self, rid):
+        self._seals().ex_del(rid)
+        return self.view()
+
+    def _seal_view(self):
+        if self.seals is None:
+            return None
+        try:
+            return self.seals.view()
+        except Exception:  # noqa: BLE001 - a broken seal ledger never breaks the card
+            return None
+
     # -- read ------------------------------------------------------------------
 
     def _row(self, b, origin, mastery, source=None, verified=None):
@@ -505,4 +533,5 @@ class ImperialService:
                     "cap_divisor": rules["cap_divisor"], "payout_pct": rules["payout_pct"],
                     "taxed": rules["taxed"], "note": rules["note"],
                     "source": rules["source"], "verified": rules["verified"]},
+                "seals": self._seal_view(),
                 "data_error": self.data_error}

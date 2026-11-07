@@ -164,7 +164,7 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 166 | Lane transcript samples read (MAIN ORDER Nd11eb1 item 6): `python tools/lane_samples.py status` shows one sample after a sampled lane and git ls-files shows none; record the size cap when 20 are measured; one sample survives a Sunday 04:30 retention run (first possible 2026-11-08) | [>] session (reads only, after the merge; a lane cannot read the sidecar) |
 | 167 | FLEET-9 read (MAIN ORDER Nd11eb1 item 7): zero live-state or timing failures in gated suite runs for 7 days; done when read clean on or after 2026-11-08 | [>] session (a read of gated runs, not before 2026-11-08) |
 | 168 | Loop checklist overflow is silent (EW analogue of SS FIX N44eed9 (a)): tools/ew_loop.py checklist add() drops rows past the kit ROWS_MAX (20) with no count or marker; write the dropped count beside the rows in progress/loop.json ("checklist_dropped": N) and pin it with a test at 25 rows; adopt the kit's own overflow form instead if a kit version ships one first | [x] done 2026-11-03 (loop; refute 0/3 PASS) |
-| 169 | Imperial Reward Seal ledger: per-category seals, exchange tables, Golden Seal conversion warning (2026-12-03) | [ ] open |
+| 169 | Imperial Reward Seal ledger: per-category seals, exchange tables, Golden Seal conversion warning (2026-12-03) | [x] done 2026-11-07 (loop; refute 0/3 PASS) |
 | 170 | Olvia Academy semester epoch: 4th Semester window, auto-graduation reset marks typed progress stale | [ ] open |
 
 Ranking rationale per deep dive / audit and the closed channel-order

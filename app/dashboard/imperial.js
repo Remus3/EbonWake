@@ -2,7 +2,8 @@
    type (CP / 2 each, C.imperialRows) with -1 / +1 / +10 ticks, the reset
    countdown (C.imperialReset, live between polls), the best boxes by payout
    per input silver (C.imperialBest), a typed CP used while the profile hides
-   it, and an add-box form. Reads GET /api/imperial every 60 s; writes go
+   it, and an add-box form. Plan 169: + the Reward Seal ledger (typed seal
+   counts per category, nearest exchange, Golden Seal conversion line). Reads GET /api/imperial every 60 s; writes go
    through the dashboard preload (window.ewApi, route /api/imperial) because
    the server refuses renderer POSTs. Prices are EW's market cache; nothing
    is read from the game. Every node is built with DOM APIs - no HTML from
@@ -137,6 +138,83 @@
     return f;
   }
 
+  // ---- plan 169: Reward Seal ledger (same card, same route) ----
+
+  function sealCountForm() {
+    const f = el('form', 'ew-form');
+    const sel = el('select');
+    C.SEAL_CATS.concat(['golden']).forEach(function (t) {
+      const o = el('option', null, t);
+      o.value = t;
+      sel.appendChild(o);
+    });
+    const inp = el('input');
+    inp.type = 'text';
+    inp.placeholder = 'seals held (blank = clear)';
+    inp.maxLength = 9;
+    const btn = el('button', 'ew-btn', 'Set seals');
+    btn.type = 'submit';
+    btn.disabled = S.busy;
+    [sel, inp, btn].forEach(function (x) { f.appendChild(x); });
+    f.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      const p = C.parseSealCount(sel.value, inp.value);
+      if (!p.ok) { S.msg = p.error; draw(); return; }
+      send(p.body);
+    });
+    return f;
+  }
+
+  function sealExchangeForm() {
+    const f = el('form', 'ew-form');
+    const sel = el('select');
+    C.SEAL_CATS.forEach(function (t) {
+      const o = el('option', null, t);
+      o.value = t;
+      sel.appendChild(o);
+    });
+    const item = el('input');
+    item.type = 'text';
+    item.placeholder = 'exchange item';
+    item.maxLength = 60;
+    const cost = el('input');
+    cost.type = 'text';
+    cost.placeholder = 'seal cost';
+    cost.maxLength = 9;
+    const btn = el('button', 'ew-btn', 'Add exchange');
+    btn.type = 'submit';
+    btn.disabled = S.busy;
+    [sel, item, cost, btn].forEach(function (x) { f.appendChild(x); });
+    f.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      const p = C.parseSealExchange({ category: sel.value, item: item.value, cost: cost.value });
+      if (!p.ok) { S.msg = p.error; draw(); return; }
+      send(p.body);
+    });
+    return f;
+  }
+
+  function drawSeals(body) {
+    const rows = C.sealRows(S.data);
+    if (!rows.length) return;
+    const s = S.data.seals;
+    body.appendChild(el('div', 'ew-muted', 'Reward seals' +
+      (s.totals && typeof s.totals.total === 'number' ? ' - ' + s.totals.total + ' held' : '')));
+    if (s.data_error) body.appendChild(el('div', 'ew-err', 'seal file: ' + s.data_error));
+    const g = C.sealGolden(S.data);
+    if (g) body.appendChild(el('div', g.cls, g.text));
+    const list = el('div', 'ew-list');
+    rows.forEach(function (r) {
+      const n = el('div', 'ew-trow');
+      n.appendChild(el('span', 'ew-mname', r.name));
+      n.appendChild(el('span', 'ew-muted ew-tdays', r.text));
+      list.appendChild(n);
+    });
+    body.appendChild(list);
+    body.appendChild(sealCountForm());
+    body.appendChild(sealExchangeForm());
+  }
+
   function draw() {
     const ui = S.ui;
     if (!ui || !ui.body.isConnected) return;
@@ -170,6 +248,7 @@
     C.imperialUnpriced(S.data).forEach(function (line) { body.appendChild(el('div', 'ew-muted', line)); });
     body.appendChild(cpForm());
     body.appendChild(boxForm());
+    drawSeals(body);
   }
 
   // ---- mount ----
