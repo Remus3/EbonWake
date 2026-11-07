@@ -14,7 +14,7 @@ import statistics
 import threading
 import time
 
-from . import knownissues, levels
+from . import knownissues, levels, olvia
 from .levels import LEVEL_RANGE
 from .today import _iso, _parse_iso
 
@@ -558,7 +558,7 @@ class LevelingService:
     the view (tagged at read time, never stored) and kept out of the rate."""
 
     def __init__(self, store, clock=time.time, buffs=None, epochs=None, deadlines=None,
-                 books=None, maint_end=None, issues=None):
+                 books=None, maint_end=None, issues=None, semesters=None):
         self.store = store
         self.clock = clock
         self.buffs = buffs
@@ -580,12 +580,30 @@ class LevelingService:
             except ValueError as e:
                 epochs, self.epoch_error = [], str(e)
         self.tracked_epochs = levels.sort_epochs(epochs)
+        load_semesters = deadlines is None
         if deadlines is None:
             try:
                 deadlines = levels.load_deadlines()
             except ValueError as e:
                 deadlines, self.deadline_error = [], str(e)
+        # Plan 170: each Olvia semester is a tracked deadline row (loaded with
+        # the tracked deadlines; injected deadlines without semesters = none).
+        self.semester_error = None
+        if semesters is None:
+            semesters = []
+            if load_semesters:
+                try:
+                    semesters = olvia.load()
+                except ValueError as e:
+                    self.semester_error = str(e)
+        self.semesters = olvia.check(semesters)
+        ids = {d["id"] for d in deadlines}
+        deadlines = list(deadlines) + [levels.validate_deadline(r)
+                                       for r in olvia.deadline_rows(self.semesters)
+                                       if r["id"] not in ids]
         self.tracked_deadlines = levels.sort_deadlines(deadlines)
+        # Plan 170: olvia.OlviaService (typed lecture progress), set by the app.
+        self.olvia = None
         self.issue_error = None
         if issues is None:
             try:
@@ -795,6 +813,10 @@ class LevelingService:
                 "segment_utc": None if segment is None else _iso(segment),
                 "books": books,
                 "deadline_error": self.deadline_error,
+                # plan 170: the running (else next) Olvia semester + typed lectures
+                "semester": olvia.brief(self.semesters, now),
+                "semester_error": self.semester_error,
+                "lecture": self._lecture(),
                 # the newest STARTED epoch that carries caps: a later operator
                 # epoch (no caps) does not hide them (refute r1 minor 2)
                 "kill_xp_cap": levels.kill_cap_note(levels.active_epoch(
@@ -803,6 +825,23 @@ class LevelingService:
                 "samples": [dict(s, pre_patch=since is not None
                                  and _parse_iso(s["ts"]) < since, suspect=tag)
                             for s, tag in reversed(list(zip(samples, suspect))[-VIEW_SAMPLES:])]}
+
+    def _lecture(self):
+        """Plan 170 lecture row (OlviaService.lecture) or None without a ledger."""
+        if self.olvia is None:
+            return None
+        try:
+            return self.olvia.lecture()
+        except Exception:  # noqa: BLE001 - the lecture row is an extra, never fatal
+            return None
+
+    def lecture(self, value):
+        """Plan 170 POST op: typed lectures done (int) or None to clear."""
+        if self.olvia is None:
+            raise ValueError("lecture ledger unavailable")
+        self.olvia.set_lecture(value)
+        self.seq += 1
+        return self.view()
 
     def _zone_here(self):
         if self.zone_here is None:

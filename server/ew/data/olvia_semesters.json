@@ -1,0 +1,7 @@
+[
+  {"number": 4, "start_utc": "2026-11-12T07:00:00+00:00", "end_utc": "2027-02-25T07:00:00+00:00",
+   "weekly_quests_end_utc": "2027-02-24T23:59:00+00:00", "needs_level": 60, "graduation_reset": true,
+   "source": "Global Lab 2026-11-06 via BDFoundry (4th Semester from the 11-12 maintenance to before the 2027-02-25 maintenance; weekly quests to 02-24 23:59; 3rd cohort auto-graduates)",
+   "verified": false,
+   "note": "times = the weekly maintenance slot start (07:00 UTC) and 23:59 read as UTC; re-check the official notice"}
+]

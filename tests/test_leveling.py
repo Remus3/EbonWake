@@ -750,7 +750,9 @@ def test_bad_tracked_deadlines_file_degrades(tmp_path, store, clock, monkeypatch
     bad.write_text("{", encoding="ascii")
     monkeypatch.setattr(levels.load_deadlines, "__defaults__", (bad,))
     v = _lsvc(store, clock, epochs=[]).view()
-    assert v["deadlines"] == [] and "unreadable" in v["deadline_error"]
+    # plan 170: semester rows come from their own table, not deadlines.json
+    left = [d for d in v["deadlines"] if not d["id"].startswith("olvia-semester-")]
+    assert left == [] and "unreadable" in v["deadline_error"]
 
 
 @pytest.mark.parametrize("patch,msg", [
@@ -851,7 +853,8 @@ def test_route_deadline_ops_and_events(tmp_path, clock, monkeypatch):
         ev = _req(s, "GET", "/api/events")[1]
         assert [d["id"] for d in ev["deadlines"]] == ["olvia-test"]
         st, doc, _ = _req(s, "POST", "/api/leveling", {"deadline_del": "olvia-class-3"})
-        assert st == 200 and [d["id"] for d in doc["deadlines"]] == ["olvia-test"]
+        assert st == 200 and [d["id"] for d in doc["deadlines"]
+                              if not d["id"].startswith("olvia-semester-")] == ["olvia-test"]
         st, doc, _ = _req(s, "POST", "/api/leveling", {"deadline_set": {"id": "x"}})
         assert st == 400 and "error" in doc
     finally:
