@@ -64,8 +64,84 @@
       case 'box_add': return exact(v, ['type', 'name', 'items']) && IMP_TYPES.indexOf(v.type) >= 0 &&
         validAscii(v.name, IMP_NAME_MAX) && validImpItems(v.items);
       case 'box_del': return typeof v === 'string' && IMP_BOX_ID.test(v);
+      // plan 169: Reward Seal ledger ops (bounds mirror server/ew/seals.py)
+      case 'seal_count': return exact(v, ['category', 'count']) &&
+        (SEAL_CATS.indexOf(v.category) >= 0 || v.category === 'golden') &&
+        (v.count === null || inRange(v.count, SEAL_COUNT));
+      case 'seal_ex_add': return exact(v, ['category', 'item', 'cost']) &&
+        SEAL_CATS.indexOf(v.category) >= 0 && validAscii(v.item, SEAL_ITEM_MAX) && inRange(v.cost, SEAL_COST);
+      case 'seal_ex_del': return typeof v === 'string' && SEAL_ROW_ID.test(v);
       default: return false;
     }
+  }
+
+  // ---- Imperial Reward Seals (plan 169) ----
+  // Formatters over GET /api/imperial `seals`: {categories: [{id, name,
+  // count}], totals: {total, known, unknown}, exchange: [{id, category, item,
+  // cost, afford, times, short, origin}], nearest: {category: {ready, next}},
+  // golden: {date, at_utc, held, passed, warn, rate_text, text}}. Typed
+  // counts only; nothing comes from the game.
+
+  const SEAL_CATS = ['cooking', 'fishing', 'subjugation', 'training', 'work-supervisor', 'alchemy'];
+  const SEAL_COUNT = [0, 1000000];
+  const SEAL_COST = [1, 1000000];
+  const SEAL_ITEM_MAX = 60;
+  const SEAL_ROW_ID = /^(cooking|fishing|subjugation|training|work-supervisor|alchemy)-[a-z0-9-]{1,40}$/;
+
+  function sealExRow(s, id) {
+    const rows = Array.isArray(s.exchange) ? s.exchange : [];
+    return rows.filter(function (r) { return plainObject(r) && r.id === id; })[0] || null;
+  }
+
+  // One row per category: {id, name, count, text}: "12 held - ready: X (10) -
+  // next: Y needs 3 more"; an untyped count says so instead of guessing.
+  function sealRows(view) {
+    const s = plainObject(view) && plainObject(view.seals) ? view.seals : null;
+    if (!s || !Array.isArray(s.categories)) return [];
+    const near = plainObject(s.nearest) ? s.nearest : {};
+    return s.categories.filter(function (c) {
+      return plainObject(c) && SEAL_CATS.indexOf(c.id) >= 0;
+    }).map(function (c) {
+      const count = isInt(c.count, 0) ? c.count : null;
+      const parts = [count === null ? 'count not typed' : count + ' held'];
+      const n = plainObject(near[c.id]) ? near[c.id] : {};
+      const ready = n.ready ? sealExRow(s, n.ready) : null;
+      const next = n.next ? sealExRow(s, n.next) : null;
+      if (ready) parts.push('ready: ' + ready.item + ' (' + ready.cost + ')');
+      if (next) parts.push('next: ' + next.item + ' needs ' + next.short + ' more');
+      return { id: c.id, name: typeof c.name === 'string' ? c.name : c.id, count: count,
+        text: parts.join(' - ') };
+    });
+  }
+
+  // Golden Seal line: {text, warn, cls} or null (no data). The server text
+  // carries the date, the held count and the rate wording ("conversion rate
+  // not announced" until sourced).
+  function sealGolden(view) {
+    const s = plainObject(view) && plainObject(view.seals) ? view.seals : null;
+    const g = s && plainObject(s.golden) ? s.golden : null;
+    if (!g || typeof g.text !== 'string' || !g.text) return null;
+    return { text: g.text, warn: g.warn === true, cls: g.warn === true ? 'ew-err' : 'ew-muted' };
+  }
+
+  // Count input for one category (or "golden"): blank clears the typed value.
+  function parseSealCount(category, text) {
+    if (SEAL_CATS.indexOf(category) < 0 && category !== 'golden') return { ok: false, error: 'pick a seal category' };
+    const t = typeof text === 'string' ? text.trim().replace(/,/g, '') : '';
+    if (!t) return { ok: true, body: { seal_count: { category: category, count: null } } };
+    if (!/^\d{1,7}$/.test(t) || !inRange(Number(t), SEAL_COUNT)) return { ok: false, error: 'seals: a whole number 0-1000000' };
+    return { ok: true, body: { seal_count: { category: category, count: Number(t) } } };
+  }
+
+  // Exchange row form: {category, item, cost} -> {ok, body | error}.
+  function parseSealExchange(f) {
+    const o = plainObject(f) ? f : {};
+    if (SEAL_CATS.indexOf(o.category) < 0) return { ok: false, error: 'pick a seal category' };
+    const item = typeof o.item === 'string' ? o.item.trim() : '';
+    if (!validAscii(item, SEAL_ITEM_MAX)) return { ok: false, error: 'item: 1-60 plain characters' };
+    const c = typeof o.cost === 'string' ? o.cost.trim().replace(/,/g, '') : '';
+    if (!/^\d{1,7}$/.test(c) || !inRange(Number(c), SEAL_COST)) return { ok: false, error: 'cost: a whole number 1-1000000' };
+    return { ok: true, body: { seal_ex_add: { category: o.category, item: item, cost: Number(c) } } };
   }
 
   // Plan 117: "+40.5% mastery (from screenshot, 2h ago)" / "(typed)" /
@@ -666,6 +742,8 @@
     uniqueNamed: uniqueNamed, paletteLists: paletteLists, pName: pName,
     paletteVerb: paletteVerb, spotRefOf: spotRefOf, armArgs: armArgs,
     parseCommand: parseCommand, paletteSuggest: paletteSuggest, paletteMode: paletteMode,
-    paletteIndex: paletteIndex, paletteSearch: paletteSearch, paletteKey: paletteKey });
+    paletteIndex: paletteIndex, paletteSearch: paletteSearch, paletteKey: paletteKey,
+    SEAL_CATS: SEAL_CATS, sealRows: sealRows, sealGolden: sealGolden,
+    parseSealCount: parseSealCount, parseSealExchange: parseSealExchange });
   return function link() {};
 });

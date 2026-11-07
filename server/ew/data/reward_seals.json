@@ -1,0 +1,22 @@
+{
+ "_doc": "Plan 169 Imperial Reward Seals (2026-11-05 patch, research 0044). categories: the six per-category seals [{id, name, source, verified, verify?}] in this fixed order. golden: the Golden Seal row {id, name, converts (YYYY-MM-DD; resolved to that date's maintenance start), rate (null = not announced, else the official wording, ASCII), note, source, verified, verify?}. exchange: [{id = <category>-<slug(item)>, category, item, cost (seals of that category), limit (per family, null = none listed), source, verified}]; the exchange tables were not read row by row in research 0044, so none is seeded - the operator adds rows on the card until an official page is read. verified stays false until an official page matches (plan 085 verifier).",
+ "categories": [
+  {"id": "cooking", "name": "Cooking", "source": "Patch Notes - November 5, 2026 (research 0044 s1)", "verified": false,
+   "verify": {"title": "^\\[Updates\\] Patch Notes - November 5, 2026\\b", "expect": ["\\bReward Seals?\\b", "\\b{name}\\b"], "contradict": []}},
+  {"id": "fishing", "name": "Fishing", "source": "Patch Notes - November 5, 2026 (research 0044 s1)", "verified": false,
+   "verify": {"title": "^\\[Updates\\] Patch Notes - November 5, 2026\\b", "expect": ["\\bReward Seals?\\b", "\\b{name}\\b"], "contradict": []}},
+  {"id": "subjugation", "name": "Subjugation", "source": "Patch Notes - November 5, 2026 (research 0044 s1)", "verified": false,
+   "verify": {"title": "^\\[Updates\\] Patch Notes - November 5, 2026\\b", "expect": ["\\bReward Seals?\\b", "\\b{name}\\b"], "contradict": []}},
+  {"id": "training", "name": "Training", "source": "Patch Notes - November 5, 2026 (research 0044 s1)", "verified": false,
+   "verify": {"title": "^\\[Updates\\] Patch Notes - November 5, 2026\\b", "expect": ["\\bReward Seals?\\b", "\\b{name}\\b"], "contradict": []}},
+  {"id": "work-supervisor", "name": "Work Supervisor", "source": "Patch Notes - November 5, 2026 (research 0044 s1)", "verified": false,
+   "verify": {"title": "^\\[Updates\\] Patch Notes - November 5, 2026\\b", "expect": ["\\bReward Seals?\\b", "\\b{name}\\b"], "contradict": []}},
+  {"id": "alchemy", "name": "Alchemy", "source": "Patch Notes - November 5, 2026 (research 0044 s1)", "verified": false,
+   "verify": {"title": "^\\[Updates\\] Patch Notes - November 5, 2026\\b", "expect": ["\\bReward Seals?\\b", "\\b{name}\\b"], "contradict": []}}
+ ],
+ "golden": {"id": "golden-seal", "name": "Golden Seal", "converts": "2026-12-03", "rate": null,
+  "note": "Golden Seals convert to per-category Reward Seals at the 2026-12-03 maintenance; the conversion rate was not announced in the 2026-11-05 patch notes.",
+  "source": "Patch Notes - November 5, 2026 (research 0044 s1)", "verified": false,
+  "verify": {"title": "^\\[Updates\\] Patch Notes - November 5, 2026\\b", "expect": ["\\b{name}s?\\b[^\\n]{0,200}\\bconver", "\\bDecember 3\\b|\\bDec\\.? 3\\b|\\b12/3\\b"], "contradict": []}},
+ "exchange": []
+}

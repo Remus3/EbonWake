@@ -457,6 +457,11 @@
     ["zonesRows","function"],
     ["verdictRows","function"],
     ["knownIssueChips","function"],
-    ["nightChip","function"]
+    ["nightChip","function"],
+    ["SEAL_CATS","object"],
+    ["sealRows","function"],
+    ["sealGolden","function"],
+    ["parseSealCount","function"],
+    ["parseSealExchange","function"]
   ]
 }
