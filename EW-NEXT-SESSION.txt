@@ -2,30 +2,18 @@ EW NEXT SESSION
 ---------------
 SESSION: 45
 
-Next action: R165, then P164, R166, R167, then the false-BLOCKED fix.
+Next action: P164, then the false-BLOCKED fix (row 171 is the loop's).
+NOTE: R165, R166, R167 done 2026-11-08 (session 45 sub-agent), rows [x] with
+read-backs in ROADMAP rows 165-167 and the Nd11eb1 section; row 171 filed
+(lane_samples.py status circular import).
 NOTE: R106 done 2026-11-08 (session 45 sub-agent): lanes moved to the
 sidecar root (kit v28), row 106 [x], N2cfb1c follow-up ANSWER sent.
 
 Carried forward (not acted on yet):
-- NOTE: OPEN R165, session act: row 165 readbacks and paperwork, texts in
-  docs/plans/165-fleet-insights-w44.md. Not done: paste the overlay QA checks
-  (88d99c0) into the OPERATOR QA bullet; add the
-  `python tools/usage_ledger.py spend` hand-off line step to
-  .claude/commands/done.md; name the read-backs in the Nd11eb1 end state and
-  flip row 165. Figures read in session 44: SS delivery 2/2 in delivery.jsonl;
-  gate used 3 cap 500; parked fields present at 17:49, then absent with 0
-  parked (absent re-read at /done). Spend read at /done: Spend 7d to
-  2026-11-01: $33.07 total; build $13.48, data $1.56, review $2.74, inbox $0.00,
-  triage $0.00, other $15.28; 0 unpriced runs.
 - NOTE: OPEN P164, session act: replace the reconstruction in
   tests/test_loop_inbox_p164.py with the real ORDER 2215 bytes (plan 164
   decision 3: a lane could not read the inbox; reverses when a session copies
   the bytes into the test's constant).
-- NOTE: OPEN R166, session read: row 166 after a sampled lane and a Sunday
-  04:30 retention run (first possible 2026-11-08);
-  `python tools/lane_samples.py status`.
-- NOTE: OPEN R167, session read: row 167 (FLEET-9), zero live-state or timing
-  failures in gated runs for 7 days; not before 2026-11-08.
 - NOTE: OPEN, unfixed, found session 44 (tagged NOTE and no ROADMAP row, so the
   loop does not build it during the operator's deferral; give it a row or fix
   it in session): false BLOCKED notes. The 2026-10-26 and 2026-10-27 kit answers
@@ -78,7 +66,10 @@ Carried forward (not acted on yet):
   the dashboard / overlay (per-plan detail in docs/handoff-ledger.txt;
   plan 009 needs ~10 screenshots with the game UI SHOWN, via a rebound BDO
   Screenshot key) AND approve the OpenSSF scorecard v5.5.0 linux binary
-  download into WSL Ubuntu (Scorecard bullet below).
+  download into WSL Ubuntu (Scorecard bullet below)
+  AND QA overlay change 88d99c0: hide off-focus (alt-tab hides, focus shows), second
+  display (shows there, follows a reorder, falls back to primary when unplugged),
+  capture guard opt-in (overlay.content_protection true = absent from a capture).
 - Scorecard BEFORE/AFTER (MAIN order 0300 section 4): needs the OpenSSF
   scorecard v5.5.0 linux binary downloaded into WSL Ubuntu (none present) -
   OPERATOR approves that download; BEFORE reference = MAIN audit 3.6. Loop

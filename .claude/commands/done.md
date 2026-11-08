@@ -108,6 +108,10 @@ hand-off as a `NOTE:` bullet.
    unacted item is copied forward verbatim or tighter. Never drop one.
 3. Add this session's items from ground truth (ROADMAP top open item, blockers,
    in-flight lanes, status figures).
+4. Run `python tools/usage_ledger.py spend` and copy the one line it prints
+   into the hand-off's Status section as ONE line (MAIN ORDER Nd11eb1 item 5,
+   EW-3; rolling 7-day spend by lane / note class). A failed read is the line
+   `Spend: not read - <cause>`, never a ritual failure.
 
 ```
 EW NEXT SESSION
@@ -120,6 +124,7 @@ Acceptance: <how the next session knows it is done>
 Do NOT redo: <shipped this session that still looks open>
 In flight: <lane / agent, progress file, ETA>
 Status: <commits / push range / gates / CI / server health / session size>
+  <the usage_ledger spend line, step 4>
 Start with: read this file, then CLAUDE.md, docs/plans/ROADMAP.md, git log -10.
 ```
 
