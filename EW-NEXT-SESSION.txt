@@ -1,26 +1,29 @@
 EW NEXT SESSION
 ---------------
-SESSION: 45
+SESSION: 46
 
-Next action: P164, then the false-BLOCKED fix (row 171 is the loop's).
-NOTE: R165, R166, R167 done 2026-11-08 (session 45 sub-agent), rows [x] with
-read-backs in ROADMAP rows 165-167 and the Nd11eb1 section; row 171 filed
-(lane_samples.py status circular import).
-NOTE: R106 done 2026-11-08 (session 45 sub-agent): lanes moved to the
-sidecar root (kit v28), row 106 [x], N2cfb1c follow-up ANSWER sent.
+Next action: row 171 (lane_samples.py status circular import). The loop
+dispatched it to lane build (lane-0) at 2026-11-08 16:49 (fire 3127,
+progress/lane-0.json running); do NOT run it by hand while the loop holds it.
+Read back its merge: `python tools/lane_samples.py status` as a script prints
+the one status line, rc 0, and row 171 is [x]. If the item lands in
+adjudicate / merge-conflict / gave-up, a session agent fixes it.
 
 Carried forward (not acted on yet):
-- NOTE: OPEN P164, session act: replace the reconstruction in
-  tests/test_loop_inbox_p164.py with the real ORDER 2215 bytes (plan 164
-  decision 3: a lane could not read the inbox; reverses when a session copies
-  the bytes into the test's constant).
-- NOTE: OPEN, unfixed, found session 44 (tagged NOTE and no ROADMAP row, so the
-  loop does not build it during the operator's deferral; give it a row or fix
-  it in session): false BLOCKED notes. The 2026-10-26 and 2026-10-27 kit answers
-  used shortened filenames and wrote no seen line, so `handled()` in
-  tools/loop_inbox.py missed them and the 2026-11-01 09:04 tick sent 2 false
-  BLOCKED notes (Nba8669, Nb25a6f; both retracted). Any answer under a shortened
-  name can repeat this.
+- NOTE: R106 check: lanes 0-1 now live under <sidecar>/EW/Worktree (2baf571).
+  The first lane run from the new path (lane-0, row 171, started 16:49) was
+  running at session 45 /done; confirm it finished and merged cleanly from
+  there (progress/lane-0.json done, loop_items state merged).
+- NOTE: session 45 slips: the first gated pytest at /done hit 1 error
+  (tests/test_zoneinfo.py::test_route_zones_xp, fleet_test_guard) because the
+  16:49 loop tick wrote inbox_status.json / headless_budget.json mid-suite;
+  re-run green (4437 passed). The EW server was found down at /done (no
+  listener on 8940) and restarted with launch.py --server-only (pid 33540,
+  health ok true). Cause not investigated; if it is down again, look.
+- NOTE: session 45 reap applied: 0 removed, 2 kept, 0 listed (base main);
+  lane-0 and lane-1 kept.
+- NOTE: session 45 board rendered locally with --final after this file was
+  read back (see git log / board status.json if in doubt).
 - NOTE: session 44 deviation, no adjudicator ruling: batched note
   2026-11-01-1755-from-EW-ANSWER-to-MAIN-batched-2-answers.md skipped the normal
   `session-done` + tick answer path. Why: `answer_context` with no recorded
@@ -31,10 +34,6 @@ Carried forward (not acted on yet):
   estimated loop-tick row (1.0 s) in timings.jsonl; left in place, the median of
   5 absorbs it. An empty stray temp file outside the repo was removed at /done
   by direct unlink (0 bytes, nothing consumes it).
-- NOTE: session 44 reap applied: 0 removed, 2 kept, 0 listed (base main);
-  lane-0 and lane-1 kept.
-- NOTE: session 44 board rendered locally with --final (rc 0) after this file
-  was read back.
 - NOTE: 2045 ORDER (N6e995b) wall time: no clean isolated before/after exists
   (session 43 gated suite 211.4 s incl. slot wait; earlier 1597.5 / 360 /
   179.6 s). Measure a clean before/after ONLY if MAIN asks for it.
@@ -216,50 +215,50 @@ Carried forward (not acted on yet):
   docs/research/0014 line 19 (ProgramData kit path); the vendored kit uses
   the same name, so it stays.
 
-Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew; read back session 44
-/done (2026-11-01 18:07): enabled, Ready, last run 18:04 rc 0, next 18:19,
-no HALT, fire 2567 idle, 0 new notes. Kit v27 vendored: SIDECAR_DEFAULT
-present, board LOCAL ONLY (no Artifact / ArtifactData). Outbound 2026-11-01: 9 of 12 (last 1755).
+Context: loop = \EbonwakeOps\LaneLoop PT15M IgnoreNew; read back session 45
+/done (2026-11-08 ~16:52): enabled, Ready, last run 16:49 rc 0, next 17:04,
+no HALT, fire 3127 dispatched row 171 to lane build. Kit v28 vendored:
+SIDECAR_DEFAULT present, lanes under the sidecar root, board LOCAL ONLY (no
+Artifact / ArtifactData). Outbound 2026-11-08: 1 of 12 (1640 ANSWER).
 FLEET_SIDECAR_ROOT unset and stays unset (MAIN ruling). Suite gate: 2 machine
-slots. Runs gate: used 3 cap 500. A loop tick, a note write or a loop_items edit
-during a whole suite trips fleet_test_guard (session 43: own note + item edit
-tripped run 1; re-run green) - write control files only after the suite. Memory
-is tight; run suites sequentially. State: ops/loop/control/ loop_items/*.json,
-progress/loop.json, progress/lane-<i>.json, inbox_status.json, inbox_seen.jsonl,
-delivery.jsonl. Merge-stuck items are fixed by a session agent (merge
-refs/ew/keep/<id> onto main, keep both sides, mark item merged, delete keep ref,
-push). Restart: stop the server pid from /api/version, then `python
-tools/launch.py --server-only`. Proxy probe: netstat for :3456 LISTENING.
-tools/leak_sweep.py --pre-push reads stdin; run it with stdin from /dev/null. Bot
-PR rule + tools/bot_pr_check.py: CLAUDE.md "Bot PRs". ci.yml paths-ignore holds
-this file, docs/** and **/*.md, so a hand-off-only push fires no ci run.
+slots. A loop tick, a note write or a loop_items edit during a whole suite
+trips fleet_test_guard (sessions 43 and 45) - write control files only after
+the suite; re-run on a guard error. Memory is tight; run suites sequentially.
+State: ops/loop/control/ loop_items/*.json, progress/loop.json,
+progress/lane-<i>.json, inbox_status.json, inbox_seen.jsonl, delivery.jsonl.
+Merge-stuck items are fixed by a session agent (merge refs/ew/keep/<id> onto
+main, keep both sides, mark item merged, delete keep ref, push). Restart: stop
+the server pid from /api/version, then `python tools/launch.py --server-only`.
+Proxy probe: netstat for :3456 LISTENING. tools/leak_sweep.py --pre-push reads
+stdin; run it with stdin from /dev/null. Bot PR rule + tools/bot_pr_check.py:
+CLAUDE.md "Bot PRs". ci.yml paths-ignore holds this file, docs/** and **/*.md,
+so a hand-off-only push fires no ci run.
 
-Acceptance: row 106 [x] with the registered lanes under the sidecar root and the
-N2cfb1c follow-up delivered (HOP 2); rows 165, 166, 167 closed on their reads
-(166 and 167 not before 2026-11-08); P164 test holds the real bytes; the
-false-BLOCKED cause fixed with a test; loop idle or merging cleanly; nothing in
+Acceptance: row 171 [x] with a subprocess test and `python
+tools/lane_samples.py status` rc 0; the first lane run from the sidecar
+worktree path finished and merged; loop idle or merging cleanly; nothing in
 adjudicate / merge-conflict / gave-up / failed-dirty.
 
-Do NOT redo: session 44 inbox: `session-done` x2 (Nba8669 commit b8eee86,
-Nb25a6f commit d6990ea); `send_batches` under the tick lock; tick fire 2566;
-watch seen 76 notes, pending orders empty; ONE note 2026-11-01-1755-from-EW-ANSWER-to-MAIN-batched-2-
-answers.md (HOP 2, TERMINAL, sha256 09da9b5b...74086d, 1/1 reached, cap 9/12)
-retracting the 2 false 09:04 BLOCKED notes. Retracted from this file, read
-2026-11-01: keep ref refs/ew/keep/N82830d is gone (for-each-ref refs/ew/keep
-empty, so no removal is owed); the electron node_modules refresh is overtaken:
-app/package.json pins 45.0.0 (3598c7c), app/node_modules/electron/package.json
-and dist/version both read 45.0.0. Session 43 batched ANSWER (1926 v23, 1935 FIX
-N82830d, 2045 ORDER N6e995b; 2026-10-25-2350, sha256 f1cacf93...1d14e2) stays
-closed. Older: docs/handoff-ledger.txt and git log.
+Do NOT redo: session 45: R106 (2baf571, lanes 0-1 under <sidecar>/EW/Worktree,
+row 106 [x]); A2cfb1c ANSWER
+2026-11-08-1640-from-EW-ANSWER-re-2026-10-25-1950-...-ONE-ANSWER.md reached
+1/1, outbound 1/12; P164 test holds the real ORDER 2215 bytes and handled()
+accepts header-matched answers (false-BLOCKED fix) in 10878b0 (CI 42531387649
+success); R165, R166, R167 closed in 176e1fc with read-backs in ROADMAP rows
+165-167 and the Nd11eb1 section; row 171 filed. Session 44 inbox
+(`session-done` x2, ONE batched retraction note 1755) stays closed. Older:
+docs/handoff-ledger.txt and git log.
 
-In flight: none from this session. Loop armed (next tick 18:19), no lane lock
-held by this session.
+In flight: loop lane-0 (lane build) on row 171, progress/lane-0.json
+(started 16:49, eta ~8 m at /done). Nothing else; no lane lock held by this
+session.
 
-Status: session 44 /done gates fresh 2026-11-01: gated pytest rc 0, 4371
-passed (123.71 s); gated node 847/847 rc 0; leak sweep ARMED (19). Nothing to
-commit before this hand-off; tree clean at 5d250ac = origin/main. Hand-off push:
-see the session 44 /done commit and git log. CI: last ci run 41342397210 on
-5d250ac success (2m32s), codeql 41342397214 success; this hand-off-only push is
-paths-ignored. Server /api/health ok true. Session jsonl 0.6 MB, under 10 MB.
+Status: session 45 /done gates fresh 2026-11-08: gated pytest 4437 passed
+(87.1 s; first run 1 guard error from a tick, re-run green); gated node 852/852
+rc 0; leak sweep ARMED (19). Nothing to commit before this hand-off; tree clean
+at 176e1fc = origin/main. CI: ci 42531387649 and codeql 42531387726 on 10878b0
+success; 176e1fc is docs / hand-off only (paths-ignored). Server /api/health ok
+true after restart (pid 33540). Session jsonl 0.7 MB, under 10 MB.
+  Spend 7d to 2026-11-08: $10.78 total; build $5.50, data $3.14, review $0.90, inbox $0.00, triage $0.00, other $1.24; 0 unpriced runs
 
 Start with: read this file, then CLAUDE.md, docs/plans/ROADMAP.md, git log -10.
