@@ -307,6 +307,33 @@ def inbox_names(inbox):
 SEEN_REL = Path("ops/loop/control/inbox_seen.jsonl")
 
 
+def answered_in_outbox(name, outbox):
+    """True when an EW ANSWER in outbox answers note `name`: its file name ends
+    `-re-<full stem>.md`, OR its title line is exactly `# From EW - ANSWER re
+    <name>`, OR (a batched answer) it has a `## Re <name>` heading. 2026-11-01
+    fix: the kit v24 / v25 answers went out under shortened file names with
+    no seen line, the stem match missed them and the 24 h bound sent false
+    BLOCKED notes (Nba8669, Nb25a6f). A BLOCKED note's title carries
+    `: BLOCKED` after the name, so it never matches."""
+    stem = Path(name).stem
+    title = f"# From {CODE} - ANSWER re {name}"
+    heading = f"## Re {name}"
+    for p in Path(outbox).iterdir():
+        if p.name.endswith(f"-re-{stem}.md"):
+            return True
+        if not p.is_file() or f"-from-{CODE}-ANSWER-" not in p.name:
+            continue
+        try:
+            lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        if lines and lines[0].rstrip() == title:
+            return True
+        if any(line.rstrip() == heading for line in lines):
+            return True
+    return False
+
+
 def settled_notes(root):
     return {d["note"] for d in read_jsonl(Path(root) / SEEN_REL) if d.get("note")}
 
@@ -466,10 +493,8 @@ class InboxMixin:
         if name in self.fi.seen(self.root):
             return True
         legacy = read_jsonl(self.root / LEGACY_LEDGER_REL)  # plan 015 deviation 14e
-        stem = Path(name).stem
         if not (any(d.get("note") == name for d in legacy)
-                or outbox.is_dir() and any(p.name.endswith(f"-re-{stem}.md")
-                                           for p in outbox.iterdir())):
+                or outbox.is_dir() and answered_in_outbox(name, outbox)):
             return False
         # Backfill the kit seen ledger (2026-10-09: the 10-04/10-05 notes were
         # settled before inbox_seen.jsonl existed and were absent from it).
@@ -712,7 +737,8 @@ class InboxMixin:
     def bound_session_wait(self, oid, name, dec, outbox, batch):
         """Plan 164: one BLOCKED ANSWER (no spawn) for a session-routed order
         unsettled after SESSION_WAIT_S. The order stays open for the session;
-        its name has no -re-<stem> so handled() does not read it as settled.
+        its name has no -re-<stem> and its title ends `: BLOCKED`, so handled()
+        does not read it as settled.
         A capped or paused tick sends nothing and is retried next tick."""
         orders = self.orders()
         order = next((o for o in orders if o["id"] == oid), None)

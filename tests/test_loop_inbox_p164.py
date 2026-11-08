@@ -2,6 +2,7 @@
 not what it mentions, and a session-routed order gets one BLOCKED ANSWER after
 24 hours. Git-free: inbox methods are called directly on a Tick with fake deps."""
 
+import hashlib
 import json
 import os
 import sys
@@ -15,23 +16,22 @@ import loop_inbox  # noqa: E402
 from ew_loopkit import ROADMAP, FakeSpawn, _inbox_root, deps  # noqa: E402
 
 sp = ew_loop.session_paths
-ORDER_NAME = "2026-10-31-2215-from-MAIN-ORDER-to-EW-public-view.md"
-# Reconstruction: a lane cannot read the inbox (plan 164 as-built deviation 3).
-# It keeps the shape MAIN reported: seven repo items and one lead-in sentence
-# pointing at the separate kit ORDER 2200 by its version number.
-ORDER_2215 = """# From MAIN - ORDER to EW: public view
+ORDER_NAME = ("2026-10-31-2215-from-MAIN-ORDER-to-EW-public-view-w44-sweep-uiux-"
+              "batched-ONE-ANSWER.md")
+# The real note bytes (sha256 6d1b3c08...0e32fe1, MAIN's outbox copy), copied
+# into a tests fixture: a test never reads the live inbox (fleet_test_guard).
+# It has seven repo items and one lead-in sentence pointing at the separate
+# kit ORDER 2200 by its version number ("kit v26").
+ORDER_FIXTURE = ROOT / "tests" / "fixtures" / "inbox_p164" / ORDER_NAME
+ORDER_2215 = ORDER_FIXTURE.read_bytes().decode("ascii")
 
-Channel code MAIN. TO EW. Separate from this one, ORDER 2200 ships kit v26; this
-order does not depend on it. Do the work in your own tree.
 
-1. Rewrite the README lead paragraph.
-2. Add the banner alt text.
-3. Back the idle deep-dive off to weekly.
-4. Fix the changelog links.
-5. Hide the overlay when the game loses focus.
-6. Place the overlay by display ID.
-7. Add the opt-in capture guard.
-"""
+def test_order_2215_fixture_is_the_real_note():
+    data = ORDER_FIXTURE.read_bytes()
+    assert hashlib.sha256(data).hexdigest().startswith("6d1b3c08")
+    assert "kit v26 ORDER (2200)" in ORDER_2215 and ORDER_2215.count(chr(10) + "## ") == 4
+
+
 FIX_NAME = ("2026-11-01-0825-from-MAIN-FIX-to-EW-loop-router-parks-an-order-on-a-prose-"
             "version-word-ONE-ANSWER.md")
 FIX_LINES = """MAIN read your tree read-only and changed nothing. This note is written to pass
