@@ -2,24 +2,11 @@ EW NEXT SESSION
 ---------------
 SESSION: 45
 
-Next action: ROADMAP 106 lane move, then the N2cfb1c follow-up ANSWER. Session
-44 did inbox only (operator: "just the inbox- not roadmap work at this time"),
-so nothing moved; that order covered session 44 and is not a standing stop.
-Row 106 is still [>] and both lanes are still under ../ew-worktrees (read
-2026-11-01). Lane answer 2026-11-01-1004 told MAIN a follow-up comes once the
-move lands; it carries the move commit, worktree list, three worktree_path
-values and row 106 [x]. Follow the ROADMAP 106 NOTE bullet and its session-44
-correction below. Then the other open session items, in this order: R165, P164,
-R166, R167, then the false-BLOCKED fix.
+Next action: R165, then P164, R166, R167, then the false-BLOCKED fix.
+NOTE: R106 done 2026-11-08 (session 45 sub-agent): lanes moved to the
+sidecar root (kit v28), row 106 [x], N2cfb1c follow-up ANSWER sent.
 
 Carried forward (not acted on yet):
-- NOTE: OPEN R106, session act (NOTE tag on purpose so the loop does not
-  dispatch it; a lane cannot HALT or move itself). Correction to the ROADMAP
-  106 bullet below: `git worktree list` read 2026-11-01 shows lane-0 and lane-1
-  only, lane-2 absent, and the machine lanes file reads lane_cap_max 1, so
-  "wait for 3 FREE lanes" means move what is registered, then read
-  worktree_path for i=0..2 (ROADMAP section Order N2cfb1c). Vendored kit is now
-  v27. Also read sidecar_root() with the variable unset right before the move.
 - NOTE: OPEN R165, session act: row 165 readbacks and paperwork, texts in
   docs/plans/165-fleet-insights-w44.md. Not done: paste the overlay QA checks
   (88d99c0) into the OPERATOR QA bullet; add the
@@ -101,23 +88,6 @@ Carried forward (not acted on yet):
   cannot run shell operators in ci.yml steps (none today).
 - EW sent two v8 ANSWERs to MAIN (04:00 loop note said "blocked on v6";
   04:11 supersedes it). If MAIN flags the duplicate, point to 04:11.
-- NOTE: ROADMAP 106 trigger (MAIN ORDER N2cfb1c 2026-10-25, MAIN ruling
-  2026-10-25-sidecar-root-unset): MAIN will NOT set FLEET_SIDECAR_ROOT;
-  trigger "SIDECAR_DEFAULT present" in the vendored
-  ops/fleet_kit/fleet_lanes.py is MET: v23 (d8bf563) carries it, read
-  2026-10-25 23:59. Do it now:
-  read back fleet_lanes.sidecar_root() == the v23 default with the
-  variable unset (process + HKCU); HALT the loop, wait for 3 FREE lanes,
-  `git worktree move` each ../ew-worktrees/lane-<i> to
-  <sidecar>/EW/Worktree/lane-<i> (MAIN created the empty parent),
-  repoint any held loop_items worktree, read back `git worktree list` and
-  fleet_lanes.worktree_path(i) for i=0..2, remove HALT, flip row 106 [x].
-  Old ../ew-worktrees: leave or Recycle Bin once nothing names it (never
-  unlink). Suite keeps FLEET_SIDECAR_ROOT pinned "". ANSWER includes the
-  move commit, worktree list, three worktree_path values, row 106 [x].
-  Reverses if: v22 delivery fails or EW has not adopted v22 by its next
-  session (SS pins the variable, then MAIN sets it), or operator orders a
-  root.
 - MAIN to record EW's port block 8940-8959 in the machine-wide registry and
   add EW to the roster / lane widget (roster INFO 0230 says EW is a member;
   Hbd1ed4).
