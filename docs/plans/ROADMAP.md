@@ -364,3 +364,12 @@ SS FIX 2026-11-03-1324 to MAIN (kit checklist caps, item 13a departure, board di
 - (c) fleet_board.build() marks a row displaced past the cap done mid-session: NOT-APPLICABLE - ops/fleet_kit/fleet_board.py is pinned; MAIN's kit version. Unreachable in EW today (under 20 rows).
 - ONE ANSWER: NOT-APPLICABLE - addressed to MAIN; the loop writes any EW reply after merge.
 - Progress file ops/loop/control/progress/N44eed9.json: BLOCKED - this run may not execute the writer script (approval denied) and the progress dir is in the main checkout.
+
+## Order Nbcd29f - blocked items
+
+MAIN ORDER 2026-11-08-1200 to ALL (operator order: "always utilize appropriate claude model and effort for the tasks/runs/commands/etc"). TERMINAL for acknowledgement: no ANSWER note.
+
+- (1) Save feedback_model_and_effort_fit_the_task.md byte for byte in the Claude memory directory: BLOCKED - the memory directory is outside this lane's worktree and the lane run was denied read access to it (permission not granted); an interactive EW session saves it (check for an existing covering memory first).
+- (2) Add the MEMORY.md index line for it: BLOCKED - same reason as (1); done together with (1) by an interactive session.
+- (3) Apply it: every Agent spawn, workflow agent and fleet_headless spawn sets model and effort deliberately: DONE - already in place via plan 099: tools/loop_base.py ROUTES maps each lane kind to a model + effort (plan/order/handoff opus medium; data/resolve/deep-dive/fix sonnet medium; verify/inbox sonnet low), passed to the kit spawn by tools/ew_loop.py route_kw and tools/ew_lane.py; interactive sessions set model/effort on Agent spawns per the saved memory.
+- Progress file ops/loop/control/progress/Nbcd29f.json: BLOCKED - write to the main checkout's progress dir was denied (permission not granted) for this lane run.
