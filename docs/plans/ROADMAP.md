@@ -167,6 +167,8 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 169 | Imperial Reward Seal ledger: per-category seals, exchange tables, Golden Seal conversion warning (2026-12-03) | [x] done 2026-11-07 (loop; refute 0/3 PASS) |
 | 170 | Olvia Academy semester epoch: 4th Semester window, auto-graduation reset marks typed progress stale | [x] done 2026-11-07 (loop; refute 0/3 PASS) |
 | 171 | `python tools/lane_samples.py status` crashes: ImportError cannot import name '_NO_WINDOW' from partially initialized loop_base (lane_samples -> loop_base -> ew_lane -> lane_samples cycle when run as a script; found by the row 166 read 2026-11-08). Acceptance: a test runs `python tools/lane_samples.py status` as a subprocess and gets the one status line, rc 0 | [ ] open |
+| 172 | Tools script-mode smoke test: run every tools/*.py entry point as a script and fail on ImportError (sibling sweep of row 171) | [ ] open |
+| 173 | Plan doc / ROADMAP consistency lint: first-line number, duplicates, missing rows and cited docs, legacy allow-list | [ ] open |
 
 Ranking rationale per deep dive / audit and the closed channel-order
 sections: `docs/plans/ROADMAP-history.md` (moved verbatim 2026-10-09, plan
@@ -192,6 +194,8 @@ MAIN as a kit defect note.
 Ranking 20261018 deep dive (research 0030): 158 (silent operator-data loss on a corrupt doc; above polish, below the 0029 unattended-recovery rows).
 
 Ranking 20261107 deep dive (research 0044): 170 (typed progress goes stale at the 2026-11-12 reset, sooner) > 169 (Golden Seal conversion 2026-12-03, rate unannounced).
+
+Ranking 20261110 deep dive (research 0046): 172 (a crash class no test can see; sibling sweep of row 171) > 173 (drift guard, low urgency).
 
 Rules: refute rounds capped at 3 per item; every plan lands via a lane worktree
 and one push; ETA log updated by every run.
