@@ -50,7 +50,10 @@ CODE_EXTRA = ("--permission-mode", "acceptEdits", "--allowedTools",
               GATE_TOOLS + "," + DEP_TOOLS)
 sys.path.insert(0, str(ROOT / "tools"))
 import eta  # noqa: E402
-import lane_samples  # noqa: E402
+
+# lane_samples is imported at call time (run_lane), never here: lane_samples ->
+# loop_base -> ew_lane -> lane_samples is a cycle that crashed
+# `python tools/lane_samples.py status` (row 171, plan 172 smoke test).
 
 
 def _load(name, rel):
@@ -134,7 +137,8 @@ def run_lane(lane, prompt, writes_code=False, timeout=3600, dry_run=False, root=
     after a failure (sample_retry) run with persistence on and their transcript
     is copied to the sidecar when the run ends (tools/lane_samples.py)."""
     check_lane(lane)
-    route = {k: v for k, v in (("model", model), ("effort", effort)) if v is not None}
+    import lane_samples  # call time only: see the note at the module imports
+    route ={k: v for k, v in (("model", model), ("effort", effort)) if v is not None}
     run_id = f"lane-{lane}"
     if progress is None:
         progress = kit().write_progress
