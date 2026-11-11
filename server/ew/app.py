@@ -289,7 +289,8 @@ class EWServer(ThreadingHTTPServer):
         self.verdicts = dataverdicts.VerdictService(
             getattr(notice_client, "patch_notes", None) or (lambda: []),
             path=verdicts_path or (Path(store_root).parent if store_root else RUNTIME)
-            / "data_verdicts.json", data_dir=verdict_data_dir)
+            / "data_verdicts.json", data_dir=verdict_data_dir,
+            listed=getattr(notice_client, "listed", None))  # plan 174: newer patch listed
         self.leveling.verdict = self.verdicts.verdict
         self.grind.verdict = self.verdicts.verdict
         # Plan 074: before-maintenance digest - loss sentences from the cached

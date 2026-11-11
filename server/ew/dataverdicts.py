@@ -10,6 +10,10 @@ page is never re-fetched). Verdicts persist in `ops/runtime/
 data_verdicts.json` (atomic write), keyed `<file>#<row id>`, each carrying the
 row fingerprint: once a lane edits the tracked row (value or hint) its old
 verdict is dropped. Tracked data files are never written here.
+
+Plan 174: `signal()` also compares the newest dated patch-notes title in plan
+064's cached notice list (`listed`, no fetch) with the last checked page's date
+and reports `newer` (suggest-only; it clears once a newer page is checked).
 """
 
 import datetime as _dt
@@ -66,11 +70,40 @@ def apply(verdicts, hinted, note, checked):
     return verdicts
 
 
+def newest_patch(listed):
+    """Plan 174: {date, title, notice_no, url} of the newest dated patch-notes title
+    in plan 064's cached notice list (never a fetch), else None."""
+    best = None
+    for n in listed if isinstance(listed, list) else []:
+        if not (isinstance(n, dict) and patchverify.is_patch_title(n.get("title"))
+                and isinstance(n.get("group_no"), int) and not isinstance(n["group_no"], bool)):
+            continue
+        date = patchverify.note_date(n["title"], n.get("stamp"))
+        if date is None:
+            continue
+        cand = {"date": date, "title": n["title"], "notice_no": n["group_no"],
+                "url": n.get("url") if isinstance(n.get("url"), str) else ""}
+        if best is None or (date, n["group_no"]) > (best["date"], best["notice_no"]):
+            best = cand
+    return best
+
+
+def newer(last_notice, newest):
+    """`newest` when its date is after the verifier's last-checked patch date; None
+    when equal / older or either side is unknown (missing verifier state is quiet)."""
+    verified = last_notice.get("date") if isinstance(last_notice, dict) else None
+    if not (isinstance(verified, str) and isinstance(newest, dict)
+            and isinstance(newest.get("date"), str)):
+        return None
+    return newest if newest["date"] > verified else None
+
+
 class VerdictService:
     """GET /api/data/verdicts plus per-row lookups for the loaders (plan 085)."""
 
-    def __init__(self, notes, path=STATE_FILE, data_dir=None, clock=time.time):
+    def __init__(self, notes, path=STATE_FILE, data_dir=None, clock=time.time, listed=None):
         self.notes = notes
+        self.listed = listed  # plan 174: () -> plan 064's cached notice list rows
         self.path = Path(path)
         self.data_dir = data_dir
         self.clock = clock
@@ -156,7 +189,14 @@ class VerdictService:
         res = self.run()
         vs = res["verdicts"]
         bad = sorted((k, v) for k, v in vs.items() if v["verdict"] == "contradicted")
-        return {"error": self.error, "last_notice": res["last_notice"],
+        try:
+            listed = self.listed() if self.listed is not None else []
+        except Exception:  # noqa: BLE001 - a broken list cache flags nothing, never a 500
+            listed = []
+        flag = newer(res["last_notice"], newest_patch(listed))
+        if flag is not None:
+            flag = dict(flag, verified=res["last_notice"]["date"])
+        return {"error": self.error, "last_notice": res["last_notice"], "newer": flag,
                 "confirmed": sum(v["verdict"] == "confirmed" for v in vs.values()),
                 "unchecked": len(self.hints()["unchecked"]),
                 "contradicted": [{"key": k, "evidence": v["evidence"], "date": v["date"]}

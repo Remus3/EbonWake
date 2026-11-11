@@ -35,7 +35,7 @@ REASONS = {
     "market": ("empty", "blocked", "stale"),
     "profile": ("no_family", "no_base", "robots", "stale", "error"),
     "boss_drift": ("not_built", "drift", "error"),
-    "data": ("contradicted", "error"),
+    "data": ("contradicted", "error", "patch_newer"),
 }
 MAX_LINES = 10  # plan 085: evidence lines on the System card
 ACTIVE = ("running", "logged_in", "disconnected")  # plan 008 states with the client up
@@ -207,6 +207,14 @@ def _boss_drift(s, now, th):
     return "ok", None, age, "matches"
 
 
+def _newer_line(n):
+    """Plan 174: the one digest line for a listed patch newer than the verified one."""
+    if not (isinstance(n, dict) and isinstance(n.get("verified"), str)
+            and isinstance(n.get("date"), str)):
+        return None
+    return f"data verified against {n['verified']}, patch {n['date']} is newer"[:120]
+
+
 def _data(s, now, th):
     """Plan 085: hinted data rows vs the official patch notes. Returns a fifth
     item, the evidence lines (`<file>#<id>: <evidence>`)."""
@@ -214,13 +222,16 @@ def _data(s, now, th):
     bad = [c for c in (s.get("contradicted") or []) if isinstance(c, dict)]
     if s.get("error"):
         return "warn", "error", None, f"hint table: {s['error']}"[:120], []
+    newer = _newer_line(s.get("newer"))
     if bad:
         dates = sorted(c["date"] for c in bad if isinstance(c.get("date"), str))
         n = len(bad)
         detail = (f"{n} data row{'s' if n != 1 else ''} contradicted by patch notes "
                   f"{dates[-1] if dates else '?'} - see System")
         lines = [f"{c.get('key')}: {c.get('evidence') or ''}"[:240] for c in bad[:MAX_LINES]]
-        return "warn", "contradicted", None, detail, lines
+        return "warn", "contradicted", None, detail, lines + ([newer] if newer else [])
+    if newer:  # plan 174: suggest-only; clears once the verifier checks that patch
+        return "warn", "patch_newer", None, newer, []
     unchecked = s.get("unchecked") if isinstance(s.get("unchecked"), int) else 0
     if not last:
         return "ok", None, None, f"no patch notes read yet; {unchecked} unchecked", []
