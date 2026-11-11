@@ -38,6 +38,7 @@
     "boss_drift.drift": "boss table differs from the public schedule - review Events > World bosses",
     "boss_drift.error": "boss schedule drift check failed - retried later",
     "data.contradicted": "patch notes disagree with a tracked value - kept with a check badge until a data fix",
-    "data.error": "a patch-notes hint in the tracked data is broken - checks paused until a data fix"
+    "data.patch_newer": "newer patch than the data was checked against - rerun the verifier: open Events to refresh",
+    "data.error":"a patch-notes hint in the tracked data is broken - checks paused until a data fix"
   }
 }

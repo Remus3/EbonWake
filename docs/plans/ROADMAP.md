@@ -169,7 +169,7 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 171 | `python tools/lane_samples.py status` crashes: ImportError cannot import name '_NO_WINDOW' from partially initialized loop_base (lane_samples -> loop_base -> ew_lane -> lane_samples cycle when run as a script; found by the row 166 read 2026-11-08). Acceptance: a test runs `python tools/lane_samples.py status` as a subprocess and gets the one status line, rc 0 | [ ] open |
 | 172 | Tools script-mode smoke test: run every tools/*.py entry point as a script and fail on ImportError (sibling sweep of row 171) | [x] done 2026-11-10 (loop; refute 0/3 PASS) |
 | 173 | Plan doc / ROADMAP consistency lint: first-line number, duplicates, missing rows and cited docs, legacy allow-list | [x] done 2026-11-10 (loop; refute 0/3 PASS) |
-| 174 | Patch newer than verified: flag data rows when a newer official patch exists (suggest-only digest line) | [ ] open |
+| 174 | Patch newer than verified: flag data rows when a newer official patch exists (suggest-only digest line) | [x] done 2026-11-11 (loop; refute 0/3 PASS) |
 
 Ranking rationale per deep dive / audit and the closed channel-order
 sections: `docs/plans/ROADMAP-history.md` (moved verbatim 2026-10-09, plan

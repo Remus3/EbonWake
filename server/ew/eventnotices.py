@@ -987,6 +987,14 @@ class NoticeClient(CachedClient):
     def peek(self):
         return super().peek(KEY, TTL_S)
 
+    def listed(self):
+        """Plan 174: the cleaned notice rows of the cached list (every board), no fetch."""
+        res = self.peek()
+        data = res.get("data") if isinstance(res, dict) else None
+        raw = data.get("notices") if isinstance(data, dict) else None
+        return [c for c in (_clean_notice(n) for n in (raw if isinstance(raw, list) else []))
+                if c is not None]
+
     def is_pending(self):
         return self.pending(KEY)
 
