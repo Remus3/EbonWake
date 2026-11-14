@@ -39,6 +39,10 @@
     "boss_drift.error": "boss schedule drift check failed - retried later",
     "data.contradicted": "patch notes disagree with a tracked value - kept with a check badge until a data fix",
     "data.patch_newer": "newer patch than the data was checked against - rerun the verifier: open Events to refresh",
-    "data.error":"a patch-notes hint in the tracked data is broken - checks paused until a data fix"
+    "data.error":"a patch-notes hint in the tracked data is broken - checks paused until a data fix",
+    "renderer.no_shot": "no screenshot seen since EW started - take one in game to check the format",
+    "renderer.new_format": "screenshot extension changed (renderer change?) - check an OCR read and the ScreenShot folder",
+    "renderer.new_size": "screenshot pixel size changed (resolution or renderer change?) - check the next OCR read",
+    "renderer.overlay_hidden": "overlay test pattern not visible - run BDO borderless / windowed, retest in Settings > Overlay"
   }
 }

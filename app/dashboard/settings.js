@@ -10,7 +10,7 @@
   'use strict';
   const C = window.EWCore;
   const S = { panel: null, saved: null, defaults: null, restartKeys: [], err: null, msg: null,
-    msgCls: 'ok', busy: false, inputs: {}, theme: 'system', derived: null };
+    msgCls: 'ok', busy: false, inputs: {}, theme: 'system', derived: null, overlayTest: null };
 
   function el(tag, cls, text) {
     const e = document.createElement(tag);
@@ -56,6 +56,8 @@
     S.detected = doc.detected && typeof doc.detected === 'object' ? doc.detected : null;
     // Plan 108: values read, not typed (fame bonus) - shown above their override.
     if (doc.derived && typeof doc.derived === 'object') S.derived = doc.derived;
+    // Plan 175: the overlay test-pattern answer in force (null = not checked since the last patch).
+    if ('overlay_test' in doc) S.overlayTest = doc.overlay_test && typeof doc.overlay_test === 'object' ? doc.overlay_test : null;
     S.err = typeof doc.error === 'string' ? doc.error : null;
     applyTheme(S.saved['ui.theme']);
   }
@@ -224,6 +226,86 @@
     return wrap;
   }
 
+  // ---- Plan 175: overlay test pattern ----
+  // Show opens EW's own click-through always-on-top window (main.js, 10 s);
+  // the operator records by eye whether it drew above the client. Stored as a
+  // typed override that retires at the next client patch.
+
+  function testPatternShow() {
+    const b = window.ewApi;
+    if (!b || typeof b.overlayTest !== 'function') { say('bad', 'the test pattern needs the Ebonwake app window'); draw(); return; }
+    b.overlayTest().then(function (r) {
+      if (!r || !r.ok) throw new Error((r && r.error) || 'unknown error');
+      say('ok', r.already ? 'test pattern already showing' : 'test pattern showing for 10 s - look over the game');
+    }).catch(function (e) {
+      say('bad', 'test pattern failed: ' + String(e && e.message || e));
+    }).then(draw);
+  }
+
+  function testPatternPost(body, okText) {
+    const b = bridge();
+    if (S.busy || !b) return;
+    S.busy = true;
+    window.EWToast.via(b).post('/api/settings', body).then(function (res) {
+      if (!res || !res.ok) throw new Error((res && res.error) || 'unknown error');
+      take(res.data);
+      if (window.EWOverrides) window.EWOverrides.refresh(true);
+      say('ok', okText);
+    }).catch(function (e) {
+      say('bad', 'overlay test save failed: ' + String(e && e.message || e));
+    }).then(function () {
+      S.busy = false;
+      draw();
+    });
+  }
+
+  function testPatternCard() {
+    const sec = el('section', 'ew-card ew-sgroup');
+    sec.dataset.group = 'overlay-test';
+    sec.appendChild(el('h2', null, 'Overlay test pattern'));
+    sec.appendChild(el('p', 'ew-muted', 'Shows a labelled border over the overlay screen for 10 s. With the game ' +
+      'running (borderless or windowed), press Show, look, then record what you saw for the renderer in use.'));
+    const row = el('div', 'ew-tprow');
+    const show = el('button', 'ew-btn', 'Show test pattern');
+    show.type = 'button';
+    show.addEventListener('click', testPatternShow);
+    row.appendChild(show);
+    const sel = el('select');
+    [['dx11', 'DirectX 11'], ['dx12', 'DirectX 12']].forEach(function (o) {
+      const opt = el('option', null, o[1]);
+      opt.value = o[0];
+      sel.appendChild(opt);
+    });
+    sel.value = S.overlayTest && S.overlayTest.renderer === 'dx11' ? 'dx11' : 'dx12';
+    row.appendChild(sel);
+    [[true, 'Seen above the game'], [false, 'Not visible']].forEach(function (o) {
+      const btn = el('button', 'ew-btn', o[1]);
+      btn.type = 'button';
+      btn.disabled = S.busy;
+      btn.addEventListener('click', function () {
+        testPatternPost({ overlay_test: { renderer: sel.value, seen: o[0] } }, 'overlay test recorded');
+      });
+      row.appendChild(btn);
+    });
+    sec.appendChild(row);
+    const t = S.overlayTest;
+    if (t && typeof t.seen === 'boolean') {
+      const line = el('div', 'ew-tprow');
+      line.appendChild(el('span', t.seen ? 'ew-muted' : 'ew-err', 'Last check: ' + (t.seen ? 'seen' : 'NOT visible') +
+        ' on ' + (t.renderer === 'dx11' ? 'DirectX 11' : 'DirectX 12') + ', ' +
+        (typeof t.set_at === 'string' ? t.set_at.slice(0, 10) : '?') + ' (until the next client patch)'));
+      const clr = el('button', 'ew-btn', 'Clear');
+      clr.type = 'button';
+      clr.disabled = S.busy;
+      clr.addEventListener('click', function () { testPatternPost({ clear: 'overlay.test_pattern' }, 'overlay test cleared'); });
+      line.appendChild(clr);
+      sec.appendChild(line);
+    } else {
+      sec.appendChild(el('div', 'ew-muted', 'Not checked since the last client patch.'));
+    }
+    return sec;
+  }
+
   function draw() {
     const p = S.panel;
     if (!p) return;
@@ -247,6 +329,7 @@
       C.settingsRows(g).forEach(function (f) { sec.appendChild(f.derived ? derivedField(f) : field(f)); });
       p.appendChild(sec);
     });
+    p.appendChild(testPatternCard());
     const bar = el('div', 'ew-sbar');
     const btn = el('button', 'ew-btn', S.busy ? 'Saving...' : 'Save');
     btn.type = 'button';

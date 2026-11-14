@@ -16,7 +16,8 @@ block), /api/settings (plan 030), /api/pets
 /api/onboarding (plan 051), /api/crafting (plan 054), /api/imperial (plan 053),
 /api/overlay/context (plan 067; SSE `overlay_context` on change),
 /api/whatnow (plan 069; SSE `whatnow` carries the full view on change),
-/api/signals (plan 073, GET only; plan 079 adds its `overrides` section; plan 085 a `data` row),
+/api/signals (plan 073, GET only; plan 079 adds its `overrides` section; plan 085 a `data` row;
+plan 175 a `renderer` row, and POST /api/settings {"overlay_test": {renderer, seen}}),
 /api/data/verdicts (plan 085, GET only: hinted data rows vs the cached patch notes),
 /api/loop (plan 136, GET only: loop tick age, lanes, stuck items, halt / backoff),
 /api/silvergoal (plan 140, GET only; the typed goal is POST /api/grind {"week_goal"}),
@@ -52,7 +53,8 @@ from . import (__version__, autotick, autowatch, bossdrift, bosses, context, cou
                knownissues, leveling, logindays, loopstatus, maint, maintdigest, market, mounts, ocr, ocrauto, olvia, onboarding,
                overrides, pets,
                ports,
-               playsession, portraits, progress, prompts, seals, settings, shopping, signals, silvergoal,
+               playsession, portraits, progress, prompts, renderer, seals, settings, shopping,
+               signals, silvergoal,
                single, spots, summary,
                today, weekly, whatnow, xpbooks, zoneinfo)
 from .store import Store
@@ -357,6 +359,11 @@ class EWServer(ThreadingHTTPServer):
             cfg = {} if game_cfg is None else game_cfg
             game_watch = gamewatch.GameWatch.from_config(cfg)
         self.game = game_watch
+        # Plan 175: newest screenshot format vs the watcher's history + the overlay
+        # test-pattern result (typed override, retired at the next listed patch).
+        self.renderer = renderer.RendererProbe(
+            self.game, self.store, self.overrides,
+            listed=getattr(notice_client, "listed", None), clock=today_clock or time.time)
         if detector is not None and isinstance(getattr(self.game, "pollers", None), list):
             detector.attach(self.game)  # detect now, again hourly while unconfigured
         # Plan 046: game exit -> play window recorded + grind.pending_stop (never a stop).
@@ -509,7 +516,8 @@ class EWServer(ThreadingHTTPServer):
             "session_log": self._sig_session_log, "screenshots": self._sig_screenshots,
             "ocr": self._sig_ocr, "notices": self._sig_notices, "market": self._sig_market,
             "profile": self._sig_profile, "boss_drift": lambda: None,
-            "data": self.verdicts.signal},  # plan 085
+            "data": self.verdicts.signal,  # plan 085
+            "renderer": self.renderer.signal},  # plan 175
             clock=today_clock or time.time, overrides=self._sig_overrides,
             restores=self.store.restores)  # plan 158
         # Plan 080: coupon / event-notice checks are always on; a config incident
@@ -679,9 +687,14 @@ class EWServer(ThreadingHTTPServer):
     def settings_out(self, view):
         """Plan 108: a /api/settings body plus `derived` {key: row} - the value
         in force for a key that is read, not typed, with its source and age.
-        Plan 109: + market.vp from the Value Pack buff timer."""
+        Plan 109: + market.vp from the Value Pack buff timer. Plan 175: +
+        overlay_test, the live overlay test-pattern result or None."""
+        try:
+            test = self.renderer.test()
+        except Exception:  # noqa: BLE001 - a ledger fault shows no result, never a 500
+            test = None
         return dict(view, derived={"market.fame_pct": self._live(self._fame_row),
-                                   "market.vp": self._live(self._vp_row)})
+                                   "market.vp": self._live(self._vp_row)}, overlay_test=test)
 
     def _hot_until(self, now):
         """Plan 081: end (utc datetime) of the next maintenance after `now`."""
@@ -794,6 +807,12 @@ class EWServer(ThreadingHTTPServer):
         """GET /api/overrides: active entries (labels, value, set-at, expires-in,
         affected cards) after live signals and expiry have retired theirs."""
         self.eff_settings()
+        probe = getattr(self, "renderer", None)
+        if probe is not None:  # plan 175: the test result retires at the next listed patch
+            try:
+                probe.expire()
+            except Exception:  # noqa: BLE001 - a list-cache fault expires nothing
+                pass
         self.overrides.sweep()
         now = float(self.overrides.clock())
         items = self.overrides.items(now, labels=getattr(settings, "LABELS", None))
@@ -1316,6 +1335,17 @@ class Handler(BaseHTTPRequestHandler):
     def _post_settings(self, body):
         led = self.server.overrides
         clear = None
+        if isinstance(body, dict) and set(body) == {"overlay_test"}:
+            # Plan 175: the operator's eye check of the overlay test pattern.
+            self.server.renderer.record(body["overlay_test"])
+            out = self.server.settings_out(self.server.settings.view())
+            out["overrides"] = self.server.overrides_view()
+            return out
+        if isinstance(body, dict) and body == {"clear": renderer.KEY}:
+            led.clear(renderer.KEY, by="operator")
+            out = self.server.settings_out(self.server.settings.view())
+            out["overrides"] = self.server.overrides_view()
+            return out
         if isinstance(body, dict) and set(body) == {"clear"}:
             # Plan 079: {"clear": key} retires the override and puts the key back
             # to its default (so config/local.json never re-imports it).

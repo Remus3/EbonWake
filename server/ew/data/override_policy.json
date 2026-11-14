@@ -54,6 +54,9 @@
                         "first_sight": true, "cards": ["shell"]},
   "notify.quiet_closed": {"label": "Game-closed quiet (config)", "expiry": "days:1",
                           "first_sight": true, "cards": ["shell"]},
-  "portrait.*": {"label": "Portrait pick", "expiry": "none", "cards": ["portraits"]}
+  "portrait.*": {"label": "Portrait pick", "expiry": "none", "cards": ["portraits"]},
+  "overlay.test_pattern": {"label": "Overlay test pattern (typed)", "expiry": "days:30",
+                           "cards": ["system", "settings"],
+                           "note": "operator eye check of the overlay above the client; retired (patch) at the next client patch (plan 175)"}
  }
 }
