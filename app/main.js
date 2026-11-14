@@ -13,6 +13,7 @@ const localhttp = require('./shared/localhttp');
 const tray = require('./shared/tray');
 const watchdog = require('./shared/watchdog');
 const W = require('./shared/overlaywin');
+const TP = require('./shared/testpattern');
 
 const REPO = path.resolve(__dirname, '..');
 
@@ -102,12 +103,33 @@ function writeDisplayState(saved) {
   } catch (e) { /* placement still works; the bind retries next time */ }
 }
 
-function overlayWorkArea() {
+function overlayDisplay() {
   const prev = readDisplayState();
   const r = W.resolveDisplay(screen.getAllDisplays(), screen.getPrimaryDisplay(), overlayCfg.display, prev);
   if (r.saved && JSON.stringify(r.saved) !== JSON.stringify(prev)) writeDisplayState(r.saved);
-  return r.display.workArea;
+  return r.display;
 }
+
+function overlayWorkArea() {
+  return overlayDisplay().workArea;
+}
+
+// Plan 175: the overlay test pattern - a separate EW window (shared/testpattern
+// config: transparent, setIgnoreMouseEvents(true), always-on-top at the overlay's
+// level, focus-less) with a labelled border over the overlay display for 10 s.
+// Dashboard-only, payload-free; it never touches the game window.
+const testPattern = TP.createRunner(function (c) {
+  const win = new BrowserWindow(c.options);
+  win.webContents.on('will-navigate', function (e) { e.preventDefault(); });
+  win.webContents.setWindowOpenHandler(function () { return { action: 'deny' }; });
+  win.loadFile(path.join(__dirname, c.page));
+  return win;
+});
+
+ipcMain.handle('ew:overlay-test', function (event) {
+  if (!dashboard || event.sender !== dashboard.webContents) return { ok: false, error: 'not allowed' };
+  return testPattern.start(overlayDisplay().bounds);
+});
 
 function overlayPlacement(height) {
   const size = { width: Math.round(core.OVERLAY_SIZE.width * overlayCfg.scale), height: height };

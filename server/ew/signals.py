@@ -2,7 +2,8 @@
 
 Rows: session log (plan 008), screenshot watcher (008), OCR (063), official
 notices (059 / 064), market (002), profile (061), boss drift (072), data rows vs
-the official patch notes (085, with evidence `lines`). Each row is
+the official patch notes (085, with evidence `lines`), renderer check (175:
+newest screenshot format + overlay test-pattern result). Each row is
 `ok | warn | off | bad` with an age and one fix hint from the tracked
 `data/signal_hints.json`. A signal that is quiet because the game is closed or
 its feature is off is `off`, never `bad`.
@@ -24,7 +25,7 @@ GENERIC_HINT = "see the System tab"
 
 NAMES = {"session_log": "Session log", "screenshots": "Screenshot watcher", "ocr": "OCR",
          "notices": "Official notices", "market": "Market", "profile": "Profile",
-         "boss_drift": "Boss drift", "data": "Data rows"}
+         "boss_drift": "Boss drift", "data": "Data rows", "renderer": "Renderer check"}
 # Every reason a row can carry; the hints file must cover each (test-enforced).
 REASONS = {
     "session_log": ("unconfigured", "log_dir_missing", "watcher_stalled", "quiet", "silent",
@@ -36,6 +37,7 @@ REASONS = {
     "profile": ("no_family", "no_base", "robots", "stale", "error"),
     "boss_drift": ("not_built", "drift", "error"),
     "data": ("contradicted", "error", "patch_newer"),
+    "renderer": ("no_shot", "new_format", "new_size", "overlay_hidden"),  # plan 175
 }
 MAX_LINES = 10  # plan 085: evidence lines on the System card
 ACTIVE = ("running", "logged_in", "disconnected")  # plan 008 states with the client up
@@ -240,9 +242,47 @@ def _data(s, now, th):
                               f"{unchecked} unchecked"), []
 
 
+def _test_line(t):
+    """Plan 175: the operator's overlay test-pattern result, or ''."""
+    if not (isinstance(t, dict) and isinstance(t.get("seen"), bool)):
+        return ""
+    day = t.get("set_at")[:10] if isinstance(t.get("set_at"), str) else "?"
+    return f"; overlay test: {'seen' if t['seen'] else 'HIDDEN'} ({t.get('renderer') or '?'}, {day})"
+
+
+def _renderer(s, now, th):
+    """Plan 175: newest ScreenShot file's extension / pixel size / age against
+    the watcher's own history, plus the overlay test-pattern result."""
+    tline = _test_line(s.get("test"))
+    hidden = bool(tline) and s["test"]["seen"] is False
+    latest = s.get("latest")
+    if latest is None:
+        if hidden:
+            return "warn", "overlay_hidden", None, ("no screenshot seen yet" + tline)[:160]
+        return "off", "no_shot", None, ("no screenshot seen yet" + tline)[:160]
+    if not isinstance(latest, dict):
+        raise ValueError("unreadable")
+    age = _age(now, latest.get("at"))
+    w, h = latest.get("w"), latest.get("h")
+    size = f" {w}x{h}" if isinstance(w, int) and isinstance(h, int) else " (size unread)"
+    base = f"last shot {latest.get('ext') or 'no extension'}{size}"
+    if hidden:
+        level, reason = "warn", "overlay_hidden"
+    elif s.get("new_ext") is True:
+        was = [e for e in (s.get("was_ext") or []) if isinstance(e, str)]
+        level, reason = "warn", "new_format"
+        base += f" - new format (was {', '.join(was) or '?'})"
+    elif s.get("new_size") is True:
+        level, reason = "warn", "new_size"
+        base += " - new pixel size"
+    else:
+        level, reason = "ok", None
+    return level, reason, age, (base + tline)[:160]
+
+
 _ROWS = {"session_log": _session_log, "screenshots": _screenshots, "ocr": _ocr,
          "notices": _notices, "market": _market, "profile": _profile, "boss_drift": _boss_drift,
-         "data": _data}
+         "data": _data, "renderer": _renderer}
 
 
 def _overrides(raw):

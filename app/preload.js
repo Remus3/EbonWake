@@ -17,6 +17,8 @@
    (main re-checks core.externalUrl; the dashboard itself never navigates).
    Plan 135 adds a read-only, payload-free read of the server watchdog
    summary ({state, restartsLastHour, lastRestart}).
+   Plan 175 adds a payload-free overlay test pattern (main opens its own
+   click-through always-on-top window for 10 s; never the game window).
    The overlay window has its own one-way preload (overlay/preload.js). */
 'use strict';
 
@@ -40,5 +42,6 @@ contextBridge.exposeInMainWorld('ewApi', {
   reloadOverlay: function () { return ipcRenderer.invoke('ew:reload-overlay'); },
   reloadShell: function () { return ipcRenderer.invoke('ew:reload-shell'); },
   openExternal: function (url) { return ipcRenderer.invoke('ew:open-external', { url: url }); },
-  watchdog: function () { return ipcRenderer.invoke('ew:watchdog'); }
+  watchdog: function () { return ipcRenderer.invoke('ew:watchdog'); },
+  overlayTest: function () { return ipcRenderer.invoke('ew:overlay-test'); }
 });

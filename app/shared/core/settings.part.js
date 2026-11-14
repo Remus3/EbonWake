@@ -260,10 +260,16 @@
   // or plan 079 {clear: key} (an allowlisted or plan 080 incident key; the
   // server checks the ledger).
   function validSettingsBody(body) {
+    // Plan 175: the overlay test-pattern answer {renderer: dx11|dx12, seen: bool}.
+    if (plainObject(body) && Object.keys(body).length === 1 && plainObject(body.overlay_test)) {
+      const t = body.overlay_test;
+      return Object.keys(t).length === 2 && (t.renderer === 'dx11' || t.renderer === 'dx12') &&
+        typeof t.seen === 'boolean';
+    }
     if (plainObject(body) && Object.keys(body).length === 1 && typeof body.clear === 'string') {
       // Plan 083: a gallery pick clears like any override ("Use newest").
       return Object.prototype.hasOwnProperty.call(SETTINGS_FIELDS, body.clear) ||
-        INCIDENT_KEYS.indexOf(body.clear) >= 0 ||
+        INCIDENT_KEYS.indexOf(body.clear) >= 0 || body.clear === 'overlay.test_pattern' ||
         /^portrait\.[A-Za-z][A-Za-z ]{0,39}$/.test(body.clear);
     }
     if (!plainObject(body) || Object.keys(body).length !== 1 || !plainObject(body.set)) return false;

@@ -25,6 +25,8 @@ EXEMPT = {
     "grind.week_goal": "pure preference (plan 140); the history goal applies without it",
     "olvia.lecture": "operator record (plan 170); no public signal, stale-marked at the "
                      "semester reset",
+    "overlay.test_pattern": "operator eye check (plan 175); no signal can see EW's own window "
+                            "above the client, retired at the next client patch",
 }
 NEEDS_OPERATOR = ["profile.multi_character"]
 

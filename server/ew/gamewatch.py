@@ -195,6 +195,7 @@ class GameWatch:
         self._last_event = None
         self._line_at = None  # plan 073: clock time the tail last read a complete line
         self._shots = []
+        self._other_shot = None  # plan 175: newest non-image-extension file since start
         self._char_loads = []  # plan 082: last MAX_CHAR_LOADS {char_no, at}, any session
         self._char_no = None  # plan 082: newest load of the current log session
         self._stop = threading.Event()
@@ -281,26 +282,36 @@ class GameWatch:
         return st.st_mtime
 
     def _screenshots(self):
+        """(shots, other): the listed image files since start, newest first, and
+        plan 175's newest file of any other extension since start (or None), so
+        a renderer that saves a new format is noticed, never read."""
         if self.shot_dir is None:
-            return []
+            return [], None
         out = []
+        other = None
         try:
             with os.scandir(self.shot_dir) as it:
                 for e in it:
-                    if not e.name.lower().endswith(SHOT_EXT) or not e.is_file():
+                    if not e.is_file():
                         continue
                     st = e.stat()
-                    if st.st_mtime >= self.started:
+                    if st.st_mtime < self.started:
+                        continue
+                    if e.name.lower().endswith(SHOT_EXT):
                         out.append((st.st_mtime, e.name, st.st_size))
+                    elif other is None or (st.st_mtime, e.name) > other[:2]:
+                        other = (st.st_mtime, e.name, st.st_size)
         except OSError:
-            return []
+            return [], None
         out.sort(reverse=True)
-        return [{"name": n, "size": sz, "mtime": _iso(m)} for m, n, sz in out[:MAX_SHOTS]]
+        return ([{"name": n, "size": sz, "mtime": _iso(m)} for m, n, sz in out[:MAX_SHOTS]],
+                None if other is None else {"name": other[1], "size": other[2],
+                                            "mtime": _iso(other[0])})
 
     def poll(self):
         """One poll step; safe to call any time (the thread calls it every 5 s)."""
         now = self.clock()
-        shots = self._screenshots()
+        shots, other = self._screenshots()
         with self._lock:
             if not self.configured:
                 state = "unconfigured"
@@ -317,6 +328,7 @@ class GameWatch:
                 else:
                     state, self._log_state, self._char_no = "not_running", None, None
             self._shots = shots
+            self._other_shot = other
             self._updated = now
             prev, changed = self._state, state != self._state
             if changed:
@@ -399,6 +411,7 @@ class GameWatch:
             out = {"state": state, "configured": self.configured, "line_at": self._line_at,
                    "since": self._since, "polled_at": self._updated,
                    "shots_configured": shot_dir is not None,
+                   "other_shot": dict(self._other_shot) if self._other_shot else None,
                    "last_shot_at": max((t for t in (_parse(s["mtime"]) for s in self._shots)
                                         if t is not None), default=None)}
         out["log_dir_ok"] = log_dir is not None and log_dir.is_dir()

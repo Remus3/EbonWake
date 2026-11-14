@@ -591,3 +591,11 @@ html.ew-overlay, html.ew-overlay body { background: transparent; height: auto; o
 .ew-sinput { width: 180px; }
 .ew-sdef { font-size: 12px; }
 .ew-sbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+
+/* Plan 175: overlay test pattern (overlay/testpattern.html) and its Settings card. */
+.ew-tp { margin: 0; overflow: hidden; }
+.ew-tp-frame { position: fixed; inset: 0; border: 8px solid var(--fk-status-warn); box-sizing: border-box; }
+.ew-tp-label { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); max-width: 80%;
+  padding: 8px 14px; background: var(--fk-surface); color: var(--fk-text);
+  border: 2px solid var(--fk-status-warn); font: 600 16px/1.4 var(--ew-font); text-align: center; }
+.ew-tprow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
