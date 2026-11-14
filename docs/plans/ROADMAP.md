@@ -170,6 +170,7 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 172 | Tools script-mode smoke test: run every tools/*.py entry point as a script and fail on ImportError (sibling sweep of row 171) | [x] done 2026-11-10 (loop; refute 0/3 PASS) |
 | 173 | Plan doc / ROADMAP consistency lint: first-line number, duplicates, missing rows and cited docs, legacy allow-list | [x] done 2026-11-10 (loop; refute 0/3 PASS) |
 | 174 | Patch newer than verified: flag data rows when a newer official patch exists (suggest-only digest line) | [x] done 2026-11-11 (loop; refute 0/3 PASS) |
+| 175 | DX12 renderer compatibility probe: overlay visibility test pattern and screenshot format-change flag | [ ] open |
 
 Ranking rationale per deep dive / audit and the closed channel-order
 sections: `docs/plans/ROADMAP-history.md` (moved verbatim 2026-10-09, plan
@@ -199,6 +200,8 @@ Ranking 20261107 deep dive (research 0044): 170 (typed progress goes stale at th
 Ranking 20261110 deep dive (research 0046): 172 (a crash class no test can see; sibling sweep of row 171) > 173 (drift guard, low urgency).
 
 Ranking 20261111 deep dive (research 0047): 174 (weekly patches make silent stale data likely; cheap, suggest-only).
+
+Ranking 20261114 deep dive (research 0048): 175 (DX12 shipped 2026-10-29; a silent overlay or screenshot break reads as no data; low urgency, operator-run probe).
 
 Rules: refute rounds capped at 3 per item; every plan lands via a lane worktree
 and one push; ETA log updated by every run.
