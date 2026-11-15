@@ -128,8 +128,14 @@ Status: <commits / push range / gates / CI / server health / session size>
 Start with: read this file, then CLAUDE.md, docs/plans/ROADMAP.md, git log -10.
 ```
 
-Overwrite the whole file, read it back (the read-back is the recorded act),
-commit it, push it (same batch if CI has not started, else one more small push
+Overwrite the whole file, read it back (the read-back is the recorded act).
+Then, BEFORE its commit (kit v31), run
+
+    python ops/fleet_kit/fleet_done.py archive --auto
+
+(it applies only at 27648 B or more, else prints `archive skipped`; it moves
+older STATE OBSERVED blocks and oversized sections to docs/handoff-archive/).
+Commit the hand-off and any archive file it wrote, push it (same batch if CI has not started, else one more small push
 is acceptable for the hand-off only).
 
 ### 7b. Status board render (kit v23, FLEET-COMMON item 18 - LOCAL ONLY)
