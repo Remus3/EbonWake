@@ -383,3 +383,31 @@ MAIN ORDER 2026-11-08-1200 to ALL (operator order: "always utilize appropriate c
 - (2) Add the MEMORY.md index line for it: BLOCKED - same reason as (1); done together with (1) by an interactive session.
 - (3) Apply it: every Agent spawn, workflow agent and fleet_headless spawn sets model and effort deliberately: DONE - already in place via plan 099: tools/loop_base.py ROUTES maps each lane kind to a model + effort (plan/order/handoff opus medium; data/resolve/deep-dive/fix sonnet medium; verify/inbox sonnet low), passed to the kit spawn by tools/ew_loop.py route_kw and tools/ew_lane.py; interactive sessions set model/effort on Agent spawns per the saved memory.
 - Progress file ops/loop/control/progress/Nbcd29f.json: BLOCKED - write to the main checkout's progress dir was denied (permission not granted) for this lane run.
+
+## Order Nb86f88 - blocked items
+
+MAIN ORDER 2026-11-16-2005 to EW (GitHub refresh: README and CI badge, three Dependabot bumps). ONE ANSWER (HOP: 2), written by the loop after merge.
+
+- (1) README rewrite to the brief's order (title, pitch, badges, what/why, screenshot, quick start, usage, architecture and layout, development and tests, license): DONE - README.md restructured, H1 added, 'What it never does' kept second. Stale claims fixed: "CI runs both on every push" (ci.yml runs on pull requests and code-changing pushes to main; paths-ignore skips docs/md); Quick start mixed a dev-only hook install into the clean-clone path and omitted the second terminal; tests need pytest/ruff from ci/requirements-ci.txt (not stdlib) - install line added; layout omitted ci/ and the work loop; start-on-login named as `tools/logon_task.py install`; `npm install` -> `npm ci` (lockfile); Status section dropped (history), the still-true "no packaged release" claim kept in Quick start.
+- (1) badge add CI status for ci.yml: DONE - already present as GitHub's own workflow badge via the repo-relative URL `../../actions/workflows/ci.yml/badge.svg` (MAIN's survey missed it); kept relative so no account name enters a tracked file.
+- (1) badges keep license / Python 3.11+ / Node 20+ / Windows: DONE - kept; they match ci.yml (Python 3.11 + 3.14, Node 20) and app/package.json engines.
+- (1) no release badge: DONE - none added (no release, no tag).
+- (1) every repo-relative README link resolves: DONE - all 23 file/dir targets read back present; anchors match the new headings.
+- (1) each README badge URL returns HTTP 200: BLOCKED - this lane may not make network requests; the loop checks the five URLs before the ANSWER.
+- (2) .github/ISSUE_TEMPLATE bug form + config.yml: NOT-APPLICABLE - already exist (bug_report.yml, feature_request.yml, config.yml); the order adds them only if none exist.
+- (2) SECURITY.md: DONE - left unchanged.
+- (2) repo description, homepage, topics: NOT-APPLICABLE - MAIN refreshed them; not edited.
+- (3) CI green / gh run watch after item 4: BLOCKED - lanes do not commit or push; the loop pushes after merge and records the ci + codeql run result in the ANSWER.
+- (4) PR 12 electron 45.0.0 -> 45.3.1 (app/): DONE in tree - `npm install --prefix app --save-exact electron@45.3.1`, package.json + 4 lockfile lines, 0 vulnerabilities, npm test 859/859. Commit, close ('Applied locally as <sha>; closing.') and branch delete: BLOCKED - lane may not commit; loop does it after merge.
+- (4) PR 13 pip group pytest 9.1.1 -> 9.2.0, ruff 0.17.2 -> 0.17.3 (ci/requirements-ci.txt, ci/requirements-dev.txt): DONE in tree - version + hash lines only. Close and branch delete: BLOCKED as PR 12.
+- (4) PR 14 github-actions group codeql-action init + analyze 4.39.1 -> 4.39.3 (.github/workflows/codeql.yml): DONE in tree - pin 33d7b85da1a04171e211befe2c739303b9a4c066. Online pin check BLOCKED here (network denied); ci.yml's verify_action_pins step checks it on push. Close and branch delete: BLOCKED as PR 12.
+- (4) read Dependabot alerts (gh api GET): BLOCKED - `gh api` denied in this lane; `npm install` reports 0 vulnerabilities.
+- (4) never merge on GitHub: DONE - nothing merged; PRs untouched.
+- (5) status board opt-in under kit v32: DONE (decision) - EW opts in: CLAUDE.md session workflow renders the local board and it costs no tokens; the opt-in flag is set when kit v32 is vendored (tree is on v31).
+- Progress file ops/loop/control/progress/Nb86f88.json: BLOCKED - write to the main checkout's progress dir was denied (permission not granted) for this lane run.
+
+As-built deviations (order Nb86f88):
+- CI badge kept repo-relative instead of an absolute github.com URL. Alternatives: absolute `https://github.com/<owner>/<repo>/actions/workflows/ci.yml/badge.svg`. Why: renders the same on GitHub and keeps the account name out of tracked files (leak-sweep rule). Reverses if: the README must render off GitHub (PyPI, mirrors).
+- PR 13 re-applied as version + hash lines only; the bot's regenerated files dropped colorama (win32 pytest dependency) and rewrote the `# via` comments. Alternatives: take the bot files whole. Why: CLAUDE.md bot-PR path B forbids carrying in a lockfile regression; Windows `--require-hashes` installs need colorama. Hashes came from the local tracking ref of the same-version bot branch (fetch denied); a PyPI release's hashes never change. Reverses if: `pip install --require-hashes -r ci/requirements-ci.txt` fails on CI.
+- PR 14 pin SHA taken from the PR body's newest compare commit (the release merge for v4.39.3), not from `git ls-remote` (network denied). Alternatives: leave PR 14 unapplied. Why: CI's pin step verifies it online before anything lands. Reverses if: verify_action_pins reports a mismatch; then pin the SHA it reports.
+- 'What it never does' placed before Quick start, not after the screenshot only. Why: the order asks to keep it prominent. Reverses if: MAIN orders the strict brief order.
