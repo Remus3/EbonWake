@@ -171,7 +171,7 @@ batch = one push. Spec: `docs/design/0001-ebonwake-spec.md`. History:
 | 173 | Plan doc / ROADMAP consistency lint: first-line number, duplicates, missing rows and cited docs, legacy allow-list | [x] done 2026-11-10 (loop; refute 0/3 PASS) |
 | 174 | Patch newer than verified: flag data rows when a newer official patch exists (suggest-only digest line) | [x] done 2026-11-11 (loop; refute 0/3 PASS) |
 | 175 | DX12 renderer compatibility probe: overlay visibility test pattern and screenshot format-change flag | [x] done 2026-11-14 (loop; refute 0/3 PASS) |
-| 176 | DST transition windows: boss times and reset display shift for the three days around a clock change | [ ] open |
+| 176 | DST transition windows: boss times and reset display shift for the three days around a clock change | [x] done 2026-11-24 (loop; refute 0/3 PASS) |
 
 Ranking rationale per deep dive / audit and the closed channel-order
 sections: `docs/plans/ROADMAP-history.md` (moved verbatim 2026-10-09, plan

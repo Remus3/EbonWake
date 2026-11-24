@@ -477,6 +477,8 @@ html.ew-overlay, html.ew-overlay body { background: transparent; height: auto; o
 .ew-ov-tick .ew-badge { margin-left: .4em; font-weight: 400; }
 /* Plan 032: world boss - looted names greyed, the following spawn muted. */
 .ew-boss-looted { color: var(--fk-text-muted); text-decoration: line-through; }
+#ov-boss-row { flex-wrap: wrap; } /* plan 176: DST banner line under the countdown */
+.ew-ov-dst { flex-basis: 100%; font-size: 12px; color: var(--fk-status-warn); }
 .ew-ov-boss-next .ew-ov-lab { color: var(--fk-text-muted); }
 .ew-ov-boss-next .ew-ov-val { font-weight: 400; }
 .ew-bnext { flex: 1 1 auto; }

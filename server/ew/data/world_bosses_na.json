@@ -2,7 +2,7 @@
   "tz": "PT",
   "source": "https://www.naeu.playblackdesert.com/en-US/Wiki?wikiNo=83",
   "verified": "2026-09-24",
-  "note": "NA world boss table in Pacific Time, transcribed from research 0003 section 1.3 (official Adventurer's Guide image uploaded 2025-12-24, page edited 2026-09-24). weekday 0 = Monday. Black Shadow is a field boss. Spawns are assumed to stay on PT wall clock across DST (unverified until after 2026-11-01).",
+  "note": "NA world boss table in Pacific Time, transcribed from research 0003 section 1.3 (official Adventurer's Guide image uploaded 2025-12-24, page edited 2026-09-24). weekday 0 = Monday. Black Shadow is a field boss. Spawns follow the PT wall clock except inside a DST transition window (plan 176, data/dst_windows.json).",
   "slots": [
     {"weekday": 0, "at": "00:00", "bosses": ["Golden Pig King", "Kzarka"]},
     {"weekday": 0, "at": "10:00", "bosses": ["Uturi", "Nouver"]},

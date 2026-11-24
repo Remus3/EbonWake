@@ -36,7 +36,7 @@ REASONS = {
     "market": ("empty", "blocked", "stale"),
     "profile": ("no_family", "no_base", "robots", "stale", "error"),
     "boss_drift": ("not_built", "drift", "error"),
-    "data": ("contradicted", "error", "patch_newer"),
+    "data": ("contradicted", "error", "patch_newer", "dst_unverified"),
     "renderer": ("no_shot", "new_format", "new_size", "overlay_hidden"),  # plan 175
 }
 MAX_LINES = 10  # plan 085: evidence lines on the System card
@@ -217,6 +217,15 @@ def _newer_line(n):
     return f"data verified against {n['verified']}, patch {n['date']} is newer"[:120]
 
 
+def _dst_line(d):
+    """Plan 176: one line for an unverified DST boss window active or within 7 days."""
+    if not (isinstance(d, dict) and isinstance(d.get("start_utc"), str)
+            and d.get("shift_h") in (1, -1)):
+        return None
+    return (f"DST window {d['start_utc'][:10]}: NA boss times {d['shift_h']:+d} h expected, "
+            f"no official notice read yet")[:120]
+
+
 def _data(s, now, th):
     """Plan 085: hinted data rows vs the official patch notes. Returns a fifth
     item, the evidence lines (`<file>#<id>: <evidence>`)."""
@@ -225,15 +234,18 @@ def _data(s, now, th):
     if s.get("error"):
         return "warn", "error", None, f"hint table: {s['error']}"[:120], []
     newer = _newer_line(s.get("newer"))
+    dst = _dst_line(s.get("dst"))
     if bad:
         dates = sorted(c["date"] for c in bad if isinstance(c.get("date"), str))
         n = len(bad)
         detail = (f"{n} data row{'s' if n != 1 else ''} contradicted by patch notes "
                   f"{dates[-1] if dates else '?'} - see System")
         lines = [f"{c.get('key')}: {c.get('evidence') or ''}"[:240] for c in bad[:MAX_LINES]]
-        return "warn", "contradicted", None, detail, lines + ([newer] if newer else [])
+        return "warn", "contradicted", None, detail, lines + [x for x in (newer, dst) if x]
     if newer:  # plan 174: suggest-only; clears once the verifier checks that patch
-        return "warn", "patch_newer", None, newer, []
+        return "warn", "patch_newer", None, newer, [dst] if dst else []
+    if dst:  # plan 176: suggest-only; clears once the window is listed verified
+        return "warn", "dst_unverified", None, dst, []
     unchecked = s.get("unchecked") if isinstance(s.get("unchecked"), int) else 0
     if not last:
         return "ok", None, None, f"no patch notes read yet; {unchecked} unchecked", []

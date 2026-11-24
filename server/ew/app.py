@@ -516,7 +516,7 @@ class EWServer(ThreadingHTTPServer):
             "session_log": self._sig_session_log, "screenshots": self._sig_screenshots,
             "ocr": self._sig_ocr, "notices": self._sig_notices, "market": self._sig_market,
             "profile": self._sig_profile, "boss_drift": lambda: None,
-            "data": self.verdicts.signal,  # plan 085
+            "data": self._sig_data,  # plan 085 (+ plan 176 DST line)
             "renderer": self.renderer.signal},  # plan 175
             clock=today_clock or time.time, overrides=self._sig_overrides,
             restores=self.store.restores)  # plan 158
@@ -822,6 +822,16 @@ class EWServer(ThreadingHTTPServer):
     def _sig_overrides(self):
         v = self.overrides_view()
         return {"count": v["count"], "items": v["items"]}
+
+    def _sig_data(self):
+        """Plan 085 data row input plus plan 176 `dst`: an unverified DST boss
+        window active or within 7 days (a broken window lookup adds nothing)."""
+        out = dict(self.verdicts.signal())
+        try:
+            out["dst"] = self.bosses.dst_pending()
+        except Exception:  # noqa: BLE001 - the DST line never blanks the data row
+            out["dst"] = None
+        return out
 
     # -- plan 073 signal inputs ------------------------------------------------
 

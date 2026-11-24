@@ -156,6 +156,35 @@ test('overlay: worldBoss from GET /api/bosses, opt-in rows, no POST', () => {
   assert.match(html, /id="ov-boss-next-row" hidden/);
 });
 
+// ---- plan 176: DST transition window banner ----
+
+const DST = { shift_h: 1, start_utc: '2026-10-29T07:00:00+00:00', end_utc: '2026-11-01T09:00:00+00:00',
+  ends_pt: 'Sun 02:00 PT', source: 'https://example.invalid/notice', verified: '2026-11-24', derived: false };
+
+test('bossDstBanner: official window -> +1 h line naming the notice', () => {
+  assert.strictEqual(C.bossDstBanner(view({ dst: DST })),
+    'NA times +1 h until Sun 02:00 PT (official DST notice)');
+});
+
+test('bossDstBanner: derived / unverified window reads expected; spring is -1 h', () => {
+  const d = Object.assign({}, DST, { shift_h: -1, verified: false, derived: true });
+  assert.strictEqual(C.bossDstBanner(view({ dst: d })), 'NA times -1 h until Sun 02:00 PT (expected)');
+});
+
+test('bossDstBanner: no window / malformed -> no banner', () => {
+  assert.strictEqual(C.bossDstBanner(view({ dst: null })), '');
+  assert.strictEqual(C.bossDstBanner(view()), '');
+  assert.strictEqual(C.bossDstBanner(null), '');
+  assert.strictEqual(C.bossDstBanner(view({ dst: Object.assign({}, DST, { shift_h: 2 }) })), '');
+  assert.strictEqual(C.bossDstBanner(view({ dst: Object.assign({}, DST, { ends_pt: 7 }) })), '');
+});
+
+test('DST banner wired into the Today card and the overlay boss widget', () => {
+  assert.match(read('dashboard/bosses.js'), /C\.bossDstBanner\(S\.data\)/);
+  assert.match(read('overlay/overlay.js'), /C\.bossDstBanner\(boss\)/);
+  assert.match(read('overlay/index.html'), /id="ov-boss-dst" hidden/);
+});
+
 test('Today card: bosses.js mounted by today.js, ticks via the bridge, safe DOM', () => {
   const src = read('dashboard/bosses.js');
   assert.match(src, /window\.EWBosses\s*=/);

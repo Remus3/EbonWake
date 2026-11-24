@@ -462,6 +462,7 @@
     ["sealRows","function"],
     ["sealGolden","function"],
     ["parseSealCount","function"],
-    ["parseSealExchange","function"]
+    ["parseSealExchange","function"],
+    ["bossDstBanner","function"]
   ]
 }

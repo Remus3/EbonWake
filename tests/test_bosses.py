@@ -144,7 +144,7 @@ def test_next_spawns_shape_and_order():
                                           ["Sangoon", "Karanda"]]
     assert out[0] == {"bosses": ["Uturi", "Nouver"], "at_utc": "2026-10-05T17:00:00+00:00",
                       "at_pt": "2026-10-05T10:00:00-07:00", "day": "2026-10-05",
-                      "despawn_min": 30}
+                      "despawn_min": 30, "shift_h": 0, "window": None}  # plan 176 keys
 
 
 def test_next_spawns_sunday_to_monday_wrap():
@@ -156,10 +156,13 @@ def test_next_spawns_sunday_to_monday_wrap():
 
 
 def test_next_spawns_across_fall_back():
-    now = T(2026, 11, 1, 7, 30)     # Sun 00:30 PDT; next is Sun 10:00 PST
-    out = bosses.next_spawns(now, n=1)
-    assert out[0]["at_utc"] == "2026-11-01T18:00:00+00:00"
-    assert out[0]["at_pt"] == "2026-11-01T10:00:00-08:00"
+    # Sun 00:30 PDT. Plan 176: the Sun 00:00 slot sits in the DST window and
+    # spawns at 01:00 PDT; the next one is Sun 10:00 PST (table time again).
+    now = T(2026, 11, 1, 7, 30)
+    out = bosses.next_spawns(now, n=2)
+    assert out[0]["at_utc"] == "2026-11-01T08:00:00+00:00" and out[0]["shift_h"] == 1
+    assert out[1]["at_utc"] == "2026-11-01T18:00:00+00:00"
+    assert out[1]["at_pt"] == "2026-11-01T10:00:00-08:00"
 
 
 def test_next_spawns_across_spring_forward():
