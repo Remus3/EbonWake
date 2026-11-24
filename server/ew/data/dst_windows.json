@@ -1,0 +1,13 @@
+{
+ "note": "Plan 176: NA boss DST transition windows. From the maintenance before a US clock change until the change, NA world bosses spawn offset_hours off the PT wall-clock table (fall +1, spring -1); the Daily Reset stays on UTC. Windows not listed here are derived by rule (Thursday maintenance before the change, to the change) and read 'expected' until an official notice is read and the window is listed with a verified date.",
+ "windows": [
+  {"start_utc": "2026-03-05T07:00:00+00:00", "end_utc": "2026-03-08T10:00:00+00:00",
+   "offset_hours": -1,
+   "source": "official NA notice for the March 2026 DST start (search snippet only, not fetched; research 0052 section 3)",
+   "verified": false},
+  {"start_utc": "2026-10-29T07:00:00+00:00", "end_utc": "2026-11-01T09:00:00+00:00",
+   "offset_hours": 1,
+   "source": "https://www.naeu.playblackdesert.com/en-US/News/Detail?groupContentNo=10723&countryType=en-US",
+   "verified": "2026-11-24"}
+ ]
+}

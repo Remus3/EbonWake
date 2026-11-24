@@ -7,6 +7,8 @@
    from the game. Plan 068: GET `suggested` (a screenshot near the spawn while
    logged in) adds a one-click "probably done - tick?", never an auto tick.
    Plan 072: GET `drift` differs -> a "verify" banner with the changed slots.
+   Plan 176: GET `dst` (DST transition window) -> one "NA times +1 h until ..."
+   banner line (C.bossDstBanner); the countdowns already carry the shift.
    Every node is built with DOM APIs - no HTML from data. */
 (function () {
   'use strict';
@@ -100,8 +102,9 @@
     const rows = C.bossRows(S.data, now, 3);
     const ticks = C.bossTicks(S.data, now);
     const drift = C.bossDriftBanner(S.data && S.data.drift);
+    const dst = C.bossDstBanner(S.data); // plan 176: DST transition window
     const shape = JSON.stringify([rows.map(function (r) { return [r.key, r.names]; }), ticks, S.err, S.msg,
-      Object.keys(S.pending), S.data && S.data.suggested, drift]);
+      Object.keys(S.pending), S.data && S.data.suggested, drift, dst]);
     if (shape === S.shape) { values(rows); return; }
     S.shape = shape;
     S.vals = [];
@@ -112,6 +115,7 @@
     if (S.msg) body.appendChild(el('div', 'ew-err', S.msg));
     if (!S.data) { if (!S.err) body.appendChild(el('div', 'ew-muted', 'loading...')); return; }
     if (drift) body.appendChild(driftNode(drift));
+    if (dst) body.appendChild(el('div', 'ew-drift ew-dst', dst));
     const list = el('div', 'ew-list' + (S.err ? ' ew-stale' : ''));
     if (!rows.length) list.appendChild(el('div', 'ew-muted', 'no spawns listed'));
     rows.forEach(function (r) {

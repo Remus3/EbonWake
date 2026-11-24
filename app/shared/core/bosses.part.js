@@ -114,6 +114,17 @@
     return { text: drift.banner, lines: lines };
   }
 
+  // Plan 176: GET /api/bosses `dst` (a DST transition window in force or holding
+  // the next spawns) -> one banner line, e.g. "NA times +1 h until Sun 02:00 PT
+  // (official DST notice)"; a window not read from a notice reads "(expected)".
+  // Outside a window / malformed = '' (no banner). The daily reset never shifts.
+  function bossDstBanner(view) {
+    const d = plainObject(view) && plainObject(view.dst) ? view.dst : null;
+    if (!d || (d.shift_h !== 1 && d.shift_h !== -1) || !validAscii(d.ends_pt, 40)) return '';
+    return 'NA times ' + (d.shift_h > 0 ? '+1' : '-1') + ' h until ' + d.ends_pt + ' (' +
+      (typeof d.verified === 'string' && d.verified ? 'official DST notice' : 'expected') + ')';
+  }
+
   // POST /api/bosses body: exactly {tick|untick: {boss, day}}.
   function validBossesBody(body) {
     if (!plainObject(body)) return false;
@@ -306,6 +317,7 @@
     fmtBossRow: fmtBossRow, bossRows: bossRows, bossTicks: bossTicks,
     bossGarmothText: bossGarmothText, BOSS_DRIFT_MAX_LINES: BOSS_DRIFT_MAX_LINES,
     bossDriftBanner: bossDriftBanner, validBossesBody: validBossesBody, bossHits: bossHits,
+    bossDstBanner: bossDstBanner,
     MOUNT_KINDS: MOUNT_KINDS, MOUNT_GENDERS: MOUNT_GENDERS, MOUNT_ID: MOUNT_ID,
     MOUNT_MAT_KEY: MOUNT_MAT_KEY, MOUNT_NAME_MAX: MOUNT_NAME_MAX,
     MOUNT_SKILLS_MAX: MOUNT_SKILLS_MAX, MOUNT_LEVEL: MOUNT_LEVEL, MOUNT_TIER: MOUNT_TIER,

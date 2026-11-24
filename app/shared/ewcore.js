@@ -95,7 +95,7 @@
     validTodayBody, validWatchBody, verdictRows, watchAlert, weeklyPlan, whatNowActions, whatNowLeft,
     whatNowLine, widgetsFromQuery, widgetsQuery, widgetsTurnedOn, withCurrency, withStep, withTick, xpPresets,
     zeroPill, zoneCapText, zoneKillsText, zoneLevelText, zonesRows, knownIssueChips, nightChip,
-    SEAL_CATS, sealRows, sealGolden, parseSealCount, parseSealExchange } = K;
+    SEAL_CATS, sealRows, sealGolden, parseSealCount, parseSealExchange, bossDstBanner } = K;
 
   const api = {
     EXTERNAL_HOSTS: EXTERNAL_HOSTS,
@@ -559,7 +559,8 @@
     sealRows: sealRows,
     sealGolden: sealGolden,
     parseSealCount: parseSealCount,
-    parseSealExchange: parseSealExchange
+    parseSealExchange: parseSealExchange,
+    bossDstBanner: bossDstBanner
   };
   if (NODE) module.exports = api;
   else root.EWCore = api;

@@ -292,6 +292,10 @@
     else v.textContent = boss ? 'none' : (bossStale ? 'offline' : '-');
     v.className = 'ew-ov-val' + (bossStale || (first && first.done) ? ' ew-stale' : '');
     showRow('ov-boss-row', true, v.textContent);
+    const dst = document.getElementById('ov-boss-dst'); // plan 176: DST window banner
+    const dstText = C.bossDstBanner(boss);
+    if (dst.textContent !== dstText) dst.textContent = dstText;
+    dst.hidden = !dstText;
     const n = document.getElementById('ov-boss-next');
     n.textContent = second ? second.left : '';
     n.className = 'ew-ov-val ew-stale';
