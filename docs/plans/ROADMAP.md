@@ -414,3 +414,12 @@ As-built deviations (order Nb86f88):
 - PR 13 re-applied as version + hash lines only; the bot's regenerated files dropped colorama (win32 pytest dependency) and rewrote the `# via` comments. Alternatives: take the bot files whole. Why: CLAUDE.md bot-PR path B forbids carrying in a lockfile regression; Windows `--require-hashes` installs need colorama. Hashes came from the local tracking ref of the same-version bot branch (fetch denied); a PyPI release's hashes never change. Reverses if: `pip install --require-hashes -r ci/requirements-ci.txt` fails on CI.
 - PR 14 pin SHA taken from the PR body's newest compare commit (the release merge for v4.39.3), not from `git ls-remote` (network denied). Alternatives: leave PR 14 unapplied. Why: CI's pin step verifies it online before anything lands. Reverses if: verify_action_pins reports a mismatch; then pin the SHA it reports.
 - 'What it never does' placed before Quick start, not after the screenshot only. Why: the order asks to keep it prominent. Reverses if: MAIN orders the strict brief order.
+
+## Order N19c528 - blocked items
+
+MAIN FIX 2026-11-27-1610 to EW (MF-4 agent model/effort pins, 2 files). ONE ANSWER (HOP: 1), written by the loop after merge.
+
+- (1) .claude/agents/adjudicator.md add `model: opus` + `effort: medium` frontmatter: BLOCKED - write to .claude/agents/ was denied (permission not granted) for this lane run; an interactive session or a lane with .claude write access adds the two lines after the `tools:` line.
+- (1) .claude/agents/verifier.md add `model: sonnet` + `effort: medium` frontmatter: BLOCKED - same reason as above.
+- (1) read back `python ops/fleet_kit/fleet_headless.py agents --root .` (zero `warn MF-4` lines): BLOCKED - running python was denied in this lane run; run it after the two edits land.
+- Progress file ops/loop/control/progress/N19c528.json: BLOCKED - not written; this lane's python and out-of-worktree writes were denied.
