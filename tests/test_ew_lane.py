@@ -26,7 +26,10 @@ def test_kit_worktree_layout_is_per_lane_index(tmp_path):
     assert fl.LANE_CAP_MAX == 3
     paths = {fl.worktree_path(ROOT, "EW", i) for i in range(3)}
     assert len(paths) == 3
-    assert all(p.parent.name == "ew-worktrees" for p in paths)
+    assert all(p.name.startswith("lane-") for p in paths)
+    # kit v33 K1: a drive-root tree gets <sidecar>/EW/Worktree/lane-<i>; an existing
+    # ../ew-worktrees lane folder stays in use until the tree moves it.
+    assert all(p.parent.name in ("ew-worktrees", "Worktree") for p in paths)
 
 
 def test_seed_config_copies_missing_only(tmp_path):

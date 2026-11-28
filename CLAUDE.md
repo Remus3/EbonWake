@@ -188,6 +188,12 @@ edit. Tree-specific rules go BELOW this block, never inside it.
        (the claims hook's own id, `<session_id>.main` in the main thread;
        per-tree lock, stale break once and logged, leftover index.lock
        cleared safely, staged paths claimed by another live agent refused).
+       The message goes in a file unique to the agent
+       (`commitmsg-<session_id>.<agent_id>-<task>.txt`, never a shared
+       name), written fresh in its own call and read back - its first line
+       and `git diff --cached --stat` - right before `git commit -F <file>`.
+       Why: sub-agents of one session share a scratchpad, and a shared
+       message file put one agent's commit under another's message.
     b. `fleet_claims.py hook` (PreToolUse) claims each file an agent edits and
        denies another live agent's edit, redirect or `git add` of it, and a
        bare commit, push or whole suite; SubagentStop releases the claims.
@@ -233,7 +239,7 @@ edit. Tree-specific rules go BELOW this block, never inside it.
 
 # EW rules (tree-specific)
 
-EW channel code: `EW`. Kit: v32, vendored at `ops/fleet_kit/`. Kit conformance:
+EW channel code: `EW`. Kit: v33, vendored at `ops/fleet_kit/`. Kit conformance:
 `tests/test_fleet_kit_conformance.py`. Hand-off: `EW-NEXT-SESSION.txt` (tracked).
 
 ## Operator standing orders (given 2026-10-04, binding on every EW session)
